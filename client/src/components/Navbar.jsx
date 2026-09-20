@@ -1,377 +1,276 @@
-import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { mockData } from '../services/api.js';
 import {
-  GraduationCap,
-  BarChart2,
-  LogOut,
-  Bell,
-  Menu,
-  X,
-  Sparkles,
-  Users
+  Menu, Sun, Moon, Bell, LogOut, User, Settings, Lock, ChevronDown,
+  GraduationCap, Briefcase
 } from 'lucide-react';
 
-const Navbar = () => {
-  const { user, role, logout, switchRole } = useAuth();
+/**
+ * ProfileDropdown — Glassmorphic dropdown with user info, quick links, and logout.
+ * Renders inline in the topbar; closes on outside-click or Escape.
+ */
+const ProfileDropdown = ({ onClose }) => {
+  const { user, role, logout } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
+
+  const student = mockData.student;
+  const faculty = mockData.faculty;
+  const isStudent = role === 'student';
+
+  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (isStudent ? student.name : faculty.name);
+  const displayEmail = user?.email || (isStudent ? student.email : faculty.email);
+  const displayId = user?.id || (isStudent ? student.id : faculty.id);
+  const initials = displayName
+    .split(' ')
+    .map(n => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  const handleLogout = () => {
+    onClose();
+    logout();
+    navigate('/login');
+  };
+
+  const handleNavigate = (path) => {
+    onClose();
+    navigate(path);
+  };
+
+  return (
+    <>
+      {/* Invisible backdrop to close on outside click */}
+      <div className="profile-dropdown-backdrop" onClick={onClose} aria-hidden="true" />
+
+      <div className="profile-dropdown" role="menu" aria-label="Profile menu">
+        {/* Header — avatar + identity */}
+        <div className="profile-dropdown-header">
+          <div className="profile-dropdown-header-avatar" aria-hidden="true">
+            {initials}
+          </div>
+          <div style={{ overflow: 'hidden', flex: 1 }}>
+            <div className="profile-dropdown-name">{displayName}</div>
+            <div className="profile-dropdown-email">{displayEmail}</div>
+            <div className="profile-dropdown-role">
+              <span className={`badge ${isStudent ? 'badge-primary' : 'badge-purple'}`} style={{ fontSize: '0.65rem' }}>
+                {isStudent ? '🎓 Student' : '👨‍🏫 Faculty'} · {displayId}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Body — action items */}
+        <div className="profile-dropdown-body">
+          <button className="profile-dropdown-item" role="menuitem" onClick={() => handleNavigate('/profile')}>
+            <span className="profile-dropdown-item-icon"><User size={16} /></span>
+            My Profile
+          </button>
+
+          <button className="profile-dropdown-item" role="menuitem" onClick={() => handleNavigate('/profile#edit')}>
+            <span className="profile-dropdown-item-icon"><Settings size={16} /></span>
+            Edit Profile
+          </button>
+
+          <button className="profile-dropdown-item" role="menuitem" onClick={() => handleNavigate('/profile#security')}>
+            <span className="profile-dropdown-item-icon"><Lock size={16} /></span>
+            Change Password
+          </button>
+
+          <div className="profile-dropdown-separator" />
+
+          <button className="profile-dropdown-item" role="menuitem" onClick={() => handleNavigate(isStudent ? '/student/dashboard' : '/faculty/dashboard')}>
+            <span className="profile-dropdown-item-icon">{isStudent ? <GraduationCap size={16} /> : <Briefcase size={16} />}</span>
+            {isStudent ? 'Student Dashboard' : 'Faculty Dashboard'}
+          </button>
+
+          <div className="profile-dropdown-separator" />
+
+          <button className="profile-dropdown-item danger" role="menuitem" onClick={handleLogout}>
+            <span className="profile-dropdown-item-icon"><LogOut size={16} /></span>
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+/**
+ * Navbar / Topbar — Adapts between public header and dashboard topbar.
+ * Now includes a clickable profile avatar with dropdown on both layouts.
+ */
+const Navbar = ({ showSidebar = false, onMenuClick, sidebarCollapsed }) => {
+  const { user, role, logout, toggleTheme, theme, isAuthenticated, switchRole } = useAuth();
+  const navigate = useNavigate();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') setDropdownOpen(false);
+    };
+    if (dropdownOpen) document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [dropdownOpen]);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const isActive = (path) => location.pathname === path;
+  // Compute initials
+  const getInitials = () => {
+    if (!user) return 'U';
+    const first = (user.firstName || user.fullName?.split(' ')[0] || 'U')[0];
+    const last = (user.lastName || user.fullName?.split(' ')[1] || '')[0] || '';
+    return `${first}${last}`.toUpperCase();
+  };
 
-  return (
-    <header className="glass-panel" style={{ borderRadius: 0, borderTop: 0, borderLeft: 0, borderRight: 0, position: 'sticky', top: 0, zIndex: 100 }}>
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0.85rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        
-        {/* Brand Logo */}
-        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+  // ── Public (no sidebar) top navigation ─────────────────────────────────
+  if (!showSidebar) {
+    return (
+      <header style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 2rem',
+        height: 'var(--topbar-height)',
+        borderBottom: '1px solid var(--border-subtle)',
+        background: 'var(--bg-sidebar)',
+        backdropFilter: 'blur(16px)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 90
+      }}>
+        {/* Logo */}
+        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <div style={{
+            width: 32, height: 32, borderRadius: 'var(--radius-sm)',
             background: 'var(--primary-gradient)',
-            width: '40px',
-            height: '40px',
-            borderRadius: 'var(--radius-sm)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)'
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-            <GraduationCap size={22} color="#ffffff" />
+            <span style={{ color: 'white', fontWeight: 800, fontSize: '0.9rem' }}>U</span>
           </div>
-          <div>
-            <div style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              UniAssist <span style={{ color: 'var(--primary)', fontSize: '0.9rem', background: 'rgba(59, 130, 246, 0.15)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>AI</span>
-            </div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>University Student Support</div>
-          </div>
+          <span style={{
+            fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.1rem',
+            background: 'var(--accent-gradient)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text'
+          }}>
+            UniAssist AI
+          </span>
         </Link>
 
-        {/* Desktop Navigation Links */}
-        <nav style={{ display: 'none', gap: '0.5rem', alignItems: 'center' }} className="desktop-nav">
-          <Link
-            to="/"
-            style={{
-              padding: '0.5rem 0.85rem',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.9rem',
-              fontWeight: 500,
-              color: isActive('/') ? 'var(--primary)' : 'var(--text-secondary)',
-              background: isActive('/') ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-              transition: 'all 0.2s'
-            }}
-          >
-            Home
-          </Link>
+        {/* Right actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button className="icon-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'} aria-label="Toggle theme">
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
 
-          {user && (
+          {isAuthenticated ? (
             <>
-              <Link
-                to={role === 'faculty' ? '/faculty/dashboard' : '/student/dashboard'}
-                style={{
-                  padding: '0.5rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  color: isActive('/student/dashboard') || isActive('/faculty/dashboard') ? 'var(--primary)' : 'var(--text-secondary)',
-                  background: isActive('/student/dashboard') || isActive('/faculty/dashboard') ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.35rem'
-                }}
-              >
-                <BarChart2 size={16} /> Dashboard
+              <Link to={role === 'faculty' ? '/faculty/dashboard' : '/student/dashboard'} className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>
+                Dashboard
               </Link>
 
-              <Link
-                to="/attendance"
-                style={{
-                  padding: '0.5rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  color: isActive('/attendance') ? 'var(--primary)' : 'var(--text-secondary)',
-                  background: isActive('/attendance') ? 'rgba(59, 130, 246, 0.1)' : 'transparent'
-                }}
-              >
-                Attendance
-              </Link>
-
-              <Link
-                to="/assignments"
-                style={{
-                  padding: '0.5rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  color: isActive('/assignments') ? 'var(--primary)' : 'var(--text-secondary)',
-                  background: isActive('/assignments') ? 'rgba(59, 130, 246, 0.1)' : 'transparent'
-                }}
-              >
-                Assignments
-              </Link>
-
-              <Link
-                to="/academic-tools"
-                style={{
-                  padding: '0.5rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  color: isActive('/academic-tools') ? 'var(--primary)' : 'var(--text-secondary)',
-                  background: isActive('/academic-tools') ? 'rgba(59, 130, 246, 0.1)' : 'transparent'
-                }}
-              >
-                Academic Tools
-              </Link>
-
-              <Link
-                to="/career-hub"
-                style={{
-                  padding: '0.5rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  color: isActive('/career-hub') ? 'var(--primary)' : 'var(--text-secondary)',
-                  background: isActive('/career-hub') ? 'rgba(59, 130, 246, 0.1)' : 'transparent'
-                }}
-              >
-                Career Hub
-              </Link>
-
-              <Link
-                to="/campus-services"
-                style={{
-                  padding: '0.5rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  color: isActive('/campus-services') ? 'var(--primary)' : 'var(--text-secondary)',
-                  background: isActive('/campus-services') ? 'rgba(59, 130, 246, 0.1)' : 'transparent'
-                }}
-              >
-                Campus Services
-              </Link>
-
-              <Link
-                to="/community"
-                style={{
-                  padding: '0.5rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  color: isActive('/community') ? 'var(--primary)' : 'var(--text-secondary)',
-                  background: isActive('/community') ? 'rgba(59, 130, 246, 0.1)' : 'transparent'
-                }}
-              >
-                Community
-              </Link>
-
-              <Link
-                to="/analytics"
-                style={{
-                  padding: '0.5rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  color: isActive('/analytics') ? 'var(--primary)' : 'var(--text-secondary)',
-                  background: isActive('/analytics') ? 'rgba(59, 130, 246, 0.1)' : 'transparent'
-                }}
-              >
-                Analytics
-              </Link>
-
-              <Link
-                to="/chat"
-                className="btn btn-primary"
-                style={{ padding: '0.45rem 0.95rem', fontSize: '0.85rem', borderRadius: 'var(--radius-full)' }}
-              >
-                <Sparkles size={15} /> AI Assistant
-              </Link>
-            </>
-          )}
-        </nav>
-
-        {/* Action Controls & Profile */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          {user ? (
-            <>
-              {/* Role Toggle Switcher for instant demo */}
-              <button
-                onClick={() => switchRole(role === 'faculty' ? 'student' : 'faculty')}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-full)',
-                  padding: '0.35rem 0.75rem',
-                  color: 'var(--text-secondary)',
-                  fontSize: '0.75rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  cursor: 'pointer'
-                }}
-                title="Toggle between Student and Faculty view"
-              >
-                <Users size={13} />
-                Mode: <strong style={{ color: 'var(--primary)' }}>{role.toUpperCase()}</strong>
-              </button>
-
-              {/* Notification Button */}
-              <div style={{ position: 'relative' }}>
+              {/* Profile Avatar with Dropdown */}
+              <div className="profile-dropdown-wrapper" ref={dropdownRef}>
                 <button
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    padding: '0.4rem'
-                  }}
+                  className="profile-avatar-btn"
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  aria-expanded={dropdownOpen}
+                  aria-haspopup="true"
+                  aria-label="Open profile menu"
+                  title={user?.fullName || 'Profile'}
                 >
-                  <Bell size={20} />
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: '2px',
-                      right: '2px',
-                      background: 'var(--danger)',
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%'
-                    }}
-                  />
+                  {getInitials()}
+                  <span className="avatar-status-dot" />
                 </button>
 
-                {/* Notifications Dropdown */}
-                {showNotifications && (
-                  <div
-                    className="glass-panel animate-fade-in"
-                    style={{
-                      position: 'absolute',
-                      right: 0,
-                      top: '120%',
-                      width: '300px',
-                      padding: '1rem',
-                      zIndex: 200,
-                      boxShadow: 'var(--shadow-lg)'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Notifications</span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--primary)', cursor: 'pointer' }}>Mark all read</span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem' }}>
-                      <div style={{ padding: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '6px', borderLeft: '3px solid var(--primary)' }}>
-                        <div style={{ fontWeight: 600 }}>Problem Set 1 Due Soon</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>CS-301 assignment deadline in 3 days.</div>
-                      </div>
-                      <div style={{ padding: '0.5rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '6px', borderLeft: '3px solid var(--danger)' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--danger)' }}>Attendance Warning</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>CS-305 attendance is at 72.2% (&lt;75%).</div>
-                      </div>
-                    </div>
-                  </div>
+                {dropdownOpen && (
+                  <ProfileDropdown onClose={() => setDropdownOpen(false)} />
                 )}
               </div>
-
-              {/* User Avatar & Menu */}
-              <Link to="/profile" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.2rem 0.6rem', borderRadius: 'var(--radius-full)', background: 'rgba(255, 255, 255, 0.05)' }}>
-                <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  background: 'var(--primary-gradient)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                  fontSize: '0.85rem'
-                }}>
-                  {user.fullName ? user.fullName[0] : 'U'}
-                </div>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }} className="desktop-name">
-                  {user.fullName ? user.fullName.split(' ')[0] : 'Account'}
-                </span>
-              </Link>
-
-              {/* Logout Button */}
-              <button
-                onClick={handleLogout}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  padding: '0.4rem',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-                title="Sign Out"
-              >
-                <LogOut size={18} />
-              </button>
             </>
           ) : (
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <Link to="/login" className="btn btn-secondary" style={{ padding: '0.45rem 0.95rem', fontSize: '0.85rem' }}>
-                Sign In
-              </Link>
-              <Link to="/register" className="btn btn-primary" style={{ padding: '0.45rem 0.95rem', fontSize: '0.85rem' }}>
-                Get Started
-              </Link>
-            </div>
-          )}
-
-          {/* Mobile Hamburger Toggle */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-primary)',
-              cursor: 'pointer',
-              display: 'none'
-            }}
-            className="mobile-hamburger"
-          >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Drawer */}
-      {mobileMenuOpen && (
-        <div style={{ padding: '1rem 1.5rem', background: 'var(--bg-surface)', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <Link to="/" onClick={() => setMobileMenuOpen(false)}>Home</Link>
-          {user && (
             <>
-              <Link to={role === 'faculty' ? '/faculty/dashboard' : '/student/dashboard'} onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
-              <Link to="/attendance" onClick={() => setMobileMenuOpen(false)}>Attendance</Link>
-              <Link to="/assignments" onClick={() => setMobileMenuOpen(false)}>Assignments</Link>
-              <Link to="/faqs" onClick={() => setMobileMenuOpen(false)}>FAQs</Link>
-              <Link to="/chat" onClick={() => setMobileMenuOpen(false)}>AI Assistant</Link>
-              <Link to="/profile" onClick={() => setMobileMenuOpen(false)}>Profile</Link>
+              <Link to="/login" className="btn btn-ghost" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>Login</Link>
+              <Link to="/register" className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>Get Started</Link>
             </>
           )}
         </div>
-      )}
+      </header>
+    );
+  }
 
-      <style>{`
-        @media (min-width: 860px) {
-          .desktop-nav { display: flex !important; }
-        }
-        @media (max-width: 859px) {
-          .mobile-hamburger { display: block !important; }
-          .desktop-name { display: none; }
-        }
-      `}</style>
+  // ── Dashboard topbar (sidebar is shown) ────────────────────────────────
+  return (
+    <header className="topbar">
+      {/* Left: Mobile menu button */}
+      <div className="topbar-left">
+        <button className="icon-btn" onClick={onMenuClick} aria-label="Toggle sidebar" title="Menu">
+          <Menu size={18} />
+        </button>
+      </div>
+
+      {/* Right: Theme, notifications, profile avatar */}
+      <div className="topbar-right">
+        {/* Demo role switcher */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '0.5rem' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Demo:</span>
+          <button
+            className={`btn ${role === 'student' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ fontSize: '0.72rem', padding: '0.3rem 0.65rem' }}
+            onClick={() => { switchRole('student'); navigate('/student/dashboard'); }}
+          >
+            Student
+          </button>
+          <button
+            className={`btn ${role === 'faculty' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ fontSize: '0.72rem', padding: '0.3rem 0.65rem' }}
+            onClick={() => { switchRole('faculty'); navigate('/faculty/dashboard'); }}
+          >
+            Faculty
+          </button>
+        </div>
+
+        {/* Theme toggle */}
+        <button className="icon-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Light mode' : 'Dark mode'} aria-label="Toggle theme">
+          {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+        </button>
+
+        {/* Notifications */}
+        <button className="icon-btn" title="Notifications" aria-label="Notifications" style={{ position: 'relative' }}>
+          <Bell size={17} />
+          <span style={{
+            position: 'absolute', top: 4, right: 4,
+            width: 7, height: 7, borderRadius: '50%',
+            background: 'var(--danger)', border: '1.5px solid var(--bg-sidebar)'
+          }} />
+        </button>
+
+        {/* Profile Avatar with Dropdown */}
+        <div className="profile-dropdown-wrapper" ref={dropdownRef}>
+          <button
+            className="profile-avatar-btn"
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            aria-expanded={dropdownOpen}
+            aria-haspopup="true"
+            aria-label="Open profile menu"
+            title={user?.fullName || 'Profile'}
+          >
+            {getInitials()}
+            <span className="avatar-status-dot" />
+          </button>
+
+          {dropdownOpen && (
+            <ProfileDropdown onClose={() => setDropdownOpen(false)} />
+          )}
+        </div>
+      </div>
     </header>
   );
 };

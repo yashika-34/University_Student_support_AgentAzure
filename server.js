@@ -22,6 +22,11 @@ import academicToolsRoutes from './routes/academicToolsRoutes.js';
 import careerRoutes from './routes/careerRoutes.js';
 import servicesRoutes from './routes/servicesRoutes.js';
 import engagementRoutes from './routes/engagementRoutes.js';
+// New specialized route modules
+import teacherRoutes from './routes/teacherRoutes.js';
+import marksRoutes from './routes/marksRoutes.js';
+import ragRoutes from './routes/ragRoutes.js';
+import voiceRoutes from './routes/voiceRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -87,6 +92,11 @@ app.use('/api/v1/academic', academicToolsRoutes);
 app.use('/api/v1/career', careerRoutes);
 app.use('/api/v1/services', servicesRoutes);
 app.use('/api/v1/engagement', engagementRoutes);
+// Specialized academic modules
+app.use('/api/v1/teacher', teacherRoutes);
+app.use('/api/v1/marks', marksRoutes);
+app.use('/api/v1/rag', ragRoutes);
+app.use('/api/v1/voice', voiceRoutes);
 
 // Error Handling Middlewares
 app.use(notFound);

@@ -1,6 +1,12 @@
+/**
+ * seedData.js — Bootstrap demo data for UniAssist AI Portal
+ * Run with: npm run seed
+ */
+
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import bcrypt from 'bcryptjs';
+
+dotenv.config();
 
 import User from '../models/User.js';
 import Student from '../models/Student.js';
@@ -8,232 +14,269 @@ import Faculty from '../models/Faculty.js';
 import Course from '../models/Course.js';
 import Attendance from '../models/Attendance.js';
 import Assignment from '../models/Assignment.js';
+import Marks from '../models/Marks.js';
 import FAQ from '../models/FAQ.js';
 import Notification from '../models/Notification.js';
 
-dotenv.config();
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/uniassist_db';
 
-const seedDatabase = async () => {
+async function seed() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/uniassist_db');
-    console.log('[Seed] Connected to MongoDB...');
+    await mongoose.connect(MONGO_URI);
+    console.log('✅ MongoDB connected for seeding...');
 
     // Clear existing data
-    await User.deleteMany({});
-    await Student.deleteMany({});
-    await Faculty.deleteMany({});
-    await Course.deleteMany({});
-    await Attendance.deleteMany({});
-    await Assignment.deleteMany({});
-    await FAQ.deleteMany({});
-    await Notification.deleteMany({});
+    await Promise.all([
+      User.deleteMany({}),
+      Student.deleteMany({}),
+      Faculty.deleteMany({}),
+      Course.deleteMany({}),
+      Attendance.deleteMany({}),
+      Assignment.deleteMany({}),
+      Marks.deleteMany({}),
+      FAQ.deleteMany({}),
+      Notification.deleteMany({})
+    ]);
+    console.log('🗑️  Cleared existing data.');
 
-    console.log('[Seed] Cleared existing records.');
-
-    // 1. Create Users
-    const passwordHash = await bcrypt.hash('Password123!', 10);
-
-    const adminUser = await User.create({
-      email: 'admin@university.edu',
-      passwordHash,
-      firstName: 'Dean',
-      lastName: 'Vance',
-      role: 'admin',
-      phoneNumber: '+1-555-0199'
-    });
-
+    // ── 1. Create Faculty User ──────────────────────────────────────────────
     const facultyUser = await User.create({
       email: 'dr.alan@university.edu',
-      passwordHash,
+      passwordHash: 'Faculty@1234',
       firstName: 'Alan',
       lastName: 'Turing',
       role: 'faculty',
-      phoneNumber: '+1-555-0144'
+      phoneNumber: '+1-555-0100',
+      isActive: true
     });
 
-    const studentUser = await User.create({
-      email: 'alex.student@university.edu',
-      passwordHash,
-      firstName: 'Alex',
-      lastName: 'Mercer',
-      role: 'student',
-      phoneNumber: '+1-555-0123'
-    });
-
-    // 2. Create Faculty Profile
     const faculty = await Faculty.create({
       userId: facultyUser._id,
       employeeId: 'FAC-CS-101',
-      department: 'Computer Science',
+      department: 'Computer Science & Engineering',
       designation: 'Professor',
-      specialization: ['Artificial Intelligence', 'Distributed Systems'],
       cabinOffice: 'Turing Hall, Room 302',
-      officeHours: [
-        { dayOfWeek: 'Tuesday', startTime: '14:00', endTime: '16:00', location: 'Room 302' },
-        { dayOfWeek: 'Thursday', startTime: '10:00', endTime: '12:00', location: 'Room 302' }
-      ]
+      specialization: ['Algorithms', 'AI & Machine Learning', 'Cloud Computing'],
+      officeHours: 'Tue & Thu: 2:00 PM - 4:00 PM'
     });
 
-    // 3. Create Courses
+    console.log('👨‍🏫 Faculty created:', facultyUser.email);
+
+    // ── 2. Create Courses ───────────────────────────────────────────────────
     const course1 = await Course.create({
       courseCode: 'CS-301',
       courseName: 'Algorithms & Complexity',
-      description: 'Advanced design and analysis of algorithms, dynamic programming, graph algorithms, and NP-completeness.',
-      department: 'Computer Science',
+      department: 'Computer Science & Engineering',
       credits: 4,
       semester: 5,
       leadFaculty: faculty._id,
-      schedule: [
-        { dayOfWeek: 'Monday', startTime: '09:00 AM', endTime: '10:30 AM', roomNumber: 'Hall 4A', classType: 'lecture' },
-        { dayOfWeek: 'Wednesday', startTime: '09:00 AM', endTime: '10:30 AM', roomNumber: 'Hall 4A', classType: 'lecture' }
-      ],
-      syllabus: {
-        overview: 'Comprehensive coverage of asymptotic notation, divide and conquer, greedy paradigms, and graph algorithms.'
-      }
+      maxStudents: 60,
+      isActive: true
     });
 
     const course2 = await Course.create({
       courseCode: 'CS-305',
       courseName: 'Cloud Computing & Distributed Systems',
-      description: 'Architectures, virtualization, containerization, microservices, and serverless computing on Azure.',
-      department: 'Computer Science',
+      department: 'Computer Science & Engineering',
       credits: 3,
       semester: 5,
       leadFaculty: faculty._id,
-      schedule: [
-        { dayOfWeek: 'Tuesday', startTime: '11:00 AM', endTime: '12:30 PM', roomNumber: 'Lab 2', classType: 'lab' }
-      ]
+      maxStudents: 50,
+      isActive: true
     });
 
-    // 4. Create Student Profile
-    const student = await Student.create({
-      userId: studentUser._id,
-      studentId: 'STU-2024-8842',
-      department: 'Computer Science',
-      degreeProgram: 'B.S. in Computer Science',
-      currentSemester: 5,
-      admissionYear: 2024,
-      batch: '2024-2028',
-      academicAdvisor: faculty._id,
-      cgpa: 3.82,
-      completedCredits: 74,
-      enrolledCourses: [
-        { courseId: course1._id, semester: 5, status: 'enrolled' },
-        { courseId: course2._id, semester: 5, status: 'enrolled' }
-      ],
-      emergencyContact: {
-        name: 'Martha Mercer',
-        relationship: 'Mother',
-        phone: '+1-555-9988'
-      }
+    await Faculty.findByIdAndUpdate(faculty._id, {
+      assignedCourses: [course1._id, course2._id]
     });
 
-    // Update faculty assigned courses
-    faculty.assignedCourses = [course1._id, course2._id];
-    await faculty.save();
+    console.log('📚 Courses created:', course1.courseCode, course2.courseCode);
 
-    // 5. Create Attendance Records
-    const attendanceDates = [
-      new Date('2026-09-01'),
-      new Date('2026-09-03'),
-      new Date('2026-09-08'),
-      new Date('2026-09-10'),
-      new Date('2026-09-15')
+    // ── 3. Create 5 Student Users ───────────────────────────────────────────
+    const studentData = [
+      { firstName: 'Alex', lastName: 'Mercer', email: 'alex.student@university.edu', id: 'STU-2024-8842', cgpa: 3.82, credits: 74 },
+      { firstName: 'Emma', lastName: 'Watson', email: 'emma.student@university.edu', id: 'STU-2024-9102', cgpa: 3.56, credits: 68 },
+      { firstName: 'Liam', lastName: 'Smith', email: 'liam.student@university.edu', id: 'STU-2024-7731', cgpa: 3.10, credits: 62 },
+      { firstName: 'Priya', lastName: 'Patel', email: 'priya.student@university.edu', id: 'STU-2024-6621', cgpa: 3.91, credits: 80 },
+      { firstName: 'Carlos', lastName: 'Rivera', email: 'carlos.student@university.edu', id: 'STU-2024-5510', cgpa: 3.40, credits: 70 }
     ];
 
-    for (let i = 0; i < attendanceDates.length; i++) {
-      await Attendance.create({
+    const studentProfiles = [];
+    for (const sd of studentData) {
+      const u = await User.create({
+        email: sd.email,
+        passwordHash: 'Student@1234',
+        firstName: sd.firstName,
+        lastName: sd.lastName,
+        role: 'student',
+        isActive: true
+      });
+
+      const s = await Student.create({
+        userId: u._id,
+        studentId: sd.id,
+        department: 'Computer Science & Engineering',
+        degreeProgram: 'B.S. in Computer Science',
+        currentSemester: 5,
+        admissionYear: 2022,
+        batch: '2022-2026',
+        cgpa: sd.cgpa,
+        completedCredits: sd.credits,
+        enrolledCourses: [
+          { courseId: course1._id, status: 'enrolled' },
+          { courseId: course2._id, status: 'enrolled' }
+        ]
+      });
+
+      studentProfiles.push(s);
+    }
+
+    console.log('🎓 5 Students created.');
+
+    // ── 4. Seed Attendance Records ──────────────────────────────────────────
+    const attendanceDates = Array.from({ length: 24 }, (_, i) => {
+      const d = new Date('2026-08-01');
+      d.setDate(d.getDate() + i * 3);
+      return d;
+    });
+
+    const attendanceRates = [0.875, 0.72, 0.68, 0.95, 0.83];
+
+    for (let sIdx = 0; sIdx < studentProfiles.length; sIdx++) {
+      const s = studentProfiles[sIdx];
+      const rate = attendanceRates[sIdx];
+
+      for (const course of [course1, course2]) {
+        const totalSessions = course === course1 ? 24 : 18;
+        const sessions = attendanceDates.slice(0, totalSessions);
+
+        for (const sessionDate of sessions) {
+          await Attendance.create({
+            student: s._id,
+            course: course._id,
+            faculty: faculty._id,
+            date: sessionDate,
+            status: Math.random() < rate ? 'present' : 'absent',
+            sessionType: 'lecture'
+          });
+        }
+      }
+    }
+
+    console.log('📊 Attendance records seeded.');
+
+    // ── 5. Seed Assignments ─────────────────────────────────────────────────
+    await Assignment.create({
+      title: 'Problem Set 1: Sorting Algorithm Analysis',
+      description: 'Implement and compare QuickSort, MergeSort, HeapSort. Submit PDF + code.',
+      course: course1._id,
+      faculty: faculty._id,
+      dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+      maxScore: 100,
+      submissions: studentProfiles.slice(0, 3).map((s) => ({
+        student: s._id,
+        submittedAt: new Date(),
+        content: 'Demo submission...',
+        status: 'submitted'
+      }))
+    });
+
+    await Assignment.create({
+      title: 'Lab 2: Docker Container Deployment',
+      description: 'Deploy containerized Node.js app. Include docker-compose.yml and README.',
+      course: course2._id,
+      faculty: faculty._id,
+      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      maxScore: 50,
+      submissions: []
+    });
+
+    console.log('📝 Assignments created.');
+
+    // ── 6. Seed Marks ───────────────────────────────────────────────────────
+    const mockScores = [[78, 85], [62, 70], [55, 60], [90, 95], [72, 78]];
+
+    for (let sIdx = 0; sIdx < studentProfiles.length; sIdx++) {
+      await Marks.create({
+        student: studentProfiles[sIdx]._id,
         course: course1._id,
-        student: student._id,
         faculty: faculty._id,
-        date: attendanceDates[i],
-        sessionType: 'lecture',
-        status: i === 3 ? 'absent' : 'present', // 1 absent, 4 present = 80%
-        markedBy: facultyUser._id
+        examType: 'internal_1',
+        examLabel: 'Unit Test 1 — Graph Algorithms',
+        marksObtained: mockScores[sIdx][0],
+        maxMarks: 100,
+        semester: 5,
+        isPublished: true
+      });
+      await Marks.create({
+        student: studentProfiles[sIdx]._id,
+        course: course1._id,
+        faculty: faculty._id,
+        examType: 'midterm',
+        examLabel: 'Mid Semester Examination',
+        marksObtained: mockScores[sIdx][1],
+        maxMarks: 100,
+        semester: 5,
+        isPublished: true
       });
     }
 
-    // 6. Create Assignments
-    await Assignment.create({
-      course: course1._id,
-      createdBy: faculty._id,
-      title: 'Problem Set 1: Dynamic Programming & Knapsack',
-      description: 'Implement memoized and bottom-up solutions for 0/1 Knapsack and Longest Common Subsequence.',
-      maxScore: 100,
-      dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), // Due in 5 days
-      allowedFileTypes: ['.pdf', '.zip']
-    });
+    console.log('🎯 Marks seeded.');
 
-    await Assignment.create({
-      course: course2._id,
-      createdBy: faculty._id,
-      title: 'Lab Exercise 2: Docker Containerization on Azure App Service',
-      description: 'Containerize a multi-tier web application and configure continuous deployment via GitHub Actions.',
-      maxScore: 50,
-      dueDate: new Date(Date.now() + 9 * 24 * 60 * 60 * 1000)
-    });
-
-    // 7. Create FAQs
-    await FAQ.create([
+    // ── 7. Seed FAQs ────────────────────────────────────────────────────────
+    await FAQ.insertMany([
       {
-        question: 'What is the minimum attendance required to appear for final examinations?',
-        answer: 'University academic regulations mandate a minimum of 75% aggregate attendance in each registered course. Students below 75% are not permitted to write end-semester exams unless an approved medical leave form has been accepted.',
-        category: 'Academics',
-        tags: ['attendance', 'exams', 'policy'],
-        targetAudience: ['student', 'all'],
-        helpfulCount: 42
+        question: 'What is the minimum attendance requirement?',
+        answer: 'Students must maintain 75% attendance per course to be eligible for final exams (Regulation 4.2).',
+        category: 'Examinations',
+        isPublished: true
       },
       {
-        question: 'When is the deadline to pay Fall semester tuition fees?',
-        answer: 'The regular tuition fee payment deadline is October 15th, 2026. A late fine of $50 applies from October 16th through October 25th. After October 25th, class registration is suspended.',
+        question: 'When is the tuition fee due?',
+        answer: 'Fall tuition is due before August 31st. Late fee: $50/week. Contact bursar@university.edu.',
         category: 'Fees & Financial Aid',
-        tags: ['fees', 'tuition', 'deadline', 'bursar'],
-        targetAudience: ['student', 'all'],
-        helpfulCount: 89
+        isPublished: true
       },
       {
-        question: 'Where is the Student Health and Counseling Center located?',
-        answer: 'The Student Health Center is located on the ground floor of the Campus Wellness Pavilion (Building D, Room 102). It is open Monday to Friday, 8:00 AM to 6:00 PM. Emergency on-call medical assistance is available 24/7 at +1-555-HELP.',
+        question: 'How do I access my digital hall ticket?',
+        answer: 'Hall tickets are available under Student Portal > Examinations, 7 days before exams (if fees cleared and attendance ≥75%).',
+        category: 'Examinations',
+        isPublished: true
+      },
+      {
+        question: 'What are the library hours?',
+        answer: 'Library: Mon–Fri 8AM–10PM, Sat 9AM–6PM. Online resources: 24/7.',
         category: 'Campus Facilities',
-        tags: ['health', 'counseling', 'clinic', 'emergency'],
-        targetAudience: ['all'],
-        helpfulCount: 31
+        isPublished: true
       }
     ]);
 
-    // 8. Create Notification
-    await Notification.create({
-      recipient: studentUser._id,
-      type: 'assignment_deadline',
-      priority: 'high',
-      title: 'Upcoming Assignment: Problem Set 1',
-      message: 'Your assignment for CS-301 is due in 5 days. Ensure your solutions are uploaded on time.',
-      actionUrl: '/student/assignments'
-    });
+    console.log('❓ FAQs seeded.');
 
-    console.log('\n======================================================');
-    console.log('✅ UNIASSIST DATABASE SEEDED SUCCESSFULLY!');
-    console.log('======================================================');
-    console.log('Default Accounts for Testing:');
-    console.log('------------------------------------------------------');
-    console.log('1. Student Account:');
-    console.log('   Email:    alex.student@university.edu');
-    console.log('   Password: Password123!');
-    console.log('------------------------------------------------------');
-    console.log('2. Faculty Account:');
-    console.log('   Email:    dr.alan@university.edu');
-    console.log('   Password: Password123!');
-    console.log('------------------------------------------------------');
-    console.log('3. Admin Account:');
-    console.log('   Email:    admin@university.edu');
-    console.log('   Password: Password123!');
-    console.log('======================================================\n');
+    // ── 8. Seed Notifications ───────────────────────────────────────────────
+    for (const s of studentProfiles.slice(0, 2)) {
+      await Notification.create({
+        recipient: s.userId,
+        type: 'warning',
+        title: 'Attendance Warning',
+        message: 'Your attendance in CS-305 has fallen below 75%. Risk of exam debarment.',
+        isRead: false
+      });
+    }
 
+    console.log('🔔 Notifications created.');
+    console.log('\n✅ Seed completed successfully!\n');
+    console.log('Demo Credentials:');
+    console.log('  👨‍🏫 Faculty:  dr.alan@university.edu  /  Faculty@1234');
+    console.log('  🎓 Student:  alex.student@university.edu  /  Student@1234');
+    console.log('  🎓 Student:  emma.student@university.edu  /  Student@1234\n');
+
+    await mongoose.disconnect();
     process.exit(0);
   } catch (error) {
-    console.error('[Seed Error]:', error);
+    console.error('❌ Seed error:', error.message);
+    await mongoose.disconnect();
     process.exit(1);
   }
-};
+}
 
-seedDatabase();
+seed();

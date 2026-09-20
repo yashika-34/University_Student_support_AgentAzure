@@ -3,14 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { mockData } from '../services/api.js';
 import {
-  Award,
-  Sparkles,
-  BarChart2,
-  AlertTriangle,
-  Clock,
-  BookOpen,
-  HelpCircle,
-  FileText
+  Award, Sparkles, BarChart2, AlertTriangle, Clock, BookOpen, HelpCircle,
+  FileText, CalendarCheck, MessageSquare, TrendingUp, GraduationCap
 } from 'lucide-react';
 
 const StudentDashboard = () => {
@@ -28,17 +22,13 @@ const StudentDashboard = () => {
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      
+
       {/* Welcome Banner */}
       <div className="glass-panel" style={{
         padding: '2.25rem 2rem',
         background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(139, 92, 246, 0.12) 100%)',
         border: '1px solid rgba(59, 130, 246, 0.25)',
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: '1.5rem'
+        display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1.5rem'
       }}>
         <div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>
@@ -51,115 +41,81 @@ const StudentDashboard = () => {
             Roll No: <strong style={{ color: 'var(--text-primary)' }}>{student.id}</strong> | {student.degreeProgram} (Semester {student.currentSemester})
           </p>
         </div>
-
-        <Link
-          to="/chat"
-          className="btn btn-primary"
-          style={{ padding: '0.75rem 1.4rem', borderRadius: 'var(--radius-full)' }}
-        >
+        <Link to="/chat" className="btn btn-primary" style={{ padding: '0.75rem 1.4rem', borderRadius: 'var(--radius-full)' }}>
           <Sparkles size={16} /> Ask AI Assistant
         </Link>
       </div>
 
-      {/* Critical Attendance Warning Banner if applicable */}
+      {/* Critical Attendance Warning */}
       {hasLowAttendance && (
         <div style={{
-          background: 'rgba(239, 68, 68, 0.15)',
-          border: '1px solid rgba(239, 68, 68, 0.35)',
-          borderRadius: 'var(--radius-md)',
-          padding: '1rem 1.25rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '1rem'
+          background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)',
+          borderRadius: 'var(--radius-md)', padding: '1rem 1.25rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ background: 'var(--danger)', color: '#fff', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: 'var(--danger)', color: '#fff', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <AlertTriangle size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, color: 'var(--danger)', fontSize: '0.95rem' }}>
-                Attendance Threshold Warning (&lt;75%)
-              </div>
+              <div style={{ fontWeight: 700, color: 'var(--danger)', fontSize: '0.95rem' }}>Attendance Threshold Warning (&lt;75%)</div>
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                 Your attendance in <strong>CS-305 (Cloud Computing)</strong> is currently 72.2%. You risk examination debarment.
               </div>
             </div>
           </div>
-          <Link to="/attendance" className="btn btn-danger" style={{ padding: '0.45rem 0.95rem', fontSize: '0.8rem' }}>
-            View Calculator
-          </Link>
+          <Link to="/attendance" className="btn btn-danger" style={{ padding: '0.45rem 0.95rem', fontSize: '0.8rem' }}>View Calculator</Link>
         </div>
       )}
 
-      {/* 4 Stat Overview Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
-        
-        {/* Cumulative GPA */}
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-            <span>Cumulative GPA</span>
+      {/* 4 Stat Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
+        <div className="glass-panel stat-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="stat-label">Cumulative GPA</div>
             <Award size={18} color="var(--primary)" />
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{student.cgpa}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.25rem' }}>
-            Top 10% in Department
-          </div>
+          <div className="stat-value" style={{ color: 'var(--primary)' }}>{student.cgpa}</div>
+          <div className="stat-sub" style={{ color: 'var(--success)' }}>Top 10% in Department</div>
         </div>
 
-        {/* Aggregate Attendance */}
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-            <span>Aggregate Attendance</span>
+        <div className="glass-panel stat-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="stat-label">Aggregate Attendance</div>
             <BarChart2 size={18} color="var(--accent-purple)" />
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: avgAttendance >= 75 ? 'var(--text-primary)' : 'var(--danger)' }}>
-            {avgAttendance}%
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-            3 Active Courses
-          </div>
+          <div className="stat-value" style={{ color: avgAttendance >= 75 ? 'var(--text-primary)' : 'var(--danger)' }}>{avgAttendance}%</div>
+          <div className="stat-sub">3 Active Courses</div>
         </div>
 
-        {/* Credits Earned */}
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-            <span>Earned Credits</span>
+        <div className="glass-panel stat-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="stat-label">Earned Credits</div>
             <BookOpen size={18} color="var(--accent-cyan)" />
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{student.completedCredits} / 120</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-            61% Degree Progress
-          </div>
+          <div className="stat-value">{student.completedCredits} / 120</div>
+          <div className="stat-sub">61% Degree Progress</div>
         </div>
 
-        {/* Pending Assignments */}
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-            <span>Pending Tasks</span>
+        <div className="glass-panel stat-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="stat-label">Pending Tasks</div>
             <Clock size={18} color="var(--warning)" />
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)' }}>1 Due</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--warning)', marginTop: '0.25rem' }}>
-            Due in 3 days
-          </div>
+          <div className="stat-value">1 Due</div>
+          <div className="stat-sub" style={{ color: 'var(--warning)' }}>Due in 3 days</div>
         </div>
-
       </div>
 
-      {/* Main Split Grid: Attendance Summary + Upcoming Assignments */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem' }}>
-        
-        {/* Attendance Summary Card */}
+      {/* Main Grid: Attendance + Assignments + Marks + Exams */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
+
+        {/* Attendance Summary */}
         <div className="glass-panel" style={{ padding: '1.75rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Course Attendance</h3>
-            <Link to="/attendance" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>
-              Full Details &rarr;
-            </Link>
+            <Link to="/attendance" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>Full Details →</Link>
           </div>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {attendanceList.map((course, idx) => (
               <div key={idx}>
@@ -171,13 +127,10 @@ const StudentDashboard = () => {
                     {course.percentage}%
                   </span>
                 </div>
-                {/* Progress bar */}
-                <div style={{ width: '100%', height: '8px', background: 'var(--bg-input)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                  <div style={{
+                <div className="progress-track">
+                  <div className="progress-fill" style={{
                     width: `${course.percentage}%`,
-                    height: '100%',
-                    background: course.percentage >= 80 ? 'var(--success)' : course.percentage >= 75 ? 'var(--warning)' : 'var(--danger)',
-                    borderRadius: 'var(--radius-full)'
+                    background: course.percentage >= 80 ? 'var(--success)' : course.percentage >= 75 ? 'var(--warning)' : 'var(--danger)'
                   }} />
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
@@ -188,57 +141,94 @@ const StudentDashboard = () => {
           </div>
         </div>
 
-        {/* Upcoming Deliverables Card */}
+        {/* Upcoming Assignments */}
         <div className="glass-panel" style={{ padding: '1.75rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Upcoming Assignments</h3>
-            <Link to="/assignments" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>
-              View All &rarr;
-            </Link>
+            <Link to="/assignments" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>View All →</Link>
           </div>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {assignments.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  padding: '1rem',
-                  background: 'var(--bg-input)',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-subtle)'
-                }}
-              >
+              <div key={item.id} style={{ padding: '1rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
                   <span className="badge badge-primary">{item.courseCode}</span>
-                  <span className={`badge ${item.status === 'submitted' ? 'badge-success' : 'badge-warning'}`}>
-                    {item.status}
-                  </span>
+                  <span className={`badge ${item.status === 'submitted' ? 'badge-success' : 'badge-warning'}`}>{item.status}</span>
                 </div>
-                <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>
-                  {item.title}
-                </div>
+                <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>{item.title}</div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <Clock size={13} /> Due: {new Date(item.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
 
-            <div style={{
-              padding: '1rem',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px dashed var(--border-subtle)',
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              fontSize: '0.85rem'
-            }}>
-              Final Exams commence December 10, 2026. Hall tickets available next week.
-            </div>
+      {/* Marks + Exam Preview Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
+
+        {/* Recent Marks Widget */}
+        <div className="glass-panel" style={{ padding: '1.75rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <TrendingUp size={17} color="var(--accent-purple)" /> Recent Marks
+            </h3>
+            <Link to="/marks" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>All Marks →</Link>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+            {[
+              { courseCode: 'CS-301', exam: 'Mid Semester', marks: '85/100', grade: 'A+', color: '#3b82f6' },
+              { courseCode: 'CS-309', exam: 'Unit Test 1', marks: '92/100', grade: 'O', color: '#10b981' },
+              { courseCode: 'CS-305', exam: 'Unit Test 1', marks: '62/100', grade: 'B', color: '#f59e0b' }
+            ].map((m, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0.85rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span className="badge badge-primary">{m.courseCode}</span>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{m.exam}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{m.marks}</span>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: '50%', background: `${m.color}22`,
+                    border: `2px solid ${m.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 800, fontSize: '0.75rem', color: m.color
+                  }}>{m.grade}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
+        {/* Exam Schedule Preview */}
+        <div className="glass-panel" style={{ padding: '1.75rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <CalendarCheck size={17} color="var(--primary)" /> Upcoming Exams
+            </h3>
+            <Link to="/exam-schedule" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>Full Schedule →</Link>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {[
+              { courseCode: 'CS-301', name: 'Algorithms', date: 'Dec 10, 2026', time: '09:00 AM', venue: 'Hall A', days: 81 },
+              { courseCode: 'CS-305', name: 'Cloud Computing', date: 'Dec 12, 2026', time: '02:00 PM', venue: 'Hall B', days: 83 },
+              { courseCode: 'CS-309', name: 'AI & Neural Networks', date: 'Dec 15, 2026', time: '09:00 AM', venue: 'Hall A', days: 86 }
+            ].map((exam, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0.85rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <span className="badge badge-primary">{exam.courseCode}</span>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{exam.name}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{exam.date} · {exam.time} · {exam.venue}</div>
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>{exam.days}d</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Quick Access Action Shortcuts */}
+      {/* Quick Access Shortcuts */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
         <Link to="/attendance" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <BarChart2 size={24} color="var(--primary)" />
@@ -247,11 +237,11 @@ const StudentDashboard = () => {
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Calculate safe absences</div>
           </div>
         </Link>
-        <Link to="/assignments" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <FileText size={24} color="var(--accent-purple)" />
+        <Link to="/academic-tools" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <Sparkles size={24} color="var(--accent-purple)" />
           <div>
-            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Assignment Portal</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Submit lab solutions</div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>AI Study Tools</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Notes, MCQs, study plans</div>
           </div>
         </Link>
         <Link to="/faqs" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
@@ -262,14 +252,13 @@ const StudentDashboard = () => {
           </div>
         </Link>
         <Link to="/chat" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <Sparkles size={24} color="var(--success)" />
+          <MessageSquare size={24} color="var(--success)" />
           <div>
             <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>AI Support Agent</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>24/7 instant chat</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>24/7 instant chat + voice</div>
           </div>
         </Link>
       </div>
-
     </div>
   );
 };
