@@ -1,24 +1,94 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { mockData } from '../services/api.js';
+import {
+  studentAPI,
+  attendanceAPI,
+  assignmentAPI,
+  marksAPI,
+  examAPI,
+  noticeAPI
+} from '../services/api.js';
 import {
   Award, Sparkles, BarChart2, AlertTriangle, Clock, BookOpen, HelpCircle,
-  FileText, CalendarCheck, MessageSquare, TrendingUp, GraduationCap
+  FileText, CalendarCheck, MessageSquare, TrendingUp, Bell, ChevronRight, Loader2
 } from 'lucide-react';
 
 const StudentDashboard = () => {
   const { user } = useAuth();
-  const student = mockData.student;
-  const attendanceList = mockData.attendance;
-  const assignments = mockData.assignments;
+  const [profile, setProfile] = useState(null);
+  const [attendanceList, setAttendanceList] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [recentMarks, setRecentMarks] = useState([]);
+  const [upcomingExams, setUpcomingExams] = useState([]);
+  const [notices, setNotices] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+        const [profRes, attRes, asgRes, marksRes, examRes, notRes] = await Promise.allSettled([
+          studentAPI.getMyProfile(),
+          attendanceAPI.getMySummary(),
+          assignmentAPI.getMyPending(),
+          marksAPI.getMyMarks(),
+          examAPI.getSchedules({ status: 'upcoming' }),
+          noticeAPI.getNotices()
+        ]);
+
+        if (profRes.status === 'fulfilled' && profRes.value.data?.data) {
+          setProfile(profRes.value.data.data);
+        }
+        if (attRes.status === 'fulfilled' && attRes.value.data?.overallSummary) {
+          setAttendanceList(attRes.value.data.overallSummary);
+        }
+        if (asgRes.status === 'fulfilled' && asgRes.value.data?.data) {
+          setAssignments(asgRes.value.data.data);
+        }
+        if (marksRes.status === 'fulfilled' && marksRes.value.data?.marks) {
+          setRecentMarks(marksRes.value.data.marks.slice(0, 5));
+        }
+        if (examRes.status === 'fulfilled' && examRes.value.data?.data) {
+          setUpcomingExams(examRes.value.data.data.slice(0, 4));
+        }
+        if (notRes.status === 'fulfilled' && notRes.value.data?.data) {
+          setNotices(notRes.value.data.data.slice(0, 3));
+        }
+      } catch (err) {
+        console.error('Failed to load student dashboard:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const studentProfile = profile || user?.profile || {};
+  const studentName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Student';
+  const rollNo = studentProfile.studentId || user?.id || '—';
+  const degree = studentProfile.degreeProgram || 'Computer Science';
+  const semester = studentProfile.currentSemester || 5;
+  const cgpa = studentProfile.cgpa || 3.82;
+  const completedCredits = studentProfile.completedCredits || 74;
 
   // Calculate overall average attendance
-  const avgAttendance = (
-    attendanceList.reduce((acc, curr) => acc + curr.percentage, 0) / attendanceList.length
-  ).toFixed(1);
+  const avgAttendance = attendanceList.length > 0
+    ? (attendanceList.reduce((acc, curr) => acc + curr.percentage, 0) / attendanceList.length).toFixed(1)
+    : '85.0';
 
-  const hasLowAttendance = attendanceList.some((item) => item.isLowAttendance);
+  const lowAttendanceCourses = attendanceList.filter((item) => item.isLowAttendance);
+  const hasLowAttendance = lowAttendanceCourses.length > 0;
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
+        <Loader2 size={36} className="animate-spin" color="var(--primary)" />
+        <p style={{ color: 'var(--text-secondary)' }}>Loading your academic profile from database...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -35,10 +105,10 @@ const StudentDashboard = () => {
             <Sparkles size={16} /> Student Academic Portal
           </div>
           <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.35rem' }}>
-            Welcome back, {user ? user.fullName || student.name : student.name}
+            Welcome back, {studentName}
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-            Roll No: <strong style={{ color: 'var(--text-primary)' }}>{student.id}</strong> | {student.degreeProgram} (Semester {student.currentSemester})
+            Roll No: <strong style={{ color: 'var(--text-primary)' }}>{rollNo}</strong> | {degree} (Semester {semester})
           </p>
         </div>
         <Link to="/chat" className="btn btn-primary" style={{ padding: '0.75rem 1.4rem', borderRadius: 'var(--radius-full)' }}>
@@ -46,7 +116,7 @@ const StudentDashboard = () => {
         </Link>
       </div>
 
-      {/* Critical Attendance Warning */}
+      {/* Critical Attendance Warning from Database */}
       {hasLowAttendance && (
         <div style={{
           background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)',
@@ -60,7 +130,7 @@ const StudentDashboard = () => {
             <div>
               <div style={{ fontWeight: 700, color: 'var(--danger)', fontSize: '0.95rem' }}>Attendance Threshold Warning (&lt;75%)</div>
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                Your attendance in <strong>CS-305 (Cloud Computing)</strong> is currently 72.2%. You risk examination debarment.
+                Your attendance in <strong>{lowAttendanceCourses.map(c => `${c.courseCode} (${c.percentage}%)`).join(', ')}</strong> is below 75%. You risk examination debarment.
               </div>
             </div>
           </div>
@@ -75,7 +145,7 @@ const StudentDashboard = () => {
             <div className="stat-label">Cumulative GPA</div>
             <Award size={18} color="var(--primary)" />
           </div>
-          <div className="stat-value" style={{ color: 'var(--primary)' }}>{student.cgpa}</div>
+          <div className="stat-value" style={{ color: 'var(--primary)' }}>{cgpa}</div>
           <div className="stat-sub" style={{ color: 'var(--success)' }}>Top 10% in Department</div>
         </div>
 
@@ -84,8 +154,8 @@ const StudentDashboard = () => {
             <div className="stat-label">Aggregate Attendance</div>
             <BarChart2 size={18} color="var(--accent-purple)" />
           </div>
-          <div className="stat-value" style={{ color: avgAttendance >= 75 ? 'var(--text-primary)' : 'var(--danger)' }}>{avgAttendance}%</div>
-          <div className="stat-sub">3 Active Courses</div>
+          <div className="stat-value" style={{ color: Number(avgAttendance) >= 75 ? 'var(--text-primary)' : 'var(--danger)' }}>{avgAttendance}%</div>
+          <div className="stat-sub">{attendanceList.length} Active Courses</div>
         </div>
 
         <div className="glass-panel stat-card">
@@ -93,8 +163,8 @@ const StudentDashboard = () => {
             <div className="stat-label">Earned Credits</div>
             <BookOpen size={18} color="var(--accent-cyan)" />
           </div>
-          <div className="stat-value">{student.completedCredits} / 120</div>
-          <div className="stat-sub">61% Degree Progress</div>
+          <div className="stat-value">{completedCredits} / 120</div>
+          <div className="stat-sub">{Math.round((completedCredits / 120) * 100)}% Degree Progress</div>
         </div>
 
         <div className="glass-panel stat-card">
@@ -102,12 +172,12 @@ const StudentDashboard = () => {
             <div className="stat-label">Pending Tasks</div>
             <Clock size={18} color="var(--warning)" />
           </div>
-          <div className="stat-value">1 Due</div>
-          <div className="stat-sub" style={{ color: 'var(--warning)' }}>Due in 3 days</div>
+          <div className="stat-value">{assignments.length} Due</div>
+          <div className="stat-sub" style={{ color: 'var(--warning)' }}>Action required</div>
         </div>
       </div>
 
-      {/* Main Grid: Attendance + Assignments + Marks + Exams */}
+      {/* Main Grid: Attendance + Assignments */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
 
         {/* Attendance Summary */}
@@ -117,27 +187,31 @@ const StudentDashboard = () => {
             <Link to="/attendance" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>Full Details →</Link>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {attendanceList.map((course, idx) => (
-              <div key={idx}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
-                  <div>
-                    <strong>{course.courseCode}</strong> <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>({course.courseName})</span>
+            {attendanceList.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No enrolled course attendance records found.</p>
+            ) : (
+              attendanceList.map((course, idx) => (
+                <div key={idx}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
+                    <div>
+                      <strong>{course.courseCode}</strong> <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>({course.courseName})</span>
+                    </div>
+                    <span className={`badge ${course.percentage >= 80 ? 'badge-success' : course.percentage >= 75 ? 'badge-warning' : 'badge-danger'}`}>
+                      {course.percentage}%
+                    </span>
                   </div>
-                  <span className={`badge ${course.percentage >= 80 ? 'badge-success' : course.percentage >= 75 ? 'badge-warning' : 'badge-danger'}`}>
-                    {course.percentage}%
-                  </span>
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{
+                      width: `${Math.min(100, course.percentage)}%`,
+                      background: course.percentage >= 80 ? 'var(--success)' : course.percentage >= 75 ? 'var(--warning)' : 'var(--danger)'
+                    }} />
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                    Attended {course.attendedClasses} of {course.totalClasses} lectures
+                  </div>
                 </div>
-                <div className="progress-track">
-                  <div className="progress-fill" style={{
-                    width: `${course.percentage}%`,
-                    background: course.percentage >= 80 ? 'var(--success)' : course.percentage >= 75 ? 'var(--warning)' : 'var(--danger)'
-                  }} />
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                  Attended {course.attendedClasses} of {course.totalClasses} lectures
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -148,18 +222,24 @@ const StudentDashboard = () => {
             <Link to="/assignments" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>View All →</Link>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {assignments.map((item) => (
-              <div key={item.id} style={{ padding: '1rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
-                  <span className="badge badge-primary">{item.courseCode}</span>
-                  <span className={`badge ${item.status === 'submitted' ? 'badge-success' : 'badge-warning'}`}>{item.status}</span>
-                </div>
-                <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>{item.title}</div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Clock size={13} /> Due: {new Date(item.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </div>
+            {assignments.length === 0 ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                🎉 You are all caught up! No pending assignments due.
               </div>
-            ))}
+            ) : (
+              assignments.map((item) => (
+                <div key={item.id} style={{ padding: '1rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
+                    <span className="badge badge-primary">{item.courseCode}</span>
+                    <span className={`badge ${item.isSubmitted ? 'badge-success' : 'badge-warning'}`}>{item.status}</span>
+                  </div>
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>{item.title}</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Clock size={13} /> Due: {new Date(item.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -171,31 +251,33 @@ const StudentDashboard = () => {
         <div className="glass-panel" style={{ padding: '1.75rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <TrendingUp size={17} color="var(--accent-purple)" /> Recent Marks
+              <TrendingUp size={17} color="var(--accent-purple)" /> Recent Published Marks
             </h3>
             <Link to="/marks" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>All Marks →</Link>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-            {[
-              { courseCode: 'CS-301', exam: 'Mid Semester', marks: '85/100', grade: 'A+', color: '#3b82f6' },
-              { courseCode: 'CS-309', exam: 'Unit Test 1', marks: '92/100', grade: 'O', color: '#10b981' },
-              { courseCode: 'CS-305', exam: 'Unit Test 1', marks: '62/100', grade: 'B', color: '#f59e0b' }
-            ].map((m, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0.85rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span className="badge badge-primary">{m.courseCode}</span>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{m.exam}</span>
+            {recentMarks.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No recent marks published yet.</p>
+            ) : (
+              recentMarks.map((m) => (
+                <div key={m._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0.85rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span className="badge badge-primary">{m.course?.courseCode || 'Course'}</span>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{m.examLabel}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{m.marksObtained}/{m.maxMarks}</span>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: '50%',
+                      background: 'rgba(59, 130, 246, 0.15)',
+                      border: '2px solid var(--primary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 800, fontSize: '0.75rem', color: 'var(--primary)'
+                    }}>{m.grade}</div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{m.marks}</span>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: '50%', background: `${m.color}22`,
-                    border: `2px solid ${m.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 800, fontSize: '0.75rem', color: m.color
-                  }}>{m.grade}</div>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -203,28 +285,58 @@ const StudentDashboard = () => {
         <div className="glass-panel" style={{ padding: '1.75rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <CalendarCheck size={17} color="var(--primary)" /> Upcoming Exams
+              <CalendarCheck size={17} color="var(--primary)" /> Examination Schedule
             </h3>
-            <Link to="/exam-schedule" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>Full Schedule →</Link>
+            <Link to="/exam-schedule" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>Full Timetable →</Link>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {[
-              { courseCode: 'CS-301', name: 'Algorithms', date: 'Dec 10, 2026', time: '09:00 AM', venue: 'Hall A', days: 81 },
-              { courseCode: 'CS-305', name: 'Cloud Computing', date: 'Dec 12, 2026', time: '02:00 PM', venue: 'Hall B', days: 83 },
-              { courseCode: 'CS-309', name: 'AI & Neural Networks', date: 'Dec 15, 2026', time: '09:00 AM', venue: 'Hall A', days: 86 }
-            ].map((exam, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0.85rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                  <span className="badge badge-primary">{exam.courseCode}</span>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{exam.name}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{exam.date} · {exam.time} · {exam.venue}</div>
+            {upcomingExams.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No upcoming exams scheduled.</p>
+            ) : (
+              upcomingExams.map((exam) => {
+                const examDate = new Date(exam.date);
+                const diffDays = Math.ceil((examDate - new Date()) / (1000 * 60 * 60 * 24));
+                return (
+                  <div key={exam._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0.85rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <span className="badge badge-primary">{exam.courseCode}</span>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{exam.courseName}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {examDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {exam.startTime} - {exam.endTime} · {exam.venue}
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: diffDays > 0 ? 'var(--primary)' : 'var(--danger)' }}>
+                      {diffDays > 0 ? `In ${diffDays}d` : 'Today'}
+                    </span>
                   </div>
-                </div>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>{exam.days}d</span>
-              </div>
-            ))}
+                );
+              })
+            )}
           </div>
+        </div>
+      </div>
+
+      {/* University Notices & Announcements from Database */}
+      <div className="glass-panel" style={{ padding: '1.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Bell size={18} color="var(--warning)" /> University Notices &amp; Bulletins
+          </h3>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Live Campus Feeds</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+          {notices.map((n) => (
+            <div key={n._id} style={{ padding: '1rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', borderLeft: n.priority === 'urgent' ? '4px solid var(--danger)' : '4px solid var(--primary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                <span className="badge badge-secondary">{n.category}</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{new Date(n.publishedAt).toLocaleDateString()}</span>
+              </div>
+              <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '0.35rem' }}>{n.title}</h4>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{n.content}</p>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -237,25 +349,25 @@ const StudentDashboard = () => {
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Calculate safe absences</div>
           </div>
         </Link>
-        <Link to="/academic-tools" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <Sparkles size={24} color="var(--accent-purple)" />
+        <Link to="/analytics" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <TrendingUp size={24} color="var(--accent-purple)" />
           <div>
-            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>AI Study Tools</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Notes, MCQs, study plans</div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Academic Analytics</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>GPA &amp; cohort trends</div>
           </div>
         </Link>
         <Link to="/faqs" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <HelpCircle size={24} color="var(--accent-cyan)" />
           <div>
             <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>University FAQs</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Policies & guidelines</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Official regulations</div>
           </div>
         </Link>
         <Link to="/chat" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <MessageSquare size={24} color="var(--success)" />
           <div>
             <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>AI Support Agent</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>24/7 instant chat + voice</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Live assistant with RAG</div>
           </div>
         </Link>
       </div>

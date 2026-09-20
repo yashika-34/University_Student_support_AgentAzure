@@ -31,7 +31,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'User role is required'],
       enum: {
-        values: ['student', 'faculty', 'admin', 'super_admin'],
+        values: ['student', 'teacher', 'faculty', 'admin', 'super_admin'],
         message: '{VALUE} is not a valid user role'
       },
       default: 'student',
@@ -55,6 +55,14 @@ const userSchema = new mongoose.Schema(
     },
     refreshTokenHash: {
       type: String,
+      select: false
+    },
+    resetPasswordToken: {
+      type: String,
+      select: false
+    },
+    resetPasswordExpire: {
+      type: Date,
       select: false
     }
   },

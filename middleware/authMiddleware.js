@@ -70,7 +70,15 @@ export const authorizeRoles = (...roles) => {
       });
     }
 
-    if (!roles.includes(req.user.role) && req.user.role !== 'super_admin') {
+    const userRole = req.user.role;
+    const isAllowed =
+      roles.includes(userRole) ||
+      (roles.includes('faculty') && userRole === 'teacher') ||
+      (roles.includes('teacher') && userRole === 'faculty') ||
+      userRole === 'super_admin' ||
+      userRole === 'admin';
+
+    if (!isAllowed) {
       return res.status(403).json({
         success: false,
         message: `Forbidden. Role '${req.user.role}' is not authorized to access this resource.`
@@ -79,4 +87,31 @@ export const authorizeRoles = (...roles) => {
 
     next();
   };
+};
+
+/**
+ * Middleware for optional JWT authentication. If token is present and valid, populates req.user.
+ */
+export const optionalAuth = async (req, res, next) => {
+  let token;
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  } else if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_uniassist_jwt_key_987654321');
+    const user = await User.findById(decoded.id).select('-passwordHash');
+    if (user && user.isActive) {
+      req.user = user;
+    }
+  } catch (error) {
+    // Ignore invalid token for optional auth
+  }
+  next();
 };

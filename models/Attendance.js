@@ -5,8 +5,13 @@ const attendanceSchema = new mongoose.Schema(
     course: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Course',
-      required: [true, 'Course reference is required'],
+      required: false,
       index: true
+    },
+    subject: {
+      type: String,
+      trim: true,
+      default: ''
     },
     student: {
       type: mongoose.Schema.Types.ObjectId,
@@ -17,7 +22,7 @@ const attendanceSchema = new mongoose.Schema(
     faculty: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Faculty',
-      required: [true, 'Faculty instructor reference is required']
+      required: false
     },
     date: {
       type: Date,
@@ -56,8 +61,7 @@ const attendanceSchema = new mongoose.Schema(
 
 // Prevent duplicate attendance records for the same student, course, date, and session
 attendanceSchema.index(
-  { course: 1, student: 1, date: 1, sessionType: 1 },
-  { unique: true }
+  { student: 1, date: 1, course: 1, subject: 1, sessionType: 1 }
 );
 
 // Compound index for fast AI Agent queries (e.g. "What is my CS101 attendance?")

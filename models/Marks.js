@@ -13,7 +13,12 @@ const marksSchema = new mongoose.Schema(
     course: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Course',
-      required: [true, 'Course reference is required']
+      required: false
+    },
+    subject: {
+      type: String,
+      trim: true,
+      default: ''
     },
     faculty: {
       type: mongoose.Schema.Types.ObjectId,
@@ -77,7 +82,7 @@ const marksSchema = new mongoose.Schema(
     },
     isPublished: {
       type: Boolean,
-      default: false // Faculty must publish marks for students to see
+      default: true // Published by default so student sees immediately
     }
   },
   {

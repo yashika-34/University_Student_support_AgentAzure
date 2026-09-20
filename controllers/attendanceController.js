@@ -16,33 +16,81 @@ export const getMyAttendanceSummary = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Student profile not found.' });
     }
 
-    const enrolledCourses = student.enrolledCourses.filter((c) => c.status === 'enrolled');
-    const summary = [];
+    // Fetch all attendance records directly from MongoDB
+    const records = await Attendance.find({ student: student._id })
+      .populate('course', 'courseCode courseName credits')
+      .sort({ date: -1 });
 
-    for (const enrollment of enrolledCourses) {
-      const course = await Course.findById(enrollment.courseId).select('courseCode courseName credits');
-      if (!course) continue;
+    const subjectMap = {};
 
-      const stats = await Attendance.calculateAttendancePercentage(student._id, course._id);
-      
-      summary.push({
-        courseId: course._id,
-        courseCode: course.courseCode,
-        courseName: course.courseName,
-        credits: course.credits,
-        totalClasses: stats.totalClasses,
-        attendedClasses: stats.attendedClasses,
-        excusedClasses: stats.excusedClasses,
-        percentage: stats.percentage,
-        isLowAttendance: stats.percentage < 75 && stats.totalClasses > 0,
-        statusLabel: stats.percentage >= 80 ? 'Good' : stats.percentage >= 75 ? 'Average' : 'Critical Warning'
+    for (const rec of records) {
+      const key = rec.course ? rec.course._id.toString() : (rec.subject || 'General');
+      const label = rec.course ? rec.course.courseName : (rec.subject || 'General');
+      const code = rec.course ? rec.course.courseCode : (rec.subject || 'General');
+
+      if (!subjectMap[key]) {
+        subjectMap[key] = {
+          courseId: rec.course?._id || null,
+          courseCode: code,
+          courseName: label,
+          credits: rec.course?.credits || 3,
+          totalClasses: 0,
+          attendedClasses: 0,
+          excusedClasses: 0,
+          records: []
+        };
+      }
+
+      subjectMap[key].totalClasses += 1;
+      if (rec.status === 'present') {
+        subjectMap[key].attendedClasses += 1;
+      } else if (rec.status === 'excused') {
+        subjectMap[key].excusedClasses += 1;
+      }
+      subjectMap[key].records.push({
+        date: rec.date,
+        status: rec.status,
+        sessionType: rec.sessionType,
+        remarks: rec.remarks
       });
     }
+
+    // Also include enrolled courses if any
+    if (student.enrolledCourses && student.enrolledCourses.length > 0) {
+      for (const enrollment of student.enrolledCourses) {
+        if (enrollment.status === 'enrolled' && enrollment.courseId) {
+          const course = await Course.findById(enrollment.courseId).select('courseCode courseName credits');
+          if (course && !subjectMap[course._id.toString()]) {
+            subjectMap[course._id.toString()] = {
+              courseId: course._id,
+              courseCode: course.courseCode,
+              courseName: course.courseName,
+              credits: course.credits,
+              totalClasses: 0,
+              attendedClasses: 0,
+              excusedClasses: 0,
+              records: []
+            };
+          }
+        }
+      }
+    }
+
+    const summary = Object.values(subjectMap).map((item) => {
+      const percentage = item.totalClasses > 0 ? parseFloat(((item.attendedClasses / item.totalClasses) * 100).toFixed(2)) : 100;
+      return {
+        ...item,
+        percentage,
+        isLowAttendance: percentage < 75 && item.totalClasses > 0,
+        statusLabel: percentage >= 80 ? 'Good' : percentage >= 75 ? 'Average' : item.totalClasses === 0 ? 'Not Started' : 'Critical Warning'
+      };
+    });
 
     res.status(200).json({
       success: true,
       studentId: student.studentId,
-      overallSummary: summary
+      overallSummary: summary,
+      recentRecords: records.slice(0, 10)
     });
   } catch (error) {
     next(error);

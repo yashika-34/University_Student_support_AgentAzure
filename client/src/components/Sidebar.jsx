@@ -11,6 +11,7 @@ import {
   MessageSquare,
   User,
   Users,
+  UserCog,
   GraduationCap,
   TrendingUp,
   ClipboardList,
@@ -61,9 +62,12 @@ const FACULTY_NAV = [
     { to: '/assignments', icon: FileText, label: 'Assignments' },
     { to: '/marks', icon: Award, label: 'Marks & Grades' }
   ]},
+  { section: 'Management', items: [
+    { to: '/teacher/students-manage', icon: UserCog, label: 'Student Management' },
+    { to: '/teacher/students', icon: Users, label: 'Student Progress' }
+  ]},
   { section: 'Analytics', items: [
     { to: '/teacher/analytics', icon: BarChart3, label: 'Course Analytics' },
-    { to: '/teacher/students', icon: Users, label: 'Student Progress' },
     { to: '/teacher/report', icon: TrendingUp, label: 'Class Reports' }
   ]},
   { section: 'AI Tools', items: [

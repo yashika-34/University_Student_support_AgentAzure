@@ -13,7 +13,7 @@ const enrolledCourseSubSchema = new mongoose.Schema(
     },
     semester: {
       type: Number,
-      required: true
+      default: 1
     },
     status: {
       type: String,

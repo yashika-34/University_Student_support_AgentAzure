@@ -23,13 +23,9 @@ const RagUploadPage = () => {
     try {
       const res = await api.get('/rag/documents');
       setDocuments(res.data.documents || []);
-    } catch {
-      // Demo data
-      setDocuments([
-        { id: 'doc-1', title: 'University Academic Handbook 2026', originalName: 'academic_handbook.pdf', category: 'Academics', sizeBytes: 2456700, uploadedBy: 'dr.alan@university.edu', uploadedAt: '2026-09-15T10:30:00Z', totalChunks: 45 },
-        { id: 'doc-2', title: 'Fee Structure & Refund Policy', originalName: 'fee_structure.pdf', category: 'Fees & Financial Aid', sizeBytes: 890200, uploadedBy: 'dr.alan@university.edu', uploadedAt: '2026-09-14T14:15:00Z', totalChunks: 12 },
-        { id: 'doc-3', title: 'Examination Rules & Regulations', originalName: 'exam_rules.docx', category: 'Examinations', sizeBytes: 534800, uploadedBy: 'dr.alan@university.edu', uploadedAt: '2026-09-10T09:00:00Z', totalChunks: 8 }
-      ]);
+    } catch (err) {
+      console.error('Error fetching RAG documents from database:', err);
+      setDocuments([]);
     } finally {
       setLoading(false);
     }

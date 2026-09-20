@@ -1,74 +1,32 @@
-import React, { useState } from 'react';
-import { CalendarCheck, Clock, MapPin, FileText, AlertCircle, CheckCircle, Info } from 'lucide-react';
-
-// Mock exam schedule data
-const EXAM_SCHEDULE = [
-  {
-    id: 1,
-    courseCode: 'CS-301',
-    courseName: 'Algorithms & Complexity',
-    examType: 'Final Examination',
-    date: '2026-12-10',
-    startTime: '09:00',
-    endTime: '12:00',
-    shift: 'Morning',
-    venue: 'Examination Hall A, Block 3',
-    seatNumber: 'A-42',
-    hallTicketStatus: 'available',
-    status: 'upcoming'
-  },
-  {
-    id: 2,
-    courseCode: 'CS-305',
-    courseName: 'Cloud Computing & Distributed Systems',
-    examType: 'Final Examination',
-    date: '2026-12-12',
-    startTime: '14:00',
-    endTime: '17:00',
-    shift: 'Afternoon',
-    venue: 'Examination Hall B, Block 3',
-    seatNumber: 'B-17',
-    hallTicketStatus: 'available',
-    status: 'upcoming'
-  },
-  {
-    id: 3,
-    courseCode: 'CS-309',
-    courseName: 'AI & Neural Networks',
-    examType: 'Final Examination',
-    date: '2026-12-15',
-    startTime: '09:00',
-    endTime: '12:00',
-    shift: 'Morning',
-    venue: 'Examination Hall A, Block 3',
-    seatNumber: 'A-88',
-    hallTicketStatus: 'pending',
-    status: 'upcoming'
-  },
-  {
-    id: 4,
-    courseCode: 'CS-302',
-    courseName: 'Database Management Systems',
-    examType: 'Internal Assessment 2',
-    date: '2026-11-22',
-    startTime: '10:00',
-    endTime: '11:30',
-    shift: 'Morning',
-    venue: 'LH-201',
-    seatNumber: 'Roll Order',
-    hallTicketStatus: 'not_required',
-    status: 'completed'
-  }
-];
+import React, { useState, useEffect } from 'react';
+import { examAPI } from '../services/api.js';
+import { CalendarCheck, Clock, MapPin, FileText, AlertCircle, CheckCircle, Info, Loader2 } from 'lucide-react';
 
 const ExamSchedulePage = () => {
+  const [exams, setExams] = useState([]);
   const [filter, setFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchExams = async () => {
+      setLoading(true);
+      try {
+        const res = await examAPI.getSchedules();
+        setExams(res.data?.data || []);
+      } catch (err) {
+        console.error('Failed to fetch exam schedules:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchExams();
+  }, []);
 
   const filteredExams = filter === 'all'
-    ? EXAM_SCHEDULE
-    : EXAM_SCHEDULE.filter(e => e.status === filter);
+    ? exams
+    : exams.filter((e) => e.status === filter);
 
-  const upcoming = EXAM_SCHEDULE.filter(e => e.status === 'upcoming');
+  const upcoming = exams.filter((e) => e.status === 'upcoming');
   const nextExam = upcoming.sort((a, b) => new Date(a.date) - new Date(b.date))[0];
 
   const formatDate = (dateStr) => {
@@ -81,152 +39,117 @@ const ExamSchedulePage = () => {
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
   };
 
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
+        <Loader2 size={36} className="animate-spin" color="var(--primary)" />
+        <p style={{ color: 'var(--text-secondary)' }}>Loading exam schedule from MongoDB...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
 
       {/* Header */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>
-          <CalendarCheck size={16} /> Examination Portal
+          <CalendarCheck size={16} /> Examination Timetable
         </div>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Exam Schedule</h1>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Semester Examination Schedule</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-          Fall Semester 2026 — Final Examination Timetable
+          Official timetable, venue assignments, and digital admit card clearance retrieved from database.
         </p>
       </div>
 
       {/* Next Exam Alert */}
       {nextExam && (
         <div style={{
-          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.15))',
+          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(139, 92, 246, 0.08))',
           border: '1px solid rgba(59, 130, 246, 0.3)',
           borderRadius: 'var(--radius-md)',
-          padding: '1.5rem'
+          padding: '1.25rem 1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '1rem'
         }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <Clock size={14} /> NEXT EXAM
+          <div>
+            <span className="badge badge-primary" style={{ marginBottom: '0.4rem', display: 'inline-block' }}>Next Upcoming Exam</span>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0.25rem 0' }}>
+              {nextExam.courseCode} — {nextExam.courseName}
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+              {formatDate(nextExam.date)} · {nextExam.startTime} - {nextExam.endTime} · Venue: <strong>{nextExam.venue}</strong>
+            </p>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-            <div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{nextExam.courseCode}: {nextExam.courseName}</div>
-              <div style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{formatDate(nextExam.date)} • {nextExam.startTime} – {nextExam.endTime}</div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--primary)' }}>
+              {getDaysUntil(nextExam.date)}d
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary)' }}>{getDaysUntil(nextExam.date)}</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>days remaining</div>
-            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Countdown to Exam</div>
           </div>
         </div>
       )}
 
-      {/* Rules Banner */}
-      <div className="glass-panel" style={{ padding: '1.25rem 1.5rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-        <Info size={18} color="var(--accent-cyan)" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
-        <div>
-          <div style={{ fontWeight: 700, marginBottom: '0.35rem' }}>Examination Guidelines</div>
-          <ul style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.2rem', paddingLeft: '1rem' }}>
-            <li>Carry your University ID card and printed/digital Hall Ticket to each exam.</li>
-            <li>Report at least 20 minutes before the scheduled start time.</li>
-            <li>Electronic devices and programmable calculators are strictly prohibited.</li>
-            <li>Students with attendance below 75% will be barred from appearing.</li>
-          </ul>
-        </div>
-      </div>
-
       {/* Filter Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        {['all', 'upcoming', 'completed'].map(f => (
+      <div style={{ display: 'flex', gap: '0.75rem' }}>
+        {['all', 'upcoming', 'completed'].map((f) => (
           <button
             key={f}
-            className={`btn ${filter === f ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ fontSize: '0.83rem', padding: '0.4rem 0.9rem' }}
             onClick={() => setFilter(f)}
+            className={`btn ${filter === f ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ textTransform: 'capitalize' }}
           >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-            {f !== 'all' && ` (${EXAM_SCHEDULE.filter(e => e.status === f).length})`}
+            {f === 'all' ? 'All Assessments' : f}
           </button>
         ))}
       </div>
 
-      {/* Exam Cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {filteredExams.map(exam => {
-          const daysUntil = exam.status === 'upcoming' ? getDaysUntil(exam.date) : null;
-          const isUrgent = daysUntil !== null && daysUntil <= 3;
-
-          return (
-            <div
-              key={exam.id}
-              className="glass-panel"
-              style={{
-                padding: '1.5rem',
-                borderColor: exam.status === 'completed' ? 'var(--border-subtle)' : isUrgent ? 'rgba(239,68,68,0.3)' : 'var(--border-subtle)',
-                opacity: exam.status === 'completed' ? 0.7 : 1
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-                <div style={{ flex: 1 }}>
-                  {/* Course & exam type */}
-                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                    <span className="badge badge-primary">{exam.courseCode}</span>
-                    <span className="badge badge-purple">{exam.examType}</span>
-                    {exam.status === 'completed' && <span className="badge badge-success">Completed</span>}
-                    {isUrgent && <span className="badge badge-danger">⚠ {daysUntil}d left</span>}
-                  </div>
-                  <h3 style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.75rem' }}>{exam.courseName}</h3>
-
-                  {/* Details grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      <CalendarCheck size={15} color="var(--primary)" />
-                      {formatDate(exam.date)}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      <Clock size={15} color="var(--accent-purple)" />
-                      {exam.startTime} – {exam.endTime} ({exam.shift})
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      <MapPin size={15} color="var(--accent-cyan)" />
-                      {exam.venue}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      <FileText size={15} color="var(--warning)" />
-                      Seat: <strong style={{ color: 'var(--text-primary)' }}>{exam.seatNumber}</strong>
-                    </div>
-                  </div>
+      {/* Exams Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+        {filteredExams.length === 0 ? (
+          <div className="glass-panel" style={{ padding: '2rem', gridColumn: '1 / -1', textAlign: 'center', color: 'var(--text-muted)' }}>
+            No examinations found for selected filter.
+          </div>
+        ) : (
+          filteredExams.map((exam) => (
+            <div key={exam._id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <span className="badge badge-primary">{exam.courseCode}</span>
+                  <span className={`badge ${exam.status === 'completed' ? 'badge-success' : 'badge-warning'}`}>
+                    {exam.status}
+                  </span>
                 </div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.25rem' }}>{exam.courseName}</h3>
+                <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 600, marginBottom: '1rem' }}>{exam.examType}</div>
 
-                {/* Hall Ticket Status */}
-                <div style={{ textAlign: 'center' }}>
-                  {exam.hallTicketStatus === 'available' ? (
-                    <button className="btn btn-primary" style={{ fontSize: '0.82rem', padding: '0.5rem 1rem' }}>
-                      <FileText size={14} /> Hall Ticket
-                    </button>
-                  ) : exam.hallTicketStatus === 'pending' ? (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--warning)', fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
-                      <AlertCircle size={20} />
-                      Pending<br />
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Available Dec 3)</span>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
-                      <CheckCircle size={20} />
-                      Completed
-                    </div>
-                  )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <CalendarCheck size={14} color="var(--primary)" /> {formatDate(exam.date)}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Clock size={14} color="var(--accent-purple)" /> {exam.startTime} - {exam.endTime} ({exam.shift})
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <MapPin size={14} color="var(--accent-cyan)" /> {exam.venue} · Seat: <strong>{exam.seatNumber}</strong>
+                  </div>
                 </div>
               </div>
+
+              <div style={{ marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Hall Ticket:</span>
+                <span className={`badge ${exam.hallTicketStatus === 'available' ? 'badge-success' : exam.hallTicketStatus === 'pending' ? 'badge-warning' : 'badge-secondary'}`}>
+                  {exam.hallTicketStatus === 'available' ? 'Verified / Clear' : exam.hallTicketStatus}
+                </span>
+              </div>
             </div>
-          );
-        })}
+          ))
+        )}
       </div>
 
-      {filteredExams.length === 0 && (
-        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
-          <CalendarCheck size={40} color="var(--text-muted)" style={{ margin: '0 auto 1rem' }} />
-          <p style={{ color: 'var(--text-muted)' }}>No {filter} exams found.</p>
-        </div>
-      )}
     </div>
   );
 };

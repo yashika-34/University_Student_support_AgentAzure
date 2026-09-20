@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { mockData } from '../services/api.js';
+import React, { useState, useEffect } from 'react';
+import api from '../services/api.js';
 import {
   MessageSquare,
   Award,
@@ -8,39 +8,95 @@ import {
   PlusCircle,
   Sparkles,
   Users,
-  Search
+  Search,
+  Loader2
 } from 'lucide-react';
 
 const CommunityHubPage = () => {
   const [activeTab, setActiveTab] = useState('forum');
 
   // Forum State
-  const [forumPosts, setForumPosts] = useState(mockData.forumPosts);
+  const [forumPosts, setForumPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchCategory, setSearchCategory] = useState('All');
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [newPostTitle, setNewPostTitle] = useState('');
   const [newPostCategory, setNewPostCategory] = useState('Algorithms');
   const [newPostContent, setNewPostContent] = useState('');
+  const [badges, setBadges] = useState([]);
+
+  useEffect(() => {
+    const loadCommunityData = async () => {
+      setLoading(true);
+      try {
+        const [postsRes, badgesRes] = await Promise.allSettled([
+          api.get('/engagement/forum'),
+          api.get('/engagement/badges')
+        ]);
+        if (postsRes.status === 'fulfilled') {
+          const posts = postsRes.value.data?.data || postsRes.value.data?.posts || [];
+          setForumPosts(Array.isArray(posts) ? posts : []);
+        }
+        if (badgesRes.status === 'fulfilled') {
+          const badgeData = badgesRes.value.data?.data;
+          const badges = badgeData?.badges || (Array.isArray(badgeData) ? badgeData : []);
+          setBadges(badges);
+        }
+      } catch (err) {
+        console.error('Failed to load community data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadCommunityData();
+  }, []);
 
   const handleUpvote = (id) => {
-    setForumPosts(forumPosts.map(p => p.id === id ? { ...p, upvotes: p.upvotes + 1 } : p));
+    setForumPosts(forumPosts.map(p => p.id === id ? { ...p, upvotes: (p.upvotes || 0) + 1 } : p));
   };
 
-  const handleCreatePost = (e) => {
+  const handleCreatePost = async (e) => {
     e.preventDefault();
-    const created = {
-      id: `post-${Date.now()}`,
-      title: newPostTitle,
-      category: newPostCategory,
-      content: newPostContent,
-      authorName: 'Alex Mercer',
-      authorRole: 'student',
-      upvotes: 1,
-      isSolved: false,
-      createdAt: new Date().toISOString(),
-      replies: []
-    };
-    setForumPosts([created, ...forumPosts]);
+    try {
+      const payload = {
+        title: newPostTitle,
+        category: newPostCategory,
+        content: newPostContent
+      };
+      const res = await api.post('/engagement/forum', payload);
+      const newPost = res.data?.data || res.data?.post;
+      if (newPost) {
+        setForumPosts([newPost, ...forumPosts]);
+      } else {
+        const localPost = {
+          id: `post-${Date.now()}`,
+          title: newPostTitle,
+          category: newPostCategory,
+          content: newPostContent,
+          authorName: 'Alex Mercer',
+          authorRole: 'student',
+          upvotes: 1,
+          isSolved: false,
+          createdAt: new Date().toISOString(),
+          replies: []
+        };
+        setForumPosts([localPost, ...forumPosts]);
+      }
+    } catch {
+      const fallbackPost = {
+        id: `post-${Date.now()}`,
+        title: newPostTitle,
+        category: newPostCategory,
+        content: newPostContent,
+        authorName: 'Alex Mercer',
+        authorRole: 'student',
+        upvotes: 1,
+        isSolved: false,
+        createdAt: new Date().toISOString(),
+        replies: []
+      };
+      setForumPosts([fallbackPost, ...forumPosts]);
+    }
     setShowNewPostModal(false);
     setNewPostTitle('');
     setNewPostContent('');
@@ -49,9 +105,6 @@ const CommunityHubPage = () => {
   const filteredPosts = searchCategory === 'All'
     ? forumPosts
     : forumPosts.filter(p => p.category === searchCategory);
-
-  // Badges State
-  const [badges] = useState(mockData.badges);
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>

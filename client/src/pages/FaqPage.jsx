@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { mockData } from '../services/api.js';
+import { faqAPI } from '../services/api.js';
 import {
   Search,
   ChevronDown,
@@ -8,18 +8,40 @@ import {
   ThumbsUp,
   Sparkles,
   ArrowRight,
-  Check
+  Check,
+  Loader2
 } from 'lucide-react';
 
 const FaqPage = () => {
+  const [faqs, setFaqs] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [expandedId, setExpandedId] = useState('faq-1');
+  const [expandedId, setExpandedId] = useState(null);
   const [votedMap, setVotedMap] = useState({});
 
   const categories = ['All', 'Academics', 'Fees & Financial Aid', 'Examinations', 'Campus Facilities'];
 
-  const filteredFaqs = mockData.faqs.filter((item) => {
+  useEffect(() => {
+    const fetchFaqs = async () => {
+      setLoading(true);
+      try {
+        const res = await faqAPI.getAll();
+        const list = res.data?.data || [];
+        setFaqs(list);
+        if (list.length > 0) {
+          setExpandedId(list[0]._id);
+        }
+      } catch (err) {
+        console.error('Failed to load FAQs:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchFaqs();
+  }, []);
+
+  const filteredFaqs = faqs.filter((item) => {
     const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
     const matchesQuery = item.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          item.answer.toLowerCase().includes(searchQuery.toLowerCase());
@@ -30,8 +52,13 @@ const FaqPage = () => {
     setExpandedId(expandedId === id ? null : id);
   };
 
-  const handleVote = (id) => {
+  const handleVote = async (id) => {
     setVotedMap({ ...votedMap, [id]: true });
+    try {
+      await faqAPI.voteHelpful(id);
+    } catch (err) {
+      console.warn('Vote feedback error:', err.message);
+    }
   };
 
   return (
@@ -43,7 +70,7 @@ const FaqPage = () => {
           Frequently Asked Questions
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>
-          Find official answers to university regulations, attendance policies, financial schedules, and campus amenities.
+          Find official answers to university regulations, attendance policies, financial schedules, and campus amenities from MongoDB database.
         </p>
 
         {/* Search Bar */}
@@ -60,107 +87,84 @@ const FaqPage = () => {
               fontSize: '0.95rem'
             }}
           />
-          <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />
+          <Search size={18} style={{ position: 'absolute', left: '1.1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
         </div>
       </div>
 
       {/* Category Pills */}
-      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-        {categories.map((cat) => (
+      <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '0.6rem' }}>
+        {categories.map((category) => (
           <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            style={{
-              padding: '0.45rem 1rem',
-              borderRadius: 'var(--radius-full)',
-              border: selectedCategory === cat ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
-              background: selectedCategory === cat ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-input)',
-              color: selectedCategory === cat ? 'var(--primary)' : 'var(--text-secondary)',
-              fontWeight: 600,
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
+            key={category}
+            className={`btn ${selectedCategory === category ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setSelectedCategory(category)}
+            style={{ borderRadius: 'var(--radius-full)', padding: '0.4rem 1.1rem', fontSize: '0.85rem' }}
           >
-            {cat}
+            {category}
           </button>
         ))}
       </div>
 
-      {/* Accordion FAQ List */}
-      <div style={{ maxWidth: '850px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {filteredFaqs.length > 0 ? (
+      {/* FAQ Accordion List */}
+      <div style={{ maxWidth: '850px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {loading ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 0.5rem auto' }} />
+            Loading FAQs from database...
+          </div>
+        ) : filteredFaqs.length === 0 ? (
+          <div className="glass-panel" style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            No official FAQs found matching "{searchQuery}".
+          </div>
+        ) : (
           filteredFaqs.map((faq) => {
-            const isExpanded = expandedId === faq.id;
-            const hasVoted = votedMap[faq.id];
+            const isExpanded = expandedId === faq._id;
+            const hasVoted = votedMap[faq._id];
 
             return (
               <div
-                key={faq.id}
+                key={faq._id}
                 className="glass-panel"
                 style={{
+                  borderRadius: 'var(--radius-md)',
+                  border: isExpanded ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border)',
                   overflow: 'hidden',
-                  border: isExpanded ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border-subtle)'
+                  transition: 'var(--transition)'
                 }}
               >
-                {/* Question Header */}
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(faq.id)}
+                <div
+                  onClick={() => toggleExpand(faq._id)}
                   style={{
-                    width: '100%',
                     padding: '1.25rem 1.5rem',
-                    background: 'transparent',
-                    border: 'none',
                     display: 'flex',
-                    alignItems: 'center',
                     justifyContent: 'space-between',
-                    gap: '1rem',
-                    textAlign: 'left',
-                    color: 'var(--text-primary)',
+                    alignItems: 'center',
                     cursor: 'pointer',
-                    fontSize: '1.05rem',
-                    fontWeight: 600
+                    background: isExpanded ? 'rgba(59, 130, 246, 0.05)' : 'transparent'
                   }}
                 >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>{faq.category}</span>
-                    {faq.question}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                    <span className="badge badge-primary">{faq.category}</span>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 600 }}>{faq.question}</h3>
+                  </div>
                   {isExpanded ? <ChevronUp size={20} color="var(--primary)" /> : <ChevronDown size={20} color="var(--text-muted)" />}
-                </button>
+                </div>
 
-                {/* Answer Content */}
                 {isExpanded && (
-                  <div style={{
-                    padding: '0 1.5rem 1.25rem',
-                    color: 'var(--text-secondary)',
-                    fontSize: '0.925rem',
-                    lineHeight: 1.6,
-                    borderTop: '1px solid var(--border-subtle)',
-                    paddingTop: '1rem'
-                  }}>
-                    <p style={{ marginBottom: '1rem' }}>{faq.answer}</p>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      <span>Verified University Policy</span>
+                  <div style={{ padding: '1.25rem 1.5rem', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-card)' }}>
+                    <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, fontSize: '0.95rem' }}>
+                      {faq.answer}
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      <span>Was this helpful?</span>
                       <button
-                        onClick={() => handleVote(faq.id)}
+                        onClick={() => handleVote(faq._id)}
                         disabled={hasVoted}
-                        style={{
-                          background: hasVoted ? 'var(--success-bg)' : 'rgba(255, 255, 255, 0.05)',
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: 'var(--radius-sm)',
-                          padding: '0.35rem 0.75rem',
-                          color: hasVoted ? 'var(--success)' : 'var(--text-secondary)',
-                          cursor: hasVoted ? 'default' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.4rem'
-                        }}
+                        className={`btn ${hasVoted ? 'btn-success' : 'btn-secondary'}`}
+                        style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                       >
                         {hasVoted ? <Check size={13} /> : <ThumbsUp size={13} />}
-                        {hasVoted ? 'Marked as Helpful' : `Helpful (${faq.helpfulCount})`}
+                        {hasVoted ? 'Helpful' : `Helpful (${faq.helpfulCount || 0})`}
                       </button>
                     </div>
                   </div>
@@ -168,40 +172,28 @@ const FaqPage = () => {
               </div>
             );
           })
-        ) : (
-          <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              No FAQs matched your search: "{searchQuery}"
-            </p>
-            <Link to="/chat" state={{ initialPrompt: searchQuery }} className="btn btn-primary">
-              <Sparkles size={16} /> Ask AI Assistant Instead
-            </Link>
-          </div>
         )}
       </div>
 
-      {/* AI Assistant Help Promo */}
+      {/* AI Assistant Banner */}
       <div className="glass-panel" style={{
         maxWidth: '850px',
-        margin: '1rem auto 0',
-        padding: '1.75rem 2rem',
+        width: '100%',
+        margin: '1.5rem auto 0 auto',
+        padding: '2rem',
+        textAlign: 'center',
         background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '1.25rem'
+        border: '1px solid rgba(59, 130, 246, 0.25)'
       }}>
-        <div>
-          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-            Still have an unanswered question?
-          </h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            Our Azure AI-powered assistant can cross-reference complete university documents and student records instantly.
-          </p>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.4rem' }}>
+          <Sparkles size={16} /> Have a specific inquiry?
         </div>
-        <Link to="/chat" className="btn btn-primary" style={{ padding: '0.65rem 1.25rem' }}>
-          Open AI Chat <ArrowRight size={15} />
+        <h3 style={{ fontSize: '1.35rem', fontWeight: 700, marginBottom: '0.5rem' }}>Ask UniAssist AI with RAG Grounding</h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: '550px', margin: '0 auto 1.25rem auto' }}>
+          Our AI student support agent answers specific questions about your attendance status, assignment deadlines, fee balances, and university policies.
+        </p>
+        <Link to="/chat" className="btn btn-primary" style={{ padding: '0.7rem 1.4rem' }}>
+          Start Live Chat Session <ArrowRight size={16} />
         </Link>
       </div>
 

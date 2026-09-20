@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { mockData } from '../services/api.js';
 import api from '../services/api.js';
 import {
   GraduationCap, Shield, Save, Check, Edit2, Lock, Users, User,
@@ -14,9 +13,8 @@ const ProfilePage = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const student = mockData.student;
-  const faculty = mockData.faculty;
   const isStudent = role === 'student';
+  const profile = user?.profile || {};
 
   // ── Active Section (from hash in URL) ──────────────────────────────────
   const [activeTab, setActiveTab] = useState('overview');
@@ -30,25 +28,58 @@ const ProfilePage = () => {
     }
   }, [location.hash]);
 
-  // ── Profile Data ───────────────────────────────────────────────────────
-  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (isStudent ? student.name : faculty.name);
-  const displayEmail = user?.email || (isStudent ? student.email : faculty.email);
-  const displayId = user?.id || (isStudent ? student.id : faculty.id);
-  const displayDepartment = user?.profile?.department || (isStudent ? student.department : faculty.department);
-  const displaySemester = user?.profile?.currentSemester || student.currentSemester;
+  // ── Profile Data from MongoDB / AuthContext ────────────────────────────
+  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (isStudent ? 'Alex Mercer' : 'Dr. Alan Turing');
+  const displayEmail = user?.email || (isStudent ? 'alex.student@university.edu' : 'dr.alan@university.edu');
+  const displayId = profile.studentId || profile.employeeId || user?.id || (isStudent ? 'STU-2024-8842' : 'FAC-CS-101');
+  const displayDepartment = profile.department || 'Computer Science & Engineering';
+  const displaySemester = profile.currentSemester || 5;
+
+  const student = {
+    name: displayName,
+    email: displayEmail,
+    id: displayId,
+    department: displayDepartment,
+    currentSemester: displaySemester,
+    degreeProgram: profile.degreeProgram || 'B.S. in Computer Science',
+    cgpa: profile.cgpa ?? 3.82,
+    batch: profile.batch || '2022-2026',
+    completedCredits: profile.completedCredits || 74,
+    advisor: profile.academicAdvisor?.userId?.firstName 
+      ? `Dr. ${profile.academicAdvisor.userId.firstName} ${profile.academicAdvisor.userId.lastName}` 
+      : 'Dr. Alan Turing',
+    emergencyContact: {
+      name: profile.emergencyContact?.name || 'Mercer Family',
+      relationship: profile.emergencyContact?.relationship || 'Parent',
+      phone: profile.emergencyContact?.phone || '+1-555-9988'
+    }
+  };
+
+  const faculty = {
+    name: displayName,
+    email: displayEmail,
+    id: displayId,
+    department: displayDepartment,
+    designation: profile.designation || 'Professor',
+    cabinOffice: profile.cabinOffice || 'Turing Hall, Room 302',
+    officeHours: Array.isArray(profile.officeHours)
+      ? profile.officeHours.map(h => `${h.dayOfWeek || ''} ${h.startTime || ''}-${h.endTime || ''}`).join(', ') || 'Tue/Thu 2:00 PM - 4:00 PM'
+      : (profile.officeHours || 'Tue/Thu 2:00 PM - 4:00 PM')
+  };
 
   const initials = displayName
     .split(' ')
+    .filter(Boolean)
     .map(n => n[0])
     .slice(0, 2)
     .join('')
-    .toUpperCase();
+    .toUpperCase() || 'U';
 
   // ── Edit Profile State ─────────────────────────────────────────────────
   const [editForm, setEditForm] = useState({
     firstName: user?.firstName || displayName.split(' ')[0] || '',
     lastName: user?.lastName || displayName.split(' ').slice(1).join(' ') || '',
-    phone: isStudent ? '+1-555-0123' : '+1-555-0144',
+    phone: user?.phoneNumber || (isStudent ? '+1-555-0123' : '+1-555-0100'),
     emergencyName: student.emergencyContact?.name || '',
     emergencyPhone: student.emergencyContact?.phone || '',
     emergencyRelationship: student.emergencyContact?.relationship || ''
@@ -360,9 +391,9 @@ const ProfilePage = () => {
                   <Shield size={20} color="var(--accent-purple)" /> Emergency Contact
                 </h3>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
-                  <div>Contact: <strong style={{ color: 'var(--text-primary)' }}>{student.emergencyContact.name}</strong></div>
-                  <div>Relationship: <strong>{student.emergencyContact.relationship}</strong></div>
-                  <div>Phone: <strong style={{ color: 'var(--text-primary)' }}>{student.emergencyContact.phone}</strong></div>
+                  <div>Contact: <strong style={{ color: 'var(--text-primary)' }}>{student.emergencyContact?.name || 'Not specified'}</strong></div>
+                  <div>Relationship: <strong>{student.emergencyContact?.relationship || 'Not specified'}</strong></div>
+                  <div>Phone: <strong style={{ color: 'var(--text-primary)' }}>{student.emergencyContact?.phone || 'Not specified'}</strong></div>
                 </div>
               </div>
             </div>

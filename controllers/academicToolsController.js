@@ -1,4 +1,5 @@
 import { AcademicPrediction, Quiz, StudyPlan } from '../models/index.js';
+import ExamSchedule from '../models/ExamSchedule.js';
 
 /**
  * Predict Attendance & Recovery Trajectory
@@ -11,14 +12,9 @@ export const predictAttendance = async (req, res) => {
     const newAttended = hypotheticalAction === 'attend' ? attended + Number(count) : attended;
     const projectedPercentage = Number(((newAttended / newTotal) * 100).toFixed(1));
 
-    // Calculate maximum safe classes to miss while staying >= targetPercentage:
-    // attended / (total + x) >= (target / 100) => total + x <= attended / (target / 100)
     const targetDecimal = targetPercentage / 100;
     const maxSafeMisses = Math.max(0, Math.floor(attended / targetDecimal - total));
 
-    // Calculate consecutive classes needed to attend to reach targetPercentage:
-    // (attended + y) / (total + y) >= targetDecimal => attended + y >= targetDecimal * total + targetDecimal * y
-    // y * (1 - targetDecimal) >= targetDecimal * total - attended
     const currentPercentage = Number(((attended / total) * 100).toFixed(1));
     const neededConsecutive = currentPercentage < targetPercentage
       ? Math.max(0, Math.ceil((targetDecimal * total - attended) / (1 - targetDecimal)))
@@ -64,39 +60,36 @@ export const predictSGPA = async (req, res) => {
       'F': 0.0
     };
 
-    let totalSemesterCredits = 0;
-    let totalGradePointsEarned = 0;
+    let semesterPoints = 0;
+    let semesterCredits = 0;
 
-    const evaluatedCourses = courses.map((c) => {
+    courses.forEach((c) => {
       const credits = Number(c.credits) || 3;
-      const point = gradePointsMap[c.expectedGrade] ?? 3.5;
-      totalSemesterCredits += credits;
-      totalGradePointsEarned += credits * point;
-      return {
-        ...c,
-        gradePoint: point,
-        weightedPoints: credits * point
-      };
+      const points = gradePointsMap[c.expectedGrade] || 3.0;
+      semesterPoints += points * credits;
+      semesterCredits += credits;
     });
 
-    const predictedSGPA = totalSemesterCredits > 0
-      ? Number((totalGradePointsEarned / totalSemesterCredits).toFixed(2))
-      : currentCgpa;
+    const projectedSgpa = semesterCredits > 0
+      ? Number((semesterPoints / semesterCredits).toFixed(2))
+      : 3.5;
 
-    // Projected Cumulative GPA
-    const totalNewCredits = completedCredits + totalSemesterCredits;
-    const projectedCGPA = totalNewCredits > 0
-      ? Number(((currentCgpa * completedCredits + totalGradePointsEarned) / totalNewCredits).toFixed(2))
+    const totalCredits = completedCredits + semesterCredits;
+    const totalWeightedPoints = (currentCgpa * completedCredits) + semesterPoints;
+    const projectedCgpa = totalCredits > 0
+      ? Number((totalWeightedPoints / totalCredits).toFixed(2))
       : currentCgpa;
 
     res.status(200).json({
       success: true,
       data: {
-        courses: evaluatedCourses,
-        semesterCredits: totalSemesterCredits,
-        predictedSGPA,
-        projectedCGPA,
-        performanceLabel: predictedSGPA >= 3.8 ? "Dean's Honors List Potential" : predictedSGPA >= 3.5 ? 'Good Academic Standing' : 'Needs Reinforcement'
+        currentCgpa,
+        projectedSgpa,
+        projectedCgpa,
+        completedCredits,
+        semesterCredits,
+        totalCredits,
+        honorsEligible: projectedCgpa >= 3.8
       }
     });
   } catch (err) {
@@ -109,60 +102,44 @@ export const predictSGPA = async (req, res) => {
  */
 export const generateQuiz = async (req, res) => {
   try {
-    const { courseCode = 'CS-301', topic = 'Dynamic Programming', difficulty = 'Intermediate' } = req.body;
+    const { topic = 'Dynamic Programming & Memoization', difficulty = 'Medium', count = 3 } = req.body;
 
-    const quizBanks = {
-      'CS-301': [
-        {
-          id: 1,
-          questionText: 'What is the optimal time complexity of solving the 0/1 Knapsack problem using Dynamic Programming?',
-          options: ['O(N * W)', 'O(2^N)', 'O(N log N)', 'O(W^2)'],
-          correctIndex: 0,
-          explanation: '0/1 Knapsack with N items and weight capacity W runs in pseudo-polynomial time O(N * W).'
-        },
-        {
-          id: 2,
-          questionText: 'Which property distinguishes Dynamic Programming from Divide and Conquer?',
-          options: ['Overlapping Subproblems', 'Recursion', 'Independent Subproblems', 'Greedy Choice Property'],
-          correctIndex: 0,
-          explanation: 'Dynamic Programming optimizes problems with overlapping subproblems and optimal substructure via memoization or tabulation.'
-        },
-        {
-          id: 3,
-          questionText: 'In Longest Common Subsequence (LCS) of two strings of lengths m and n, what is the space complexity of the standard 2D table?',
-          options: ['O(m * n)', 'O(m + n)', 'O(2^(m+n))', 'O(1)'],
-          correctIndex: 0,
-          explanation: 'The standard DP grid requires an (m+1) x (n+1) matrix, requiring O(m * n) space.'
-        }
-      ],
-      'CS-305': [
-        {
-          id: 1,
-          questionText: 'What constitutes the key advantage of containerization (Docker) over traditional Virtual Machines?',
-          options: ['Shares host OS kernel with lower overhead', 'Provides complete hardware emulation', 'Requires dedicated guest OS per instance', 'Disables network bridging'],
-          correctIndex: 0,
-          explanation: 'Containers share the host operating system kernel and isolate user spaces, resulting in lightweight resource consumption.'
-        },
-        {
-          id: 2,
-          questionText: 'Which Azure cloud compute service provides fully managed serverless event-driven execution?',
-          options: ['Azure Functions', 'Azure Virtual Machines', 'Azure Blob Storage', 'Azure ExpressRoute'],
-          correctIndex: 0,
-          explanation: 'Azure Functions is Microsoft’s serverless compute service that runs event-triggered code on demand.'
-        }
-      ]
-    };
-
-    const selectedQuestions = quizBanks[courseCode] || quizBanks['CS-301'];
+    const quizQuestions = [
+      {
+        questionId: 'q1',
+        question: 'What is the primary difference between top-down memoization and bottom-up tabulation in Dynamic Programming?',
+        options: [
+          'Memoization is iterative while tabulation uses recursion.',
+          'Memoization uses recursion with cached subproblem results while tabulation solves subproblems iteratively.',
+          'Tabulation requires exponential memory whereas memoization is O(1) space.',
+          'There is no theoretical or operational difference.'
+        ],
+        correctOptionIndex: 1,
+        explanation: 'Top-down memoization maintains recursive call stacks and caches solutions, while bottom-up tabulation builds the solution iteratively from the base cases.'
+      },
+      {
+        questionId: 'q2',
+        question: 'In the 0/1 Knapsack Problem with N items and maximum weight W, what is the optimal dynamic programming time complexity?',
+        options: ['O(N log N)', 'O(N * W)', 'O(2^N)', 'O(N^2)'],
+        correctOptionIndex: 1,
+        explanation: 'The standard dynamic programming solution runs in pseudo-polynomial time O(N * W) using a 2D table or 1D array optimization.'
+      },
+      {
+        questionId: 'q3',
+        question: 'Which of the following shortest path algorithms can handle negative weight edges without negative cycles?',
+        options: ["Dijkstra's Algorithm", 'Bellman-Ford Algorithm', "Prim's MST", "Kruskal's Algorithm"],
+        correctOptionIndex: 1,
+        explanation: 'The Bellman-Ford algorithm relaxes edges V-1 times and correctly determines shortest paths in graphs with negative weight edges, also detecting negative cycles.'
+      }
+    ];
 
     res.status(200).json({
       success: true,
       data: {
-        courseCode,
         topic,
         difficulty,
-        totalQuestions: selectedQuestions.length,
-        questions: selectedQuestions
+        totalQuestions: quizQuestions.length,
+        questions: quizQuestions
       }
     });
   } catch (err) {
@@ -171,7 +148,7 @@ export const generateQuiz = async (req, res) => {
 };
 
 /**
- * Personalized Study Planner
+ * Get Study Plan & Schedule
  */
 export const getStudyPlan = async (req, res) => {
   try {
@@ -235,6 +212,48 @@ export const getLearningRecommendations = async (req, res) => {
     ];
 
     res.status(200).json({ success: true, data: recommendations });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Get Exam Schedules
+ * @route GET /api/v1/academic/exam-schedules
+ */
+export const getExamSchedules = async (req, res) => {
+  try {
+    const { term, status } = req.query;
+    const filter = {};
+    if (term) filter.term = term;
+    if (status && status !== 'all') filter.status = status;
+
+    const schedules = await ExamSchedule.find(filter)
+      .populate('course', 'courseCode courseName credits')
+      .sort({ date: 1, startTime: 1 });
+
+    res.status(200).json({
+      success: true,
+      count: schedules.length,
+      data: schedules
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Create Exam Schedule
+ * @route POST /api/v1/academic/exam-schedules
+ */
+export const createExamSchedule = async (req, res) => {
+  try {
+    const schedule = await ExamSchedule.create(req.body);
+    res.status(201).json({
+      success: true,
+      message: 'Exam schedule entry created successfully.',
+      data: schedule
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

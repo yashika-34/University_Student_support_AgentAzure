@@ -1,10 +1,7 @@
-import { SearchClient, SearchIndexClient, AzureKeyCredential } from '@azure/search-documents';
+import { SearchClient, AzureKeyCredential } from '@azure/search-documents';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
-import mongoose from 'mongoose';
-
-// In-memory document registry (replace with MongoDB model in production)
-const documentRegistry = new Map();
+import Document from '../models/Document.js';
 
 /**
  * Chunk text into overlapping segments for better RAG retrieval
@@ -21,7 +18,7 @@ function chunkText(text, chunkSize = 800, overlap = 100) {
 }
 
 /**
- * @desc    Upload, parse, and index a university document into Azure AI Search
+ * @desc    Upload, parse, and index a university document into MongoDB & Azure AI Search
  * @route   POST /api/v1/rag/upload
  * @access  Faculty, Admin
  */
@@ -35,7 +32,7 @@ export const uploadDocument = async (req, res, next) => {
     const file = req.file;
     const docTitle = title || file.originalname.replace(/\.[^.]+$/, '');
 
-    // 1. Extract text from file
+    // 1. Extract text from file (PDF, DOCX, TXT)
     let extractedText = '';
     if (file.mimetype === 'application/pdf') {
       const parsed = await pdfParse(file.buffer);
@@ -50,7 +47,7 @@ export const uploadDocument = async (req, res, next) => {
       extractedText = file.buffer.toString('utf-8');
     }
 
-    if (!extractedText || extractedText.trim().length < 50) {
+    if (!extractedText || extractedText.trim().length < 20) {
       return res.status(422).json({
         success: false,
         message: 'Could not extract meaningful text from the uploaded document.'
@@ -59,12 +56,11 @@ export const uploadDocument = async (req, res, next) => {
 
     // 2. Chunk the extracted text
     const chunks = chunkText(extractedText);
-    console.log(`[RAG] Extracted ${extractedText.length} chars, created ${chunks.length} chunks.`);
-
-    // 3. Try to upload to Azure AI Search
     const docId = `doc-${Date.now()}`;
+    let azureIndexed = false;
     let indexedChunks = 0;
 
+    // 3. Optional: upload to Azure AI Search if configured
     if (
       process.env.AZURE_SEARCH_ENDPOINT &&
       process.env.AZURE_SEARCH_API_KEY &&
@@ -84,53 +80,56 @@ export const uploadDocument = async (req, res, next) => {
           content: chunk,
           category,
           sourceUrl: file.originalname,
-          uploadedBy: req.user.email,
+          uploadedBy: req.user ? req.user.email : 'System Admin',
           uploadedAt: new Date().toISOString()
         }));
 
-        // Upload in batches of 100
         for (let i = 0; i < documents.length; i += 100) {
           await client.uploadDocuments(documents.slice(i, i + 100));
           indexedChunks += Math.min(100, documents.length - i);
         }
-
-        console.log(`[RAG] Successfully indexed ${indexedChunks} chunks to Azure AI Search.`);
+        azureIndexed = true;
       } catch (azureErr) {
-        console.warn('[RAG] Azure AI Search indexing failed, storing locally:', azureErr.message);
+        console.warn('[RAG] Azure AI Search indexing skipped/failed:', azureErr.message);
       }
     } else {
-      console.log('[RAG] Azure AI Search not configured — storing chunks in memory registry.');
       indexedChunks = chunks.length;
     }
 
-    // 4. Store document metadata in local registry
-    const docMeta = {
-      id: docId,
+    // 4. Save to MongoDB collection `Document`
+    const formattedChunks = chunks.map((chunk, idx) => ({
+      chunkId: `${docId}-chunk-${idx}`,
+      chunkIndex: idx,
+      content: chunk
+    }));
+
+    const savedDoc = await Document.create({
+      docId,
       title: docTitle,
       originalName: file.originalname,
       mimeType: file.mimetype,
       sizeBytes: file.size,
       category,
-      uploadedBy: req.user.email,
-      uploadedAt: new Date().toISOString(),
+      uploadedBy: req.user ? req.user.email : 'Faculty/Admin',
       totalChunks: chunks.length,
       indexedChunks,
-      // Store first few chunks locally for fallback search
-      chunks: chunks.slice(0, 20)
-    };
-    documentRegistry.set(docId, docMeta);
+      chunks: formattedChunks,
+      azureIndexed
+    });
 
     res.status(201).json({
       success: true,
-      message: `Document "${docTitle}" uploaded and indexed successfully.`,
+      message: `Document "${docTitle}" uploaded, processed, and stored in MongoDB successfully.`,
       document: {
-        id: docId,
-        title: docTitle,
-        category,
-        sizeBytes: file.size,
-        totalChunks: chunks.length,
-        indexedChunks,
-        uploadedAt: docMeta.uploadedAt
+        id: savedDoc._id,
+        docId: savedDoc.docId,
+        title: savedDoc.title,
+        originalName: savedDoc.originalName,
+        category: savedDoc.category,
+        sizeBytes: savedDoc.sizeBytes,
+        totalChunks: savedDoc.totalChunks,
+        indexedChunks: savedDoc.indexedChunks,
+        uploadedAt: savedDoc.createdAt
       }
     });
   } catch (error) {
@@ -139,28 +138,33 @@ export const uploadDocument = async (req, res, next) => {
 };
 
 /**
- * @desc    List all uploaded/indexed documents
+ * @desc    List all uploaded/indexed documents from MongoDB
  * @route   GET /api/v1/rag/documents
  * @access  Authenticated users
  */
 export const listDocuments = async (req, res, next) => {
   try {
-    const docs = Array.from(documentRegistry.values()).map((d) => ({
-      id: d.id,
+    const docs = await Document.find()
+      .select('-chunks')
+      .sort({ createdAt: -1 });
+
+    const formatted = docs.map((d) => ({
+      id: d._id,
+      docId: d.docId,
       title: d.title,
       originalName: d.originalName,
       category: d.category,
       sizeBytes: d.sizeBytes,
       uploadedBy: d.uploadedBy,
-      uploadedAt: d.uploadedAt,
-      totalChunks: d.totalChunks
+      uploadedAt: d.createdAt,
+      totalChunks: d.totalChunks,
+      azureIndexed: d.azureIndexed
     }));
 
-    // Also try to get from Azure AI Search
     res.status(200).json({
       success: true,
-      count: docs.length,
-      documents: docs,
+      count: formatted.length,
+      documents: formatted,
       azureConfigured:
         !!(process.env.AZURE_SEARCH_ENDPOINT && !process.env.AZURE_SEARCH_ENDPOINT.includes('your-'))
     });
@@ -170,21 +174,51 @@ export const listDocuments = async (req, res, next) => {
 };
 
 /**
- * @desc    Delete a document from registry (and Azure Search if configured)
+ * @desc    Get single document details with chunk preview
+ * @route   GET /api/v1/rag/documents/:id
+ * @access  Authenticated users
+ */
+export const getDocumentById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    let query = { docId: id };
+    if (id.match(/^[0-9a-fA-F]{24}$/)) {
+      query = { $or: [{ _id: id }, { docId: id }] };
+    }
+
+    const doc = await Document.findOne(query);
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'Document not found.' });
+    }
+
+    res.status(200).json({
+      success: true,
+      document: doc
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Delete a document from MongoDB (and Azure Search if configured)
  * @route   DELETE /api/v1/rag/documents/:id
  * @access  Faculty, Admin
  */
 export const deleteDocument = async (req, res, next) => {
   try {
     const { id } = req.params;
-
-    if (!documentRegistry.has(id)) {
-      return res.status(404).json({ success: false, message: 'Document not found in registry.' });
+    let query = { docId: id };
+    if (id.match(/^[0-9a-fA-F]{24}$/)) {
+      query = { $or: [{ _id: id }, { docId: id }] };
     }
 
-    const doc = documentRegistry.get(id);
+    const doc = await Document.findOne(query);
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'Document not found in database.' });
+    }
 
-    // Try deleting from Azure AI Search
+    // Try deleting from Azure AI Search if configured
     if (
       process.env.AZURE_SEARCH_ENDPOINT &&
       process.env.AZURE_SEARCH_API_KEY &&
@@ -196,21 +230,20 @@ export const deleteDocument = async (req, res, next) => {
           process.env.AZURE_SEARCH_INDEX_NAME || 'university-knowledge-index',
           new AzureKeyCredential(process.env.AZURE_SEARCH_API_KEY)
         );
-        // Delete all chunks for this document
         const idsToDelete = Array.from({ length: doc.totalChunks }, (_, i) => ({
-          id: `${id}-chunk-${i}`
+          id: `${doc.docId}-chunk-${i}`
         }));
         if (idsToDelete.length > 0) {
           await client.deleteDocuments(idsToDelete);
         }
       } catch (azureErr) {
-        console.warn('[RAG] Azure delete failed:', azureErr.message);
+        console.warn('[RAG] Azure delete skipped/failed:', azureErr.message);
       }
     }
 
-    documentRegistry.delete(id);
+    await Document.deleteOne({ _id: doc._id });
 
-    res.status(200).json({ success: true, message: 'Document deleted from index.' });
+    res.status(200).json({ success: true, message: `Document "${doc.title}" deleted successfully from MongoDB.` });
   } catch (error) {
     next(error);
   }

@@ -6,31 +6,62 @@ import {
   getStudentPerformanceList,
   getStudentProgressDetail,
   generateQuestionPaper,
-  getClassReport
+  getClassReport,
+  addStudentAttendance,
+  addStudentMarks,
+  createTeacherNotice,
+  assignCourseToFaculty,
+  createAndAssignCourse,
+  unassignCourseFromFaculty,
+  assignStudentToCourse,
+  // Student Management CRUD
+  getStudentManagementList,
+  addStudentByFaculty,
+  editStudentByFaculty,
+  deleteStudentByFaculty,
+  approveStudentAccount,
+  getDepartmentStats
 } from '../controllers/teacherController.js';
 
 const router = express.Router();
 
-// All teacher routes require authentication + faculty/admin role
+// All teacher routes require authentication + faculty/teacher/admin role
 router.use(verifyToken);
-router.use(authorizeRoles('faculty', 'admin', 'super_admin'));
+router.use(authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'));
 
-// GET /api/v1/teacher/dashboard — Aggregated faculty dashboard stats
+// ── Course Assignment & Management ─────────────────────────────────────────
+router.post('/courses/assign', assignCourseToFaculty);
+router.post('/courses/create', createAndAssignCourse);
+router.delete('/courses/assign/:courseId', unassignCourseFromFaculty);
+router.post('/courses/assign-student', assignStudentToCourse);
+
+// ── Teacher Dashboard & Analytics ─────────────────────────────────────────
 router.get('/dashboard', getTeacherDashboard);
-
-// GET /api/v1/teacher/analytics/:courseId — Detailed analytics for a course
 router.get('/analytics/:courseId', getCourseAnalytics);
 
-// GET /api/v1/teacher/students — Roster of all students for faculty's courses
+// ── Student Performance List & Detail ─────────────────────────────────────
 router.get('/students', getStudentPerformanceList);
-
-// GET /api/v1/teacher/students/:studentId — Individual student progress
 router.get('/students/:studentId', getStudentProgressDetail);
 
-// POST /api/v1/teacher/question-paper — AI-generate question paper
+// ── Attendance, Marks, Notices ─────────────────────────────────────────────
+router.post('/attendance', addStudentAttendance);
+router.post('/marks', addStudentMarks);
+router.post('/notices', createTeacherNotice);
+
+// ── AI Question Paper ──────────────────────────────────────────────────────
 router.post('/question-paper', generateQuestionPaper);
 
-// GET /api/v1/teacher/report/:courseId — Full class report (marks + attendance)
+// ── Class Report ──────────────────────────────────────────────────────────
 router.get('/report/:courseId', getClassReport);
+
+// ── Student Management CRUD (Full CRUD) ────────────────────────────────────
+router.get('/manage/students', getStudentManagementList);
+router.post('/manage/students', addStudentByFaculty);
+router.put('/manage/students/:id', editStudentByFaculty);
+router.delete('/manage/students/:id', deleteStudentByFaculty);
+router.put('/manage/students/:id/approve', approveStudentAccount);
+
+// ── Department & Semester Stats ────────────────────────────────────────────
+router.get('/manage/departments', getDepartmentStats);
 
 export default router;

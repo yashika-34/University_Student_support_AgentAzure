@@ -1,76 +1,193 @@
+import Placement from '../models/Placement.js';
+import CareerProfile from '../models/CareerProfile.js';
+import Student from '../models/Student.js';
+
 /**
- * Career & Placement Controller: Eligibility, ATS Resume, Counseling, Mock Interview
+ * Career & Placement Controller: DB-backed Placement Eligibility, ATS Resume, Counseling, Mock Interview
  */
 
 /**
- * Placement Eligibility Checker
+ * Get all placement drives from MongoDB
  */
-export const checkPlacementEligibility = async (req, res) => {
+export const getPlacements = async (req, res, next) => {
   try {
-    const { cgpa = 3.82, backlogs = 0, department = 'Computer Science' } = req.body;
+    let placements = await Placement.find().sort({ packageLPA: -1 });
 
-    const companies = [
-      {
-        id: 'comp-1',
-        name: 'Microsoft Corporation',
-        tier: 'Tier-1 (Super Dream)',
-        role: 'Software Development Engineer I',
-        packageLPA: 45.0,
-        minCgpa: 3.5,
-        maxBacklogs: 0,
-        eligibleDepartments: ['Computer Science', 'Information Technology', 'Electronics'],
-        requiredSkills: ['Data Structures & Algorithms', 'System Design', 'C++/Java/Python'],
-        deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        id: 'comp-2',
-        name: 'Amazon Web Services (AWS)',
-        tier: 'Tier-1 (Super Dream)',
-        role: 'Cloud Support / DevOps Associate',
-        packageLPA: 32.5,
-        minCgpa: 3.3,
-        maxBacklogs: 0,
-        eligibleDepartments: ['Computer Science', 'Information Technology'],
-        requiredSkills: ['Linux', 'Docker', 'Networking', 'Distributed Systems'],
-        deadline: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        id: 'comp-3',
-        name: 'Deloitte Digital',
-        tier: 'Tier-2 (Dream)',
-        role: 'Technology Consultant',
-        packageLPA: 14.0,
-        minCgpa: 3.0,
-        maxBacklogs: 1,
-        eligibleDepartments: ['All Engineering Branches'],
-        requiredSkills: ['SQL', 'Business Analysis', 'Cloud Computing', 'Python'],
-        deadline: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        id: 'comp-4',
-        name: 'Cognizant Technology',
-        tier: 'Service',
-        role: 'Programmer Analyst Trainee',
-        packageLPA: 7.5,
-        minCgpa: 2.8,
-        maxBacklogs: 2,
-        eligibleDepartments: ['All Engineering Branches'],
-        requiredSkills: ['Java/C#', 'Web Fundamentals', 'Database Basics'],
-        deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    if (placements.length === 0) {
+      // Initialize MongoDB with university placement drives if collection is empty
+      const initialDrives = [
+        {
+          companyName: 'Microsoft Corporation',
+          tier: 'Tier-1 (Super Dream)',
+          roleTitle: 'Software Development Engineer I',
+          packageLPA: 45.0,
+          minCgpa: 3.5,
+          maxBacklogsAllowed: 0,
+          eligibleDepartments: ['Computer Science', 'Information Technology', 'Electronics'],
+          requiredSkills: ['Data Structures & Algorithms', 'System Design', 'C++/Java/Python'],
+          deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          openPositions: 5
+        },
+        {
+          companyName: 'Amazon Web Services (AWS)',
+          tier: 'Tier-1 (Super Dream)',
+          roleTitle: 'Cloud Support / DevOps Associate',
+          packageLPA: 32.5,
+          minCgpa: 3.3,
+          maxBacklogsAllowed: 0,
+          eligibleDepartments: ['Computer Science', 'Information Technology'],
+          requiredSkills: ['Linux', 'Docker', 'Networking', 'Distributed Systems'],
+          deadline: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
+          openPositions: 8
+        },
+        {
+          companyName: 'Deloitte Digital',
+          tier: 'Tier-2 (Dream)',
+          roleTitle: 'Technology Consultant',
+          packageLPA: 14.0,
+          minCgpa: 3.0,
+          maxBacklogsAllowed: 1,
+          eligibleDepartments: ['All Engineering Branches'],
+          requiredSkills: ['SQL', 'Business Analysis', 'Cloud Computing', 'Python'],
+          deadline: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+          openPositions: 15
+        },
+        {
+          companyName: 'Cognizant Technology',
+          tier: 'Service',
+          roleTitle: 'Programmer Analyst Trainee',
+          packageLPA: 7.5,
+          minCgpa: 2.8,
+          maxBacklogsAllowed: 2,
+          eligibleDepartments: ['All Engineering Branches'],
+          requiredSkills: ['Java/C#', 'Web Fundamentals', 'Database Basics'],
+          deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          openPositions: 30
+        }
+      ];
+      placements = await Placement.insertMany(initialDrives);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: placements
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Create a new placement drive (Faculty / Admin only)
+ */
+export const createPlacement = async (req, res, next) => {
+  try {
+    const placement = await Placement.create(req.body);
+    res.status(201).json({
+      success: true,
+      message: 'Placement drive published successfully.',
+      data: placement
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Placement Eligibility Checker querying live MongoDB Placements and Student records
+ */
+export const checkPlacementEligibility = async (req, res, next) => {
+  try {
+    let studentCgpa = req.body.cgpa !== undefined ? Number(req.body.cgpa) : 3.82;
+    let studentBacklogs = req.body.backlogs !== undefined ? Number(req.body.backlogs) : 0;
+    let studentDepartment = req.body.department || 'Computer Science';
+
+    // If student is authenticated, pull verified records from DB
+    if (req.user) {
+      const student = await Student.findOne({ userId: req.user._id });
+      if (student) {
+        if (student.cgpa) studentCgpa = student.cgpa;
+        if (student.department) studentDepartment = student.department;
       }
-    ];
+    }
 
-    const results = companies.map((c) => {
-      const isCgpaEligible = cgpa >= c.minCgpa;
-      const isBacklogEligible = backlogs <= c.maxBacklogs;
+    let placements = await Placement.find().sort({ packageLPA: -1 });
+
+    if (placements.length === 0) {
+      const initialDrives = [
+        {
+          companyName: 'Microsoft Corporation',
+          tier: 'Tier-1 (Super Dream)',
+          roleTitle: 'Software Development Engineer I',
+          packageLPA: 45.0,
+          minCgpa: 3.5,
+          maxBacklogsAllowed: 0,
+          eligibleDepartments: ['Computer Science', 'Information Technology', 'Electronics'],
+          requiredSkills: ['Data Structures & Algorithms', 'System Design', 'C++/Java/Python'],
+          deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          openPositions: 5
+        },
+        {
+          companyName: 'Amazon Web Services (AWS)',
+          tier: 'Tier-1 (Super Dream)',
+          roleTitle: 'Cloud Support / DevOps Associate',
+          packageLPA: 32.5,
+          minCgpa: 3.3,
+          maxBacklogsAllowed: 0,
+          eligibleDepartments: ['Computer Science', 'Information Technology'],
+          requiredSkills: ['Linux', 'Docker', 'Networking', 'Distributed Systems'],
+          deadline: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
+          openPositions: 8
+        },
+        {
+          companyName: 'Deloitte Digital',
+          tier: 'Tier-2 (Dream)',
+          roleTitle: 'Technology Consultant',
+          packageLPA: 14.0,
+          minCgpa: 3.0,
+          maxBacklogsAllowed: 1,
+          eligibleDepartments: ['All Engineering Branches'],
+          requiredSkills: ['SQL', 'Business Analysis', 'Cloud Computing', 'Python'],
+          deadline: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+          openPositions: 15
+        },
+        {
+          companyName: 'Cognizant Technology',
+          tier: 'Service',
+          roleTitle: 'Programmer Analyst Trainee',
+          packageLPA: 7.5,
+          minCgpa: 2.8,
+          maxBacklogsAllowed: 2,
+          eligibleDepartments: ['All Engineering Branches'],
+          requiredSkills: ['Java/C#', 'Web Fundamentals', 'Database Basics'],
+          deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          openPositions: 30
+        }
+      ];
+      placements = await Placement.insertMany(initialDrives);
+    }
+
+    const results = placements.map((p) => {
+      const isCgpaEligible = studentCgpa >= (p.minCgpa || 0);
+      const isBacklogEligible = studentBacklogs <= (p.maxBacklogsAllowed ?? 0);
       const isEligible = isCgpaEligible && isBacklogEligible;
 
       let reason = 'Eligible for placement drive.';
-      if (!isCgpaEligible) reason = `Requires minimum CGPA of ${c.minCgpa} (current: ${cgpa}).`;
-      else if (!isBacklogEligible) reason = `Max backlogs allowed is ${c.maxBacklogs} (current: ${backlogs}).`;
+      if (!isCgpaEligible) reason = `Requires minimum CGPA of ${p.minCgpa} (current: ${studentCgpa}).`;
+      else if (!isBacklogEligible) reason = `Max backlogs allowed is ${p.maxBacklogsAllowed} (current: ${studentBacklogs}).`;
 
       return {
-        ...c,
+        id: p._id,
+        name: p.companyName,
+        tier: p.tier,
+        role: p.roleTitle,
+        packageLPA: p.packageLPA,
+        minCgpa: p.minCgpa,
+        maxBacklogs: p.maxBacklogsAllowed,
+        eligibleDepartments: p.eligibleDepartments,
+        requiredSkills: p.requiredSkills,
+        deadline: p.deadline,
+        openPositions: p.openPositions,
         isEligible,
         statusReason: reason
       };
@@ -81,22 +198,22 @@ export const checkPlacementEligibility = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        studentMetrics: { cgpa, backlogs, department },
+        studentMetrics: { cgpa: studentCgpa, backlogs: studentBacklogs, department: studentDepartment },
         totalDrives: results.length,
         eligibleCount,
-        eligibilityPercentage: Math.round((eligibleCount / results.length) * 100),
+        eligibilityPercentage: results.length > 0 ? Math.round((eligibleCount / results.length) * 100) : 0,
         companies: results
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    next(err);
   }
 };
 
 /**
- * Resume ATS Analyzer
+ * Resume ATS Analyzer with MongoDB CareerProfile persistence
  */
-export const analyzeResume = async (req, res) => {
+export const analyzeResume = async (req, res, next) => {
   try {
     const { resumeText = '', targetRole = 'Fullstack Cloud Engineer' } = req.body;
 
@@ -117,7 +234,7 @@ export const analyzeResume = async (req, res) => {
       }
     });
 
-    const atsScore = Math.min(95, Math.max(35, Math.round((matched.length / keywordsRequired.length) * 100)));
+    const atsScore = Math.min(98, Math.max(30, Math.round((matched.length / keywordsRequired.length) * 100)));
 
     const recommendations = [];
     if (missing.length > 0) {
@@ -126,31 +243,49 @@ export const analyzeResume = async (req, res) => {
     if (!lowerText.includes('achieved') && !lowerText.includes('improved') && !lowerText.includes('reduced')) {
       recommendations.push('Quantify project impacts using metric verbs (e.g. "reduced latency by 35%").');
     }
-    if (resumeText.length < 300) {
-      recommendations.push('Expand your experience and project descriptions to meet minimum ATS depth (500+ words).');
+    if (resumeText.length < 200) {
+      recommendations.push('Expand your experience and project descriptions to meet minimum ATS depth (300+ words).');
     }
     recommendations.push('Ensure standard sections: Summary, Technical Skills, Projects, Education, Certifications.');
+
+    // Save to CareerProfile in MongoDB if user is a student
+    if (req.user) {
+      const student = await Student.findOne({ userId: req.user._id });
+      if (student) {
+        await CareerProfile.findOneAndUpdate(
+          { student: student._id },
+          {
+            targetDomain: targetRole,
+            atsScore,
+            resumeKeywordsMatched: matched,
+            missingKeywords: missing,
+            resumeFeedback: recommendations
+          },
+          { upsert: true, new: true }
+        );
+      }
+    }
 
     res.status(200).json({
       success: true,
       data: {
         targetRole,
         atsScore,
-        grade: atsScore >= 80 ? 'Excellent Match' : atsScore >= 65 ? 'Competitive Match' : 'Needs ATS Optimization',
+        grade: atsScore >= 80 ? 'Optimal Candidate Match' : atsScore >= 65 ? 'Competitive Candidate Match' : 'Needs ATS Optimization',
         matchedKeywords: matched,
         missingKeywords: missing,
-        recommendations
+        feedback: recommendations
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    next(err);
   }
 };
 
 /**
- * AI Career Counselor
+ * AI Career Counselor with personalized recommendations
  */
-export const getCareerCounseling = async (req, res) => {
+export const getCareerCounseling = async (req, res, next) => {
   try {
     const { primaryInterest = 'Cloud & AI Architecture', semester = 5 } = req.body;
 
@@ -181,14 +316,14 @@ export const getCareerCounseling = async (req, res) => {
       data: counselorData
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    next(err);
   }
 };
 
 /**
- * AI Mock Interview Simulator
+ * AI Mock Interview Simulator with MongoDB simulation history
  */
-export const simulateInterview = async (req, res) => {
+export const simulateInterview = async (req, res, next) => {
   try {
     const { role = 'Fullstack Engineer', questionId = 1, answerText = '' } = req.body;
 
@@ -219,9 +354,45 @@ export const simulateInterview = async (req, res) => {
     if (answerText.trim().length < 40) {
       feedbackScore = 45;
       feedbackNotes = 'Answer is too brief. Elaborate with specific architectural mechanisms, state management trade-offs, or real-world project context.';
-    } else if (answerText.toLowerCase().includes('heuristic') || answerText.toLowerCase().includes('reconciliation') || answerText.toLowerCase().includes('compound index')) {
+    } else if (
+      answerText.toLowerCase().includes('heuristic') ||
+      answerText.toLowerCase().includes('reconciliation') ||
+      answerText.toLowerCase().includes('virtual dom') ||
+      answerText.toLowerCase().includes('compound index')
+    ) {
       feedbackScore = 95;
       feedbackNotes = 'Exceptional depth. Accurate terminology and strong comprehension demonstrated.';
+    }
+
+    // Save simulation record to MongoDB CareerProfile
+    if (req.user) {
+      const student = await Student.findOne({ userId: req.user._id });
+      if (student) {
+        await CareerProfile.findOneAndUpdate(
+          { student: student._id },
+          {
+            $push: {
+              interviewSimulations: {
+                sessionDate: new Date(),
+                roleTitle: role,
+                difficulty: 'Junior',
+                score: feedbackScore,
+                strengths: ['Relevant conceptual alignment', 'Clear structure'],
+                improvements: ['Include production trade-offs'],
+                qaTranscript: [
+                  {
+                    question: currentQ.question,
+                    answer: answerText,
+                    feedback: feedbackNotes,
+                    rating: feedbackScore
+                  }
+                ]
+              }
+            }
+          },
+          { upsert: true }
+        );
+      }
     }
 
     res.status(200).json({
@@ -230,12 +401,12 @@ export const simulateInterview = async (req, res) => {
         question: currentQ,
         evaluatedAnswer: answerText,
         score: feedbackScore,
-        feedback: feedbackNotes,
+        notes: feedbackNotes,
         strengths: ['Relevant conceptual alignment', 'Clear structure'],
-        improvementTip: 'Include a brief real-world production tradeoff to elevate to Senior rating.'
+        improvement: 'Include a brief real-world production tradeoff to elevate to Senior rating.'
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    next(err);
   }
 };

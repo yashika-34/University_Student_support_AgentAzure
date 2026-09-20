@@ -19,7 +19,26 @@ export const getMyMarks = async (req, res, next) => {
       .populate('course', 'courseCode courseName credits department')
       .sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, count: marks.length, marks });
+    const formattedMarks = marks.map((m) => ({
+      _id: m._id,
+      subject: m.subject || m.course?.courseName || 'General',
+      courseCode: m.course?.courseCode || m.subject?.slice(0, 6) || 'GEN',
+      courseName: m.course?.courseName || m.subject || 'General',
+      credits: m.course?.credits || 3,
+      examType: m.examType,
+      examLabel: m.examLabel || `${m.subject || m.course?.courseName || 'Course'} Exam`,
+      marksObtained: m.marksObtained,
+      maxMarks: m.maxMarks,
+      percentage: m.percentage,
+      grade: m.grade,
+      gradePoints: m.gradePoints,
+      semester: m.semester,
+      academicYear: m.academicYear,
+      remarks: m.remarks,
+      createdAt: m.createdAt
+    }));
+
+    res.status(200).json({ success: true, count: marks.length, marks: formattedMarks });
   } catch (error) {
     next(error);
   }
@@ -43,7 +62,7 @@ export const getMarksSummary = async (req, res, next) => {
     // Group by semester
     const bySemester = {};
     allMarks.forEach((m) => {
-      const sem = m.semester || 'Unknown';
+      const sem = m.semester || 1;
       if (!bySemester[sem]) bySemester[sem] = [];
       bySemester[sem].push(m);
     });
@@ -51,7 +70,7 @@ export const getMarksSummary = async (req, res, next) => {
     // Calculate SGPA per semester
     const semesterSummaries = Object.entries(bySemester).map(([sem, entries]) => {
       const totalCredits = entries.reduce((acc, e) => acc + (e.course?.credits || 3), 0);
-      const weightedPoints = entries.reduce((acc, e) => acc + ((e.course?.credits || 3) * e.gradePoints), 0);
+      const weightedPoints = entries.reduce((acc, e) => acc + ((e.course?.credits || 3) * (e.gradePoints || 0)), 0);
       const sgpa = totalCredits > 0 ? (weightedPoints / totalCredits).toFixed(2) : 0;
       return { semester: sem, sgpa: parseFloat(sgpa), totalCredits, courses: entries.length };
     });
@@ -59,18 +78,20 @@ export const getMarksSummary = async (req, res, next) => {
     // Grade distribution
     const gradeDistribution = {};
     allMarks.forEach((m) => {
-      gradeDistribution[m.grade] = (gradeDistribution[m.grade] || 0) + 1;
+      if (m.grade) {
+        gradeDistribution[m.grade] = (gradeDistribution[m.grade] || 0) + 1;
+      }
     });
 
     // Calculate overall CGPA
     const totalCredits = allMarks.reduce((acc, m) => acc + (m.course?.credits || 3), 0);
-    const totalWeighted = allMarks.reduce((acc, m) => acc + ((m.course?.credits || 3) * m.gradePoints), 0);
+    const totalWeighted = allMarks.reduce((acc, m) => acc + ((m.course?.credits || 3) * (m.gradePoints || 0)), 0);
     const cgpa = totalCredits > 0 ? (totalWeighted / totalCredits).toFixed(2) : 0;
 
     res.status(200).json({
       success: true,
       summary: {
-        cgpa: parseFloat(cgpa),
+        cgpa: parseFloat(cgpa) || student.cgpa || 0,
         totalMarksEntries: allMarks.length,
         gradeDistribution,
         semesterSummaries: semesterSummaries.sort((a, b) => a.semester - b.semester),
@@ -104,7 +125,6 @@ export const getCourseMarks = async (req, res, next) => {
       })
       .sort({ 'student.studentId': 1, examType: 1 });
 
-    // Compute course statistics
     const published = marks.filter((m) => m.isPublished);
     const avg = published.length
       ? (published.reduce((acc, m) => acc + m.percentage, 0) / published.length).toFixed(1)
@@ -130,31 +150,38 @@ export const getCourseMarks = async (req, res, next) => {
  */
 export const addMarks = async (req, res, next) => {
   try {
-    const { studentId, courseId, examType, examLabel, marksObtained, maxMarks, semester, academicYear, remarks } = req.body;
+    const { studentId, courseId, subject, examType, examLabel, marksObtained, maxMarks, semester, academicYear, remarks } = req.body;
 
     const faculty = await Faculty.findOne({ userId: req.user._id });
     const student = await Student.findById(studentId);
-    const course = await Course.findById(courseId);
-
     if (!student) return res.status(404).json({ success: false, message: 'Student not found.' });
-    if (!course) return res.status(404).json({ success: false, message: 'Course not found.' });
+
+    let course = null;
+    if (courseId) {
+      course = await Course.findById(courseId);
+    }
+
+    const subjectName = subject || (course ? course.courseName : 'General Assessment');
 
     const entry = await Marks.create({
-      student: studentId,
-      course: courseId,
-      faculty: faculty?._id,
-      examType,
-      examLabel,
-      marksObtained,
-      maxMarks: maxMarks || 100,
-      semester: semester || student.currentSemester,
-      academicYear,
-      remarks,
-      isPublished: false
+      student: student._id,
+      course: course?._id || null,
+      subject: subjectName,
+      faculty: faculty?._id || null,
+      examType: examType || 'internal_1',
+      examLabel: examLabel || `${subjectName} Assessment`,
+      marksObtained: Number(marksObtained),
+      maxMarks: Number(maxMarks) || 100,
+      semester: semester || student.currentSemester || 1,
+      academicYear: academicYear || '2026-2027',
+      remarks: remarks || '',
+      isPublished: true
     });
 
-    await entry.populate('course', 'courseCode courseName');
-    await entry.populate({ path: 'student', populate: { path: 'userId', select: 'firstName lastName' } });
+    if (entry.course) {
+      await entry.populate('course', 'courseCode courseName');
+    }
+    await entry.populate({ path: 'student', populate: { path: 'userId', select: 'firstName lastName email' } });
 
     res.status(201).json({ success: true, message: 'Marks added successfully.', marks: entry });
   } catch (error) {

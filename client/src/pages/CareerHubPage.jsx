@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { mockData } from '../services/api.js';
+import React, { useState, useEffect } from 'react';
+import api from '../services/api.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import {
   Briefcase,
   Compass,
@@ -13,12 +14,36 @@ import {
 } from 'lucide-react';
 
 const CareerHubPage = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('placement');
 
   // Placement Checker State
-  const [studentCgpa, setStudentCgpa] = useState(3.82);
+  const [studentCgpa, setStudentCgpa] = useState(() => user?.profile?.cgpa || 3.82);
   const [studentBacklogs, setStudentBacklogs] = useState(0);
-  const [placements] = useState(mockData.placements);
+  const [placements, setPlacements] = useState([]);
+  const [placementsLoading, setPlacementsLoading] = useState(false);
+
+  // Load placement eligibility from API on mount
+  useEffect(() => {
+    const fetchPlacements = async () => {
+      setPlacementsLoading(true);
+      try {
+        const res = await api.post('/career/check-placement', {
+          cgpa: studentCgpa,
+          backlogs: studentBacklogs,
+          department: user?.profile?.department || 'Computer Science'
+        });
+        if (res.data?.data?.companies) {
+          setPlacements(res.data.data.companies);
+        }
+      } catch (err) {
+        console.error('Failed to fetch placements:', err);
+      } finally {
+        setPlacementsLoading(false);
+      }
+    };
+    fetchPlacements();
+  }, [studentCgpa, studentBacklogs]);
 
   // Resume Analyzer State
   const [resumeText, setResumeText] = useState(
@@ -27,27 +52,27 @@ const CareerHubPage = () => {
   const [atsAnalysis, setAtsAnalysis] = useState(null);
   const [isAnalyzingResume, setIsAnalyzingResume] = useState(false);
 
-  const handleAnalyzeResume = () => {
+  const handleAnalyzeResume = async () => {
+    if (!resumeText.trim()) return;
     setIsAnalyzingResume(true);
-    setTimeout(() => {
-      const keywords = ['react', 'node.js', 'express', 'mongodb', 'docker', 'azure', 'rest api', 'git', 'sql', 'ci/cd', 'typescript', 'microservices'];
-      const textLower = resumeText.toLowerCase();
-      const matched = keywords.filter(k => textLower.includes(k));
-      const missing = keywords.filter(k => !textLower.includes(k));
-      const score = Math.round((matched.length / keywords.length) * 100);
-
-      setAtsAnalysis({
-        score,
-        matched,
-        missing,
-        feedback: [
-          'Strong foundational technology stack keywords detected for Fullstack Cloud roles.',
-          'Quantify team impacts using metrics (e.g. "enhanced API query throughput by 40%").',
-          'Include continuous integration (CI/CD) and automated testing mentions to elevate to Senior rating.'
-        ]
+    try {
+      const res = await api.post('/career/analyze-resume', {
+        resumeText,
+        targetRole: 'Fullstack Cloud Engineer'
       });
+      if (res.data?.data) {
+        setAtsAnalysis({
+          score: res.data.data.atsScore,
+          matched: res.data.data.matchedKeywords || [],
+          missing: res.data.data.missingKeywords || [],
+          feedback: res.data.data.feedback || []
+        });
+      }
+    } catch (err) {
+      console.error('Failed to analyze resume:', err);
+    } finally {
       setIsAnalyzingResume(false);
-    }, 700);
+    }
   };
 
   // Mock Interview State
@@ -55,29 +80,23 @@ const CareerHubPage = () => {
   const [interviewResult, setInterviewResult] = useState(null);
   const [isEvaluatingInterview, setIsEvaluatingInterview] = useState(false);
 
-  const handleEvaluateInterview = () => {
+  const handleEvaluateInterview = async () => {
     if (!interviewAnswer.trim()) return;
     setIsEvaluatingInterview(true);
-    setTimeout(() => {
-      const lower = interviewAnswer.toLowerCase();
-      let score = 82;
-      let notes = 'Clear architectural explanation with sound technical foundation.';
-      if (lower.length < 50) {
-        score = 55;
-        notes = 'Response is concise. Discuss trade-offs and performance implications under load.';
-      } else if (lower.includes('reconciliation') || lower.includes('virtual dom') || lower.includes('latency')) {
-        score = 96;
-        notes = 'Outstanding precision, demonstrates deep production understanding.';
-      }
-
-      setInterviewResult({
-        score,
-        notes,
-        strengths: ['Accurate concept terminology', 'Logical sequence of steps'],
-        improvement: 'Mention production monitoring or error-boundary recovery.'
+    try {
+      const res = await api.post('/career/simulate-interview', {
+        role: 'Fullstack Engineer',
+        questionId: 1,
+        answerText: interviewAnswer
       });
+      if (res.data?.data) {
+        setInterviewResult(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to evaluate interview:', err);
+    } finally {
       setIsEvaluatingInterview(false);
-    }, 800);
+    }
   };
 
   return (
@@ -153,8 +172,13 @@ const CareerHubPage = () => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {placements.map((drive) => {
-              const isEligible = studentCgpa >= drive.minCgpa && studentBacklogs <= drive.maxBacklogs;
+            {placementsLoading ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading placement drives...</div>
+            ) : placements.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No placement drives found.</div>
+            ) : placements.map((drive) => {
+              const isEligible = drive.isEligible !== undefined ? drive.isEligible : (studentCgpa >= (drive.minCgpa || 0) && studentBacklogs <= (drive.maxBacklogs ?? 99));
+              const packageDisplay = drive.packageLPA ? `${drive.packageLPA} LPA` : drive.package || 'Competitive';
               return (
                 <div
                   key={drive.id}
@@ -179,10 +203,10 @@ const CareerHubPage = () => {
                     </div>
                     <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.2rem' }}>{drive.name}</h3>
                     <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.92rem', marginBottom: '0.4rem' }}>
-                      {drive.role} &bull; <span style={{ color: 'var(--success)' }}>Package: {drive.packageLPA} LPA</span>
+                      {drive.role} &bull; <span style={{ color: 'var(--success)' }}>Package: {packageDisplay}</span>
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      Min CGPA: {drive.minCgpa} | Max Backlogs: {drive.maxBacklogs} | Deadline: {drive.deadline}
+                      Min CGPA: {drive.minCgpa || drive.eligibilityCgpa} | Max Backlogs: {drive.maxBacklogs ?? 'N/A'} | Deadline: {drive.deadline ? new Date(drive.deadline).toLocaleDateString() : 'TBD'}
                     </div>
                   </div>
 

@@ -4,7 +4,11 @@ import {
   login,
   getMe,
   logout,
-  refreshAccessToken
+  refreshAccessToken,
+  updateProfile,
+  forgotPassword,
+  resetPassword,
+  updatePassword
 } from '../controllers/authController.js';
 import { verifyToken } from '../middleware/authMiddleware.js';
 
@@ -15,5 +19,11 @@ router.post('/login', login);
 router.post('/logout', verifyToken, logout);
 router.post('/refresh', refreshAccessToken);
 router.get('/me', verifyToken, getMe);
+router.put('/profile', verifyToken, updateProfile);
+
+// Password Management
+router.post('/forgot-password', forgotPassword);
+router.put('/reset-password/:token', resetPassword);
+router.put('/update-password', verifyToken, updatePassword);
 
 export default router;

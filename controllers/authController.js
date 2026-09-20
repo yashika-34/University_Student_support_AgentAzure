@@ -80,7 +80,7 @@ export const register = async (req, res, next) => {
         admissionYear: admissionYear || new Date().getFullYear(),
         batch: batch || `${new Date().getFullYear()}-${new Date().getFullYear() + 4}`
       });
-    } else if (role === 'faculty') {
+    } else if (role === 'faculty' || role === 'teacher') {
       roleProfile = await Faculty.create({
         userId: user._id,
         employeeId: employeeId || `FAC-${Date.now().toString().slice(-4)}`,
@@ -168,7 +168,7 @@ export const login = async (req, res, next) => {
     let roleProfile = null;
     if (user.role === 'student') {
       roleProfile = await Student.findOne({ userId: user._id });
-    } else if (user.role === 'faculty') {
+    } else if (user.role === 'faculty' || user.role === 'teacher') {
       roleProfile = await Faculty.findOne({ userId: user._id });
     }
 
@@ -212,7 +212,7 @@ export const getMe = async (req, res, next) => {
 
     if (user.role === 'student') {
       roleProfile = await Student.findOne({ userId: user._id }).populate('academicAdvisor enrolledCourses.courseId');
-    } else if (user.role === 'faculty') {
+    } else if (user.role === 'faculty' || user.role === 'teacher') {
       roleProfile = await Faculty.findOne({ userId: user._id }).populate('assignedCourses');
     }
 
@@ -289,3 +289,172 @@ export const refreshAccessToken = async (req, res, next) => {
     });
   }
 };
+
+/**
+ * @desc    Update user profile & role-specific details
+ * @route   PUT /api/v1/auth/profile
+ * @access  Private
+ */
+export const updateProfile = async (req, res, next) => {
+  try {
+    const { firstName, lastName, phoneNumber, emergencyContact, cabinOffice, officeHours } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
+    if (phoneNumber) user.phoneNumber = phoneNumber;
+    await user.save();
+
+    let profile = null;
+    if (user.role === 'student') {
+      profile = await Student.findOne({ userId: user._id });
+      if (profile && emergencyContact) {
+        profile.emergencyContact = { ...profile.emergencyContact, ...emergencyContact };
+        await profile.save();
+      }
+    } else if (user.role === 'faculty') {
+      profile = await Faculty.findOne({ userId: user._id });
+      if (profile) {
+        if (cabinOffice) profile.cabinOffice = cabinOffice;
+        if (officeHours) profile.officeHours = officeHours;
+        await profile.save();
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully.',
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: user.role,
+        profile
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Forgot Password — generate reset token
+ * @route   POST /api/v1/auth/forgot-password
+ * @access  Public
+ */
+export const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Please provide an email address.' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'No user registered with this email.' });
+    }
+
+    // Generate random 6-character reset code or token
+    const crypto = await import('crypto');
+    const resetToken = crypto.randomBytes(20).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    user.resetPasswordToken = resetTokenHash;
+    user.resetPasswordExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
+    await user.save({ validateBeforeSave: false });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset token generated.',
+      resetToken,
+      resetUrl: `/reset-password/${resetToken}`
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Reset Password using token
+ * @route   PUT /api/v1/auth/reset-password/:token
+ * @access  Public
+ */
+export const resetPassword = async (req, res, next) => {
+  try {
+    const crypto = await import('crypto');
+    const resetTokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex');
+
+    const user = await User.findOne({
+      resetPasswordToken: resetTokenHash,
+      resetPasswordExpire: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired password reset token.'
+      });
+    }
+
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long.'
+      });
+    }
+
+    user.passwordHash = password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save();
+
+    const token = generateToken(user._id, user.role);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password has been reset successfully.',
+      token,
+      role: user.role
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update Password for logged-in user
+ * @route   PUT /api/v1/auth/update-password
+ * @access  Private
+ */
+export const updatePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Please provide current and new password.' });
+    }
+
+    const user = await User.findById(req.user._id).select('+passwordHash');
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Current password is incorrect.' });
+    }
+
+    user.passwordHash = newPassword;
+    await user.save();
+
+    const token = generateToken(user._id, user.role);
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully.',
+      token
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

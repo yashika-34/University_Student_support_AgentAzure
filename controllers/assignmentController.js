@@ -3,6 +3,65 @@ import Student from '../models/Student.js';
 import Faculty from '../models/Faculty.js';
 
 /**
+ * @desc    Get all assignments for logged-in student (pending, submitted, graded)
+ * @route   GET /api/v1/assignments/my
+ * @access  Private (Student)
+ */
+export const getMyAssignments = async (req, res, next) => {
+  try {
+    const student = await Student.findOne({ userId: req.user._id });
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student profile not found.' });
+    }
+
+    const enrolledCourseIds = student.enrolledCourses
+      .filter((c) => c.status === 'enrolled')
+      .map((c) => c.courseId);
+
+    const assignments = await Assignment.find({
+      course: { $in: enrolledCourseIds }
+    })
+      .populate('course', 'courseCode courseName')
+      .sort({ dueDate: 1 });
+
+    const formatted = assignments.map((assign) => {
+      const submission = assign.submissions?.find(
+        (s) => s.student.toString() === student._id.toString()
+      );
+      const isPastDue = new Date(assign.dueDate) < new Date();
+      let status = 'pending';
+      if (submission) {
+        status = submission.status === 'graded' ? 'graded' : 'submitted';
+      } else if (isPastDue) {
+        status = 'overdue';
+      }
+
+      return {
+        id: assign._id,
+        courseCode: assign.course?.courseCode || 'Unknown',
+        courseName: assign.course?.courseName || 'Course',
+        title: assign.title,
+        description: assign.description,
+        dueDate: assign.dueDate,
+        maxScore: assign.maxScore,
+        attachmentUrl: assign.attachmentUrl,
+        isSubmitted: !!submission,
+        status,
+        submissionDetails: submission || null
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: formatted.length,
+      data: formatted
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc    Get upcoming pending assignments for logged-in student
  * @route   GET /api/v1/assignments/my-pending
  * @access  Private (Student)
@@ -27,19 +86,20 @@ export const getMyPendingAssignments = async (req, res, next) => {
 
     // Attach student submission status
     const formatted = assignments.map((assign) => {
-      const submission = assign.submissions.find(
+      const submission = assign.submissions?.find(
         (s) => s.student.toString() === student._id.toString()
       );
       return {
         id: assign._id,
-        courseCode: assign.course.courseCode,
-        courseName: assign.course.courseName,
+        courseCode: assign.course?.courseCode || 'Unknown',
+        courseName: assign.course?.courseName || 'Course',
         title: assign.title,
         description: assign.description,
         dueDate: assign.dueDate,
         maxScore: assign.maxScore,
         attachmentUrl: assign.attachmentUrl,
         isSubmitted: !!submission,
+        status: submission ? (submission.status === 'graded' ? 'graded' : 'submitted') : 'pending',
         submissionDetails: submission || null
       };
     });
@@ -64,6 +124,7 @@ export const getAssignmentsByCourse = async (req, res, next) => {
     const { courseId } = req.params;
     const assignments = await Assignment.find({ course: courseId })
       .populate('createdBy', 'employeeId')
+      .populate('course', 'courseCode courseName')
       .sort({ dueDate: -1 });
 
     res.status(200).json({
@@ -83,22 +144,32 @@ export const getAssignmentsByCourse = async (req, res, next) => {
  */
 export const createAssignment = async (req, res, next) => {
   try {
-    const { courseId, title, description, maxScore, dueDate, attachmentUrl, allowedFileTypes } = req.body;
+    const { courseId, courseCode, title, description, maxScore, dueDate, attachmentUrl, allowedFileTypes } = req.body;
 
     const faculty = await Faculty.findOne({ userId: req.user._id });
     if (!faculty && req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Only faculty can post assignments.' });
     }
 
+    let targetCourseId = courseId;
+    if (!targetCourseId && courseCode) {
+      const course = await (await import('../models/Course.js')).default.findOne({ courseCode: courseCode.toUpperCase() });
+      if (course) targetCourseId = course._id;
+    }
+
+    if (!targetCourseId) {
+      return res.status(400).json({ success: false, message: 'Valid course is required.' });
+    }
+
     const assignment = await Assignment.create({
-      course: courseId,
+      course: targetCourseId,
       createdBy: faculty ? faculty._id : req.body.facultyId,
       title,
       description,
       maxScore: maxScore || 100,
       dueDate: new Date(dueDate),
       attachmentUrl: attachmentUrl || null,
-      allowedFileTypes: allowedFileTypes || ['.pdf', '.zip']
+      allowedFileTypes: allowedFileTypes || ['pdf', 'docx', 'zip']
     });
 
     res.status(201).json({
@@ -112,18 +183,14 @@ export const createAssignment = async (req, res, next) => {
 };
 
 /**
- * @desc    Submit an assignment
+ * @desc    Submit student assignment file or text
  * @route   POST /api/v1/assignments/:id/submit
  * @access  Private (Student)
  */
 export const submitAssignment = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { fileUrl } = req.body;
-
-    if (!fileUrl) {
-      return res.status(400).json({ success: false, message: 'Submission file URL is required.' });
-    }
+    const { fileUrl, content, fileName } = req.body;
 
     const student = await Student.findOne({ userId: req.user._id });
     if (!student) {
@@ -136,6 +203,7 @@ export const submitAssignment = async (req, res, next) => {
     }
 
     const isLate = new Date() > new Date(assignment.dueDate);
+    const submissionContent = fileUrl || fileName || content || (req.file ? req.file.originalname : 'Online Submission');
 
     // Check existing submission
     const existingIndex = assignment.submissions.findIndex(
@@ -143,13 +211,13 @@ export const submitAssignment = async (req, res, next) => {
     );
 
     if (existingIndex > -1) {
-      assignment.submissions[existingIndex].fileUrl = fileUrl;
+      assignment.submissions[existingIndex].fileUrl = submissionContent;
       assignment.submissions[existingIndex].submittedAt = new Date();
       assignment.submissions[existingIndex].status = isLate ? 'late' : 'resubmitted';
     } else {
       assignment.submissions.push({
         student: student._id,
-        fileUrl,
+        fileUrl: submissionContent,
         submittedAt: new Date(),
         status: isLate ? 'late' : 'submitted'
       });

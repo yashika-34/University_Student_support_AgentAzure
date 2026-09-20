@@ -11,6 +11,7 @@ import Home from './pages/Home.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import FaqPage from './pages/FaqPage.jsx';
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 
 // Shared Protected Pages
 import StudentDashboard from './pages/StudentDashboard.jsx';
@@ -33,8 +34,10 @@ import TeacherAnalyticsPage from './pages/teacher/TeacherAnalyticsPage.jsx';
 import QuestionPaperPage from './pages/teacher/QuestionPaperPage.jsx';
 import StudentProgressPage from './pages/teacher/StudentProgressPage.jsx';
 
+import StudentManagementPage from "./pages/teacher/StudentManagementPage";
+
 // PUBLIC PATHS that should NOT show sidebar
-const PUBLIC_PATHS = ['/', '/login', '/register', '/faqs'];
+const PUBLIC_PATHS = ['/', '/login', '/register', '/faqs', '/forgot-password', '/reset-password'];
 
 // Inner layout component (needs access to router context)
 function AppLayout() {
@@ -43,7 +46,7 @@ function AppLayout() {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
 
-  const isPublicPage = PUBLIC_PATHS.includes(location.pathname) || location.pathname === '/faqs';
+  const isPublicPage = PUBLIC_PATHS.includes(location.pathname) || location.pathname.startsWith('/reset-password');
   const showSidebar = isAuthenticated && !isPublicPage;
 
   return (
@@ -74,6 +77,8 @@ function AppLayout() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password/:token" element={<ForgotPasswordPage />} />
             <Route path="/faqs" element={<FaqPage />} />
 
             {/* ── Student Protected Routes ────────────────────────────────── */}
@@ -93,6 +98,7 @@ function AppLayout() {
               <Route path="/teacher/analytics" element={<TeacherAnalyticsPage />} />
               <Route path="/teacher/question-paper" element={<QuestionPaperPage />} />
               <Route path="/teacher/students" element={<StudentProgressPage />} />
+              <Route path="/teacher/students-manage" element={<StudentManagementPage />} />
               <Route path="/teacher/report" element={<TeacherAnalyticsPage />} />
               <Route path="/rag-upload" element={<RagUploadPage />} />
             </Route>
@@ -131,7 +137,7 @@ function RoleRedirect() {
 function App() {
   return (
     <AuthProvider>
-      <Router>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AppLayout />
       </Router>
     </AuthProvider>

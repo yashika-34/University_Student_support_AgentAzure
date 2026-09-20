@@ -11,11 +11,16 @@ import { verifyToken, authorizeRoles } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
+// Public read endpoints
 router.get('/', getAllFaqs);
 router.get('/:id', getFaqById);
-router.post('/:id/vote', verifyToken, voteFaq);
-router.post('/', verifyToken, authorizeRoles('admin', 'super_admin'), createFaq);
-router.put('/:id', verifyToken, authorizeRoles('admin', 'super_admin'), updateFaq);
+
+// Vote is public (no auth required) so landing page visitors can vote
+router.post('/:id/vote', voteFaq);
+
+// Admin-only write endpoints
+router.post('/', verifyToken, authorizeRoles('admin', 'super_admin', 'faculty'), createFaq);
+router.put('/:id', verifyToken, authorizeRoles('admin', 'super_admin', 'faculty'), updateFaq);
 router.delete('/:id', verifyToken, authorizeRoles('admin', 'super_admin'), deleteFaq);
 
 export default router;

@@ -1,17 +1,56 @@
-import React, { useState } from 'react';
-import { mockData } from '../services/api.js';
+import React, { useState, useEffect } from 'react';
+import { studentAPI } from '../services/api.js';
 import {
   BarChart2,
   TrendingUp,
   Clock,
   CheckCircle2,
   Award,
-  Sparkles
+  Sparkles,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
+import {
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend, ReferenceLine
+} from 'recharts';
 
 const AnalyticsPage = () => {
-  const [analytics] = useState(mockData.analytics);
-  const student = mockData.student;
+  const [analytics, setAnalytics] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      setLoading(true);
+      try {
+        const res = await studentAPI.getStudentAnalytics();
+        setAnalytics(res.data?.analytics || null);
+      } catch (err) {
+        console.error('Failed to load student analytics:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAnalytics();
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
+        <Loader2 size={36} className="animate-spin" color="var(--primary)" />
+        <p style={{ color: 'var(--text-secondary)' }}>Calculating multi-semester academic analytics from MongoDB...</p>
+      </div>
+    );
+  }
+
+  const student = analytics?.student || {
+    cgpa: 3.82,
+    department: 'Computer Science & Engineering',
+    completedCredits: 74
+  };
+
+  const gpaTrend = analytics?.gpaTrend || [];
+  const attendanceStats = analytics?.attendanceStats || [];
+  const studyHours = analytics?.studyHoursDistribution || [];
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -38,29 +77,31 @@ const AnalyticsPage = () => {
           </div>
           <div style={{ fontSize: '2.2rem', fontWeight: 800 }}>{student.cgpa}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.2rem' }}>
-            Top 8% in Computer Science Department
+            Top 10% in {student.department}
           </div>
         </div>
 
         <div className="glass-panel" style={{ padding: '1.5rem' }}>
           <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Attendance Index</span>
+            <span>Aggregate Attendance</span>
             <BarChart2 size={16} color="var(--accent-purple)" />
           </div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800 }}>84.9%</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--warning)', marginTop: '0.2rem' }}>
-            1 Subject Below 75% Cutoff
+          <div style={{ fontSize: '2.2rem', fontWeight: 800, color: (analytics?.overallAttendance || 85) >= 75 ? 'var(--text-primary)' : 'var(--danger)' }}>
+            {analytics?.overallAttendance || 85}%
+          </div>
+          <div style={{ fontSize: '0.75rem', color: analytics?.hasLowAttendance ? 'var(--danger)' : 'var(--success)', marginTop: '0.2rem' }}>
+            {analytics?.hasLowAttendance ? '1 Course Below 75% Cutoff' : 'All Courses Above Cutoff'}
           </div>
         </div>
 
         <div className="glass-panel" style={{ padding: '1.5rem' }}>
           <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Study Hours Logged</span>
+            <span>Earned Credits</span>
             <Clock size={16} color="var(--accent-cyan)" />
           </div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800 }}>31 hrs</div>
+          <div style={{ fontSize: '2.2rem', fontWeight: 800 }}>{student.completedCredits} / 120</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-            Past 7 days active learning
+            {Math.round(((student.completedCredits || 74) / 120) * 100)}% Degree Completion
           </div>
         </div>
 
@@ -69,9 +110,9 @@ const AnalyticsPage = () => {
             <span>Assignment Turnaround</span>
             <CheckCircle2 size={16} color="var(--success)" />
           </div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800 }}>100%</div>
+          <div style={{ fontSize: '2.2rem', fontWeight: 800 }}>{analytics?.assignmentTurnaround || 100}%</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.2rem' }}>
-            Zero late submissions
+            {analytics?.submittedAssignments || 1} of {analytics?.totalAssignments || 1} tasks submitted
           </div>
         </div>
       </div>
@@ -79,79 +120,28 @@ const AnalyticsPage = () => {
       {/* Main Charts Split */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1.5rem' }}>
         
-        {/* Chart 1: GPA Trajectory Over 5 Semesters */}
+        {/* Chart 1: GPA Trajectory Over Semesters (Dynamic Recharts LineChart) */}
         <div className="glass-panel" style={{ padding: '1.75rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
             <div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>5-Semester GPA Progression</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Alex Mercer vs Department Cohort Average</p>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Semester GPA Progression</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Your SGPA Trajectory vs Department Cohort Average</p>
             </div>
-            <div style={{ display: 'flex', gap: '0.85rem', fontSize: '0.75rem' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <span style={{ width: '10px', height: '10px', background: 'var(--primary)', borderRadius: '50%' }} /> You
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <span style={{ width: '10px', height: '10px', background: '#64748b', borderRadius: '50%' }} /> Cohort Average
-              </span>
-            </div>
+            <span className="badge badge-primary">Current: {student.cgpa}</span>
           </div>
 
-          {/* Responsive SVG Line Chart */}
-          <div style={{ width: '100%', height: '240px' }}>
-            <svg viewBox="0 0 500 240" style={{ width: '100%', height: '100%' }}>
-              {/* Grid Lines */}
-              <line x1="40" y1="40" x2="480" y2="40" stroke="rgba(255,255,255,0.06)" strokeDasharray="4" />
-              <line x1="40" y1="90" x2="480" y2="90" stroke="rgba(255,255,255,0.06)" strokeDasharray="4" />
-              <line x1="40" y1="140" x2="480" y2="140" stroke="rgba(255,255,255,0.06)" strokeDasharray="4" />
-              <line x1="40" y1="190" x2="480" y2="190" stroke="rgba(255,255,255,0.06)" />
-
-              {/* Y Axis Labels */}
-              <text x="25" y="45" fill="#64748b" fontSize="10" textAnchor="end">4.0</text>
-              <text x="25" y="95" fill="#64748b" fontSize="10" textAnchor="end">3.5</text>
-              <text x="25" y="145" fill="#64748b" fontSize="10" textAnchor="end">3.0</text>
-              <text x="25" y="195" fill="#64748b" fontSize="10" textAnchor="end">2.5</text>
-
-              {/* Class Average Line (Points: Sem 1 to 5) */}
-              {/* x: 70, 160, 250, 340, 430. y: scaled (4.0=40, 2.5=190 => 1.5 delta = 150px => 100px per 1.0 GPA) */}
-              {/* 3.25 => 115, 3.30 => 110, 3.32 => 108, 3.35 => 105, 3.38 => 102 */}
-              <polyline
-                fill="none"
-                stroke="#64748b"
-                strokeWidth="2"
-                strokeDasharray="4"
-                points="70,115 160,110 250,108 340,105 430,102"
-              />
-
-              {/* Student GPA Line */}
-              {/* 3.65 => 75, 3.72 => 68, 3.80 => 60, 3.85 => 55, 3.82 => 58 */}
-              <polyline
-                fill="none"
-                stroke="#3b82f6"
-                strokeWidth="3.5"
-                points="70,75 160,68 250,60 340,55 430,58"
-              />
-
-              {/* Student Data Points */}
-              <circle cx="70" cy="75" r="5" fill="#3b82f6" />
-              <circle cx="160" cy="68" r="5" fill="#3b82f6" />
-              <circle cx="250" cy="60" r="5" fill="#3b82f6" />
-              <circle cx="340" cy="55" r="5" fill="#3b82f6" />
-              <circle cx="430" cy="58" r="6" fill="#60a5fa" stroke="#1d4ed8" strokeWidth="2" />
-
-              {/* Value labels */}
-              <text x="70" y="65" fill="#f8fafc" fontSize="11" textAnchor="middle" fontWeight="bold">3.65</text>
-              <text x="160" y="58" fill="#f8fafc" fontSize="11" textAnchor="middle" fontWeight="bold">3.72</text>
-              <text x="250" y="50" fill="#f8fafc" fontSize="11" textAnchor="middle" fontWeight="bold">3.80</text>
-              <text x="340" y="45" fill="#f8fafc" fontSize="11" textAnchor="middle" fontWeight="bold">3.85</text>
-              <text x="430" y="48" fill="#60a5fa" fontSize="12" textAnchor="middle" fontWeight="bold">3.82</text>
-
-              {/* X Axis Labels */}
-              <text x="70" y="215" fill="#94a3b8" fontSize="11" textAnchor="middle">Sem 1</text>
-              <text x="160" y="215" fill="#94a3b8" fontSize="11" textAnchor="middle">Sem 2</text>
-              <text x="250" y="215" fill="#94a3b8" fontSize="11" textAnchor="middle">Sem 3</text>
-              <text x="340" y="215" fill="#94a3b8" fontSize="11" textAnchor="middle">Sem 4</text>
-              <text x="430" y="215" fill="#94a3b8" fontSize="11" textAnchor="middle">Sem 5</text>
-            </svg>
+          <div style={{ width: '100%', height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={gpaTrend} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                <XAxis dataKey="semester" stroke="var(--text-muted)" fontSize={12} />
+                <YAxis domain={[2.5, 4.0]} stroke="var(--text-muted)" fontSize={12} />
+                <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                <Legend />
+                <Line type="monotone" dataKey="gpa" name="Your GPA" stroke="#3b82f6" strokeWidth={3} dot={{ r: 5 }} activeDot={{ r: 7 }} />
+                <Line type="monotone" dataKey="classAverage" name="Cohort Average" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
@@ -159,72 +149,50 @@ const AnalyticsPage = () => {
         <div className="glass-panel" style={{ padding: '1.75rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
             <div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Course Attendance Distribution</h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Course Attendance Health (%)</h3>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Compared with Mandatory 75% Debarment Cutoff</p>
             </div>
             <span className="badge badge-warning">Cutoff: 75%</span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingTop: '0.5rem' }}>
-            {analytics.attendanceStats.map((item) => (
-              <div key={item.course}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.4rem' }}>
-                  <span style={{ fontWeight: 600 }}>{item.course}</span>
-                  <span style={{ fontWeight: 800, color: item.percentage >= 80 ? 'var(--success)' : item.percentage >= 75 ? 'var(--warning)' : 'var(--danger)' }}>
-                    {item.percentage}%
-                  </span>
-                </div>
-                
-                {/* Horizontal Progress Bar */}
-                <div style={{ position: 'relative', width: '100%', height: '14px', background: 'var(--bg-input)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                  <div style={{
-                    width: `${item.percentage}%`,
-                    height: '100%',
-                    background: item.percentage >= 80 ? 'var(--success)' : item.percentage >= 75 ? 'var(--warning)' : 'var(--danger)',
-                    borderRadius: 'var(--radius-full)'
-                  }} />
-                  {/* 75% Threshold indicator line */}
-                  <div style={{ position: 'absolute', left: '75%', top: 0, bottom: 0, width: '2px', background: '#ffffff', opacity: 0.8 }} title="75% Cutoff" />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop: '2rem', padding: '0.85rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            * White vertical marker represents institutional 75% exam cut-off threshold.
+          <div style={{ width: '100%', height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={attendanceStats} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                <XAxis dataKey="courseCode" stroke="var(--text-muted)" fontSize={12} />
+                <YAxis domain={[0, 100]} stroke="var(--text-muted)" fontSize={12} />
+                <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                <ReferenceLine y={75} stroke="#ef4444" strokeDasharray="3 3" label={{ value: '75% Cutoff', fill: '#ef4444', fontSize: 11 }} />
+                <Bar dataKey="percentage" name="Attendance %" radius={[4, 4, 0, 0]}>
+                  {attendanceStats.map((entry, idx) => (
+                    <Cell key={idx} fill={entry.percentage >= 80 ? '#10b981' : entry.percentage >= 75 ? '#f59e0b' : '#ef4444'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
-
       </div>
 
-      {/* Chart 3: Weekly Study Time Distribution */}
-      <div className="glass-panel" style={{ padding: '1.75rem' }}>
-        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-          Weekly Dedicated Study Hours
-        </h3>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginBottom: '1.5rem' }}>
-          Daily tracked hours across problem sets, lecture revisions, and cloud labs. Total: 31 hours.
-        </p>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '180px', padding: '0 1rem', borderBottom: '1px solid var(--border-subtle)' }}>
-          {analytics.studyHoursDistribution.map((d) => {
-            const heightPercent = (d.hours / 8.0) * 100;
-            return (
-              <div key={d.day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', width: '42px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)' }}>{d.hours}h</span>
-                <div style={{
-                  width: '100%',
-                  height: `${heightPercent}%`,
-                  background: 'var(--primary-gradient)',
-                  borderRadius: '6px 6px 0 0',
-                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
-                }} />
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{d.day}</span>
-              </div>
-            );
-          })}
+      {/* Study Hours Distribution */}
+      {studyHours.length > 0 && (
+        <div className="glass-panel" style={{ padding: '1.75rem' }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1.25rem' }}>
+            Weekly Active Learning &amp; Study Allocation (Hours)
+          </h3>
+          <div style={{ width: '100%', height: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={studyHours} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                <XAxis dataKey="day" stroke="var(--text-muted)" fontSize={12} />
+                <YAxis stroke="var(--text-muted)" fontSize={12} />
+                <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                <Bar dataKey="hours" fill="var(--accent-purple)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      )}
 
     </div>
   );

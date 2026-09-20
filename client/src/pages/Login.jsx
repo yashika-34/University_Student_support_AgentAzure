@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { GraduationCap, Lock, Mail, ArrowRight, UserCheck, ShieldAlert } from 'lucide-react';
+import { GraduationCap, Lock, Mail, ArrowRight, UserCheck, ShieldAlert, Sparkles } from 'lucide-react';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -19,36 +19,41 @@ const Login = () => {
     try {
       const res = await login(email, password);
       if (res && res.success) {
-        navigate('/student/dashboard');
+        if (res.user?.role === 'faculty') {
+          navigate('/faculty/dashboard');
+        } else {
+          navigate('/student/dashboard');
+        }
       } else {
-        setError('Invalid email or password.');
+        setError(res?.message || 'Invalid email or password.');
       }
     } catch (err) {
-      setError('Login failed. Please verify your credentials.');
+      setError('Login error: ' + (err.message || 'Unable to connect to server'));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const fillDemoAccount = (role) => {
-    if (role === 'student') {
-      setEmail('alex.student@university.edu');
-      setPassword('Password123!');
-      login('alex.student@university.edu', 'Password123!', 'student').then(() => {
-        navigate('/student/dashboard');
-      });
-    } else if (role === 'faculty') {
-      setEmail('dr.alan@university.edu');
-      setPassword('Password123!');
-      login('dr.alan@university.edu', 'Password123!', 'faculty').then(() => {
-        navigate('/faculty/dashboard');
-      });
-    } else {
-      setEmail('admin@university.edu');
-      setPassword('Password123!');
-      login('admin@university.edu', 'Password123!', 'student').then(() => {
-        navigate('/student/dashboard');
-      });
+  const handleQuickLogin = async (demoEmail, demoPass) => {
+    setEmail(demoEmail);
+    setPassword(demoPass);
+    setError('');
+    setIsLoading(true);
+    try {
+      const res = await login(demoEmail, demoPass);
+      if (res && res.success) {
+        if (res.user?.role === 'faculty') {
+          navigate('/faculty/dashboard');
+        } else {
+          navigate('/student/dashboard');
+        }
+      } else {
+        setError(res?.message || 'Login failed.');
+      }
+    } catch (err) {
+      setError('Login error: ' + err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -98,79 +103,93 @@ const Login = () => {
           <div className="form-group">
             <label className="form-label">University Email</label>
             <div style={{ position: 'relative' }}>
+              <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="email"
                 required
                 className="form-input"
-                placeholder="name@university.edu"
+                style={{ paddingLeft: '38px' }}
+                placeholder="student@university.edu"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                style={{ paddingLeft: '2.5rem' }}
               />
-              <Mail size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)' }} />
             </div>
           </div>
 
-          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label className="form-label">Password</label>
-              <a href="#" style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>Forgot password?</a>
-            </div>
+          <div className="form-group">
+            <label className="form-label">Password</label>
             <div style={{ position: 'relative' }}>
+              <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="password"
                 required
                 className="form-input"
-                placeholder="••••••••••••"
+                style={{ paddingLeft: '38px' }}
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={{ paddingLeft: '2.5rem' }}
               />
-              <Lock size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)' }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.4rem' }}>
+              <Link to="/forgot-password" style={{ color: 'var(--primary)', fontSize: '0.8rem', fontWeight: 500 }}>
+                Forgot password?
+              </Link>
             </div>
           </div>
 
           <button
             type="submit"
             className="btn btn-primary"
-            style={{ width: '100%', padding: '0.8rem', fontSize: '0.95rem', marginBottom: '1.25rem' }}
+            style={{ width: '100%', marginTop: '0.75rem', padding: '0.75rem' }}
             disabled={isLoading}
           >
-            {isLoading ? 'Signing In...' : 'Sign In'} <ArrowRight size={16} />
+            {isLoading ? 'Authenticating...' : 'Sign In'} <ArrowRight size={16} />
           </button>
         </form>
 
-        {/* Quick Demo Fill Buttons */}
-        <div style={{ margin: '1.5rem 0 1rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1.25rem' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Instant Demo Logins
+        {/* Demo Accounts Preset Buttons */}
+        <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border)' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+            <Sparkles size={14} color="var(--primary)" /> Quick One-Click Demo Sign In (MongoDB):
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
             <button
               type="button"
-              onClick={() => fillDemoAccount('student')}
+              onClick={() => handleQuickLogin('dr.alan@university.edu', 'Faculty@1234')}
               className="btn btn-secondary"
-              style={{ fontSize: '0.75rem', padding: '0.5rem' }}
+              style={{ fontSize: '0.75rem', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.15rem', alignItems: 'center' }}
+              disabled={isLoading}
             >
-              <UserCheck size={14} /> Student Demo
+              <span style={{ fontWeight: 700, color: 'var(--primary)' }}>👨‍🏫 Faculty Role</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Dr. Alan Turing</span>
             </button>
             <button
               type="button"
-              onClick={() => fillDemoAccount('faculty')}
+              onClick={() => handleQuickLogin('alex.student@university.edu', 'Student@1234')}
               className="btn btn-secondary"
-              style={{ fontSize: '0.75rem', padding: '0.5rem' }}
+              style={{ fontSize: '0.75rem', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.15rem', alignItems: 'center' }}
+              disabled={isLoading}
             >
-              <UserCheck size={14} /> Faculty Demo
+              <span style={{ fontWeight: 700, color: 'var(--accent-purple)' }}>🎓 Student Role</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Alex Mercer (3.82 CGPA)</span>
+            </button>
+          </div>
+          <div style={{ marginTop: '0.5rem' }}>
+            <button
+              type="button"
+              onClick={() => handleQuickLogin('emma.student@university.edu', 'Student@1234')}
+              className="btn btn-secondary"
+              style={{ width: '100%', fontSize: '0.75rem', padding: '0.4rem', textAlign: 'center' }}
+              disabled={isLoading}
+            >
+              🎓 Student: Emma Watson (3.56 CGPA)
             </button>
           </div>
         </div>
 
-        {/* Footer */}
-        <div style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          Don't have an account?{' '}
-          <Link to="/register" style={{ color: 'var(--primary)', fontWeight: 600 }}>
-            Register here
-          </Link>
+        {/* Register Link */}
+        <div style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          Need an account? <Link to="/register" style={{ color: 'var(--primary)', fontWeight: 600 }}>Create an account</Link>
         </div>
 
       </div>

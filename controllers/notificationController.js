@@ -1,4 +1,5 @@
 import Notification from '../models/Notification.js';
+import Notice from '../models/Notice.js';
 
 /**
  * @desc    Get all notifications for logged-in user
@@ -105,6 +106,66 @@ export const createNotification = async (req, res, next) => {
       success: true,
       message: 'Notification sent successfully.',
       data: notification
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get published notices and announcements
+ * @route   GET /api/v1/notifications/notices
+ * @access  Public / Private
+ */
+export const getNotices = async (req, res, next) => {
+  try {
+    const { category, targetAudience, department } = req.query;
+    const filter = { isPublished: true };
+
+    if (category && category !== 'All') filter.category = category;
+    if (targetAudience) filter.targetAudience = { $in: [targetAudience, 'all'] };
+    if (department && department !== 'All') filter.department = { $in: [department, 'All Departments'] };
+
+    const notices = await Notice.find(filter)
+      .sort({ isPinned: -1, publishedAt: -1 })
+      .limit(50);
+
+    res.status(200).json({
+      success: true,
+      count: notices.length,
+      data: notices
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Create a notice / announcement
+ * @route   POST /api/v1/notifications/notices
+ * @access  Private (Faculty, Admin)
+ */
+export const createNotice = async (req, res, next) => {
+  try {
+    const { title, content, category, priority, targetAudience, isPinned, department, attachmentUrl } = req.body;
+
+    const notice = await Notice.create({
+      title,
+      content,
+      category: category || 'General',
+      priority: priority || 'medium',
+      targetAudience: targetAudience || 'all',
+      department: department || 'All Departments',
+      isPinned: !!isPinned,
+      attachmentUrl: attachmentUrl || null,
+      author: req.user ? req.user._id : null,
+      authorName: req.user ? `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() : 'University Administration'
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Notice created successfully.',
+      data: notice
     });
   } catch (error) {
     next(error);

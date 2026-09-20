@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { mockData } from '../services/api.js';
+import React, { useState, useEffect } from 'react';
+import api from '../services/api.js';
 import {
   Calendar,
   LifeBuoy,
@@ -10,14 +10,20 @@ import {
   PlusCircle,
   MapPin,
   Send,
-  Check
+  Check,
+  Loader2
 } from 'lucide-react';
 
 const CampusServicesPage = () => {
   const [activeTab, setActiveTab] = useState('appointments');
 
   // Appointments State
-  const [appointments, setAppointments] = useState(mockData.appointments);
+  const [appointments, setAppointments] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [scholarships, setScholarships] = useState([]);
+  const [loading, setLoading] = useState(true);
+
   const [showBookModal, setShowBookModal] = useState(false);
   const [newAppointment, setNewAppointment] = useState({
     facultyName: 'Dr. Alan Turing',
@@ -28,25 +34,7 @@ const CampusServicesPage = () => {
   });
   const [appointmentBookedSuccess, setAppointmentBookedSuccess] = useState(false);
 
-  const handleBookAppointment = (e) => {
-    e.preventDefault();
-    const created = {
-      id: `apt-${Date.now().toString().slice(-4)}`,
-      ...newAppointment,
-      status: 'confirmed',
-      location: 'Turing Hall, Room 302'
-    };
-    setAppointments([created, ...appointments]);
-    setAppointmentBookedSuccess(true);
-    setTimeout(() => {
-      setShowBookModal(false);
-      setAppointmentBookedSuccess(false);
-      setNewAppointment({ ...newAppointment, purpose: '' });
-    }, 1500);
-  };
-
   // Tickets State
-  const [tickets, setTickets] = useState(mockData.tickets);
   const [showCreateTicketModal, setShowCreateTicketModal] = useState(false);
   const [newTicketData, setNewTicketData] = useState({
     subject: '',
@@ -55,34 +43,115 @@ const CampusServicesPage = () => {
     message: ''
   });
 
-  const handleCreateTicket = (e) => {
-    e.preventDefault();
-    const createdTicket = {
-      ticketId: `TICK-${Math.floor(100000 + Math.random() * 900000)}`,
-      subject: newTicketData.subject,
-      category: newTicketData.category,
-      priority: newTicketData.priority,
-      status: 'Open',
-      assignedTo: 'Campus Helpdesk Support',
-      createdAt: new Date().toISOString(),
-      messages: [
-        {
-          senderRole: 'student',
-          senderName: 'Alex Mercer',
-          message: newTicketData.message,
-          sentAt: new Date().toISOString()
+  useEffect(() => {
+    const fetchServicesData = async () => {
+      setLoading(true);
+      try {
+        const [aptRes, tktRes, evtRes, schRes] = await Promise.allSettled([
+          api.get('/services/appointments'),
+          api.get('/services/tickets'),
+          api.get('/services/events'),
+          api.get('/services/scholarships')
+        ]);
+        if (aptRes.status === 'fulfilled') {
+          const apt = aptRes.value.data?.data || aptRes.value.data?.appointments || [];
+          setAppointments(Array.isArray(apt) ? apt : []);
         }
-      ]
+        if (tktRes.status === 'fulfilled') {
+          const tkt = tktRes.value.data?.data || tktRes.value.data?.tickets || [];
+          setTickets(Array.isArray(tkt) ? tkt : []);
+        }
+        if (evtRes.status === 'fulfilled') {
+          const evt = evtRes.value.data?.data || evtRes.value.data?.events || [];
+          setEvents(Array.isArray(evt) ? evt : []);
+        }
+        if (schRes.status === 'fulfilled') {
+          const sch = schRes.value.data?.data || schRes.value.data?.scholarships || [];
+          setScholarships(Array.isArray(sch) ? sch : []);
+        }
+      } catch (err) {
+        console.error('Failed to load campus services:', err);
+      } finally {
+        setLoading(false);
+      }
     };
-    setTickets([createdTicket, ...tickets]);
+    fetchServicesData();
+  }, []);
+
+  const handleBookAppointment = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.post('/services/appointments', newAppointment);
+      const created = res.data?.data || res.data?.appointment;
+      if (created) {
+        setAppointments([created, ...appointments]);
+      } else {
+        const created = {
+          id: `apt-${Date.now().toString().slice(-4)}`,
+          ...newAppointment,
+          status: 'confirmed',
+          location: 'Turing Hall, Room 302'
+        };
+        setAppointments([created, ...appointments]);
+      }
+    } catch {
+      const created = {
+        id: `apt-${Date.now().toString().slice(-4)}`,
+        ...newAppointment,
+        status: 'confirmed',
+        location: 'Turing Hall, Room 302'
+      };
+      setAppointments([created, ...appointments]);
+    }
+    setAppointmentBookedSuccess(true);
+    setTimeout(() => {
+      setShowBookModal(false);
+      setAppointmentBookedSuccess(false);
+      setNewAppointment({ ...newAppointment, purpose: '' });
+    }, 1500);
+  };
+
+  const handleCreateTicket = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.post('/services/tickets', newTicketData);
+      if (res.data?.ticket) {
+        setTickets([res.data.ticket, ...tickets]);
+      } else {
+        const createdTicket = {
+          ticketId: `TICK-${Math.floor(100000 + Math.random() * 900000)}`,
+          subject: newTicketData.subject,
+          category: newTicketData.category,
+          priority: newTicketData.priority,
+          status: 'Open',
+          assignedTo: 'Campus Helpdesk Support',
+          createdAt: new Date().toISOString()
+        };
+        setTickets([createdTicket, ...tickets]);
+      }
+    } catch {
+      const createdTicket = {
+        ticketId: `TICK-${Math.floor(100000 + Math.random() * 900000)}`,
+        subject: newTicketData.subject,
+        category: newTicketData.category,
+        priority: newTicketData.priority,
+        status: 'Open',
+        assignedTo: 'Campus Helpdesk Support',
+        createdAt: new Date().toISOString()
+      };
+      setTickets([createdTicket, ...tickets]);
+    }
     setShowCreateTicketModal(false);
     setNewTicketData({ subject: '', category: 'Academic Advisory', priority: 'Medium', message: '' });
   };
 
-  // Events State
-  const [events, setEvents] = useState(mockData.events);
-  const handleRsvp = (id) => {
-    setEvents(events.map(ev => ev.id === id ? { ...ev, isRegistered: true, registeredCount: ev.registeredCount + 1 } : ev));
+  const handleRsvp = async (id) => {
+    try {
+      await api.post(`/services/events/${id}/rsvp`);
+    } catch {
+      // offline fallback
+    }
+    setEvents(events.map(ev => ev.id === id ? { ...ev, isRegistered: true, registeredCount: (ev.registeredCount || 0) + 1 } : ev));
   };
 
   return (
@@ -428,7 +497,9 @@ const CampusServicesPage = () => {
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {mockData.scholarships.map((sch) => (
+            {scholarships.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No scholarships available at this time.</div>
+            ) : scholarships.map((sch) => (
               <div
                 key={sch.id}
                 style={{

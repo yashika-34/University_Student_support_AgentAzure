@@ -4,7 +4,11 @@ import Faculty from './Faculty.js';
 import Course from './Course.js';
 import Attendance from './Attendance.js';
 import Assignment from './Assignment.js';
+import Marks from './Marks.js';
 import Notification from './Notification.js';
+import Notice from './Notice.js';
+import ExamSchedule from './ExamSchedule.js';
+import Document from './Document.js';
 import FAQ from './FAQ.js';
 import ChatHistory from './ChatHistory.js';
 import AcademicPrediction from './AcademicPrediction.js';
@@ -26,7 +30,11 @@ export {
   Course,
   Attendance,
   Assignment,
+  Marks,
   Notification,
+  Notice,
+  ExamSchedule,
+  Document,
   FAQ,
   ChatHistory,
   AcademicPrediction,
@@ -49,7 +57,11 @@ export default {
   Course,
   Attendance,
   Assignment,
+  Marks,
   Notification,
+  Notice,
+  ExamSchedule,
+  Document,
   FAQ,
   ChatHistory,
   AcademicPrediction,

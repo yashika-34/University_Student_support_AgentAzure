@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { mockData } from '../services/api.js';
+
 import {
   Menu, Sun, Moon, Bell, LogOut, User, Settings, Lock, ChevronDown,
   GraduationCap, Briefcase
@@ -15,19 +15,18 @@ const ProfileDropdown = ({ onClose }) => {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
 
-  const student = mockData.student;
-  const faculty = mockData.faculty;
   const isStudent = role === 'student';
 
-  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (isStudent ? student.name : faculty.name);
-  const displayEmail = user?.email || (isStudent ? student.email : faculty.email);
-  const displayId = user?.id || (isStudent ? student.id : faculty.id);
+  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (isStudent ? 'Alex Mercer' : 'Dr. Alan Turing');
+  const displayEmail = user?.email || (isStudent ? 'alex.student@university.edu' : 'dr.alan@university.edu');
+  const displayId = user?.profile?.studentId || user?.profile?.employeeId || user?.id || (isStudent ? 'STU-2024-8842' : 'FAC-CS-101');
   const initials = displayName
     .split(' ')
+    .filter(Boolean)
     .map(n => n[0])
     .slice(0, 2)
     .join('')
-    .toUpperCase();
+    .toUpperCase() || 'U';
 
   const handleLogout = () => {
     onClose();
@@ -103,7 +102,7 @@ const ProfileDropdown = ({ onClose }) => {
  * Now includes a clickable profile avatar with dropdown on both layouts.
  */
 const Navbar = ({ showSidebar = false, onMenuClick, sidebarCollapsed }) => {
-  const { user, role, logout, toggleTheme, theme, isAuthenticated, switchRole } = useAuth();
+  const { user, role, logout, toggleTheme, theme, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -218,24 +217,6 @@ const Navbar = ({ showSidebar = false, onMenuClick, sidebarCollapsed }) => {
 
       {/* Right: Theme, notifications, profile avatar */}
       <div className="topbar-right">
-        {/* Demo role switcher */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Demo:</span>
-          <button
-            className={`btn ${role === 'student' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ fontSize: '0.72rem', padding: '0.3rem 0.65rem' }}
-            onClick={() => { switchRole('student'); navigate('/student/dashboard'); }}
-          >
-            Student
-          </button>
-          <button
-            className={`btn ${role === 'faculty' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ fontSize: '0.72rem', padding: '0.3rem 0.65rem' }}
-            onClick={() => { switchRole('faculty'); navigate('/faculty/dashboard'); }}
-          >
-            Faculty
-          </button>
-        </div>
 
         {/* Theme toggle */}
         <button className="icon-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Light mode' : 'Dark mode'} aria-label="Toggle theme">
