@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { teacherAPI } from '../../services/api.js';
+import ModalPortal from '../../components/ModalPortal.jsx';
 import {
   Users, Search, Plus, Edit3, Trash2, CheckCircle, XCircle,
   Filter, ChevronDown, ChevronLeft, ChevronRight, User, Mail,
@@ -157,6 +158,20 @@ const StudentManagementPage = () => {
   useEffect(() => {
     fetchStudents();
     fetchDeptStats();
+  }, []);
+
+  // Body scroll locking is handled automatically by ModalPortal
+
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Debounced search
@@ -737,329 +752,418 @@ const StudentManagementPage = () => {
       {/* ───────────────────────────────────────────────────────────────────
           ── ADD STUDENT MODAL
           ─────────────────────────────────────────────────────────────── */}
-      {(modal === 'add' || modal === 'edit') && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 2000,
-          background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(8px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
-        }}
+      {/* ───────────────────────────────────────────────────────────────────
+          ── ADD / EDIT STUDENT MODAL (CENTERED POPUP DIALOG)
+          ─────────────────────────────────────────────────────────────── */}
+      {/* ── ADD / EDIT STUDENT MODAL (CENTERED POPUP DIALOG) ───────────────── */}
+      <ModalPortal isOpen={modal === 'add' || modal === 'edit'}>
+        <div
+          className="modal-overlay"
           onClick={(e) => { if (e.target === e.currentTarget) setModal(null); }}
+          role="dialog"
+          aria-modal="true"
         >
-          <div style={{
-            background: 'var(--bg-surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '760px',
-            maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-xl)'
-          }}>
+          <div className="modal-container" style={{ maxWidth: '720px' }}>
             {/* Modal Header */}
-            <div style={{
-              padding: '1.5rem 1.75rem',
-              borderBottom: '1px solid var(--border-subtle)',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              position: 'sticky', top: 0, background: 'var(--bg-surface)', zIndex: 1
-            }}>
-              <div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.2rem' }}>
-                  {modal === 'add' ? '➕ Add New Student' : '✏️ Edit Student Profile'}
-                </h2>
-                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                  {modal === 'add'
-                    ? 'Create a new student account with academic profile'
-                    : `Editing: ${selectedStudent?.name} (${selectedStudent?.studentId})`}
-                </p>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 'var(--radius-sm)',
+                  background: 'var(--primary-gradient)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', color: '#fff',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)'
+                }}>
+                  {modal === 'add' ? <Plus size={18} /> : <Edit3 size={18} />}
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.15rem', fontWeight: 800, lineHeight: 1.2 }}>
+                    {modal === 'add' ? 'Add New Student' : 'Edit Student Profile'}
+                  </h2>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    {modal === 'add'
+                      ? 'Create a new student account with university credentials'
+                      : `Updating records for: ${selectedStudent?.name} (${selectedStudent?.studentId})`}
+                  </p>
+                </div>
               </div>
-              <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0.35rem' }}>
-                <X size={20} />
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="modal-close-btn"
+                title="Close (Esc)"
+                aria-label="Close dialog"
+              >
+                <X size={18} />
               </button>
             </div>
 
-            {/* Modal Form */}
-            <form onSubmit={modal === 'add' ? handleAddStudent : handleEditStudent} style={{ padding: '1.75rem' }}>
-              {/* Section: Personal Info */}
-              <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <User size={14} /> Personal Information
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label className="form-label">First Name *</label>
-                    <input className={`form-input ${formErrors.firstName ? 'input-error' : ''}`}
-                      value={formData.firstName} onChange={(e) => handleFormChange('firstName', e.target.value)}
-                      placeholder="Arjun" />
-                    {formErrors.firstName && <div style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: '0.25rem' }}>{formErrors.firstName}</div>}
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Last Name *</label>
-                    <input className={`form-input ${formErrors.lastName ? 'input-error' : ''}`}
-                      value={formData.lastName} onChange={(e) => handleFormChange('lastName', e.target.value)}
-                      placeholder="Sharma" />
-                    {formErrors.lastName && <div style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: '0.25rem' }}>{formErrors.lastName}</div>}
-                  </div>
-                  {modal === 'add' && (
-                    <div className="form-group">
-                      <label className="form-label">Email Address *</label>
-                      <input className={`form-input ${formErrors.email ? 'input-error' : ''}`}
-                        type="email" value={formData.email} onChange={(e) => handleFormChange('email', e.target.value)}
-                        placeholder="arjun.sharma@university.edu.in" />
-                      {formErrors.email && <div style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: '0.25rem' }}>{formErrors.email}</div>}
+            {/* Modal Body: Compact & Immediately Visible */}
+            <form onSubmit={modal === 'add' ? handleAddStudent : handleEditStudent} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+              <div className="modal-body" style={{ padding: '1rem 1.25rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {/* Personal Information */}
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <User size={13} /> Personal Details
                     </div>
-                  )}
-                  <div className="form-group">
-                    <label className="form-label">Phone Number</label>
-                    <input className="form-input" value={formData.phoneNumber}
-                      onChange={(e) => handleFormChange('phoneNumber', e.target.value)}
-                      placeholder="+91 98765 43210" />
-                  </div>
-                  {modal === 'add' && (
-                    <div className="form-group">
-                      <label className="form-label">Temporary Password</label>
-                      <input className="form-input" value={formData.password}
-                        onChange={(e) => handleFormChange('password', e.target.value)}
-                        placeholder="Student@1234" />
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Student must change on first login</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>First Name *</label>
+                        <input
+                          className={`form-input ${formErrors.firstName ? 'input-error' : ''}`}
+                          style={{ padding: '0.42rem 0.65rem', fontSize: '0.85rem' }}
+                          value={formData.firstName}
+                          onChange={(e) => handleFormChange('firstName', e.target.value)}
+                          placeholder="Arjun"
+                          required
+                          autoFocus
+                        />
+                        {formErrors.firstName && <div style={{ color: 'var(--danger)', fontSize: '0.72rem', marginTop: '0.15rem' }}>{formErrors.firstName}</div>}
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Last Name *</label>
+                        <input
+                          className={`form-input ${formErrors.lastName ? 'input-error' : ''}`}
+                          style={{ padding: '0.42rem 0.65rem', fontSize: '0.85rem' }}
+                          value={formData.lastName}
+                          onChange={(e) => handleFormChange('lastName', e.target.value)}
+                          placeholder="Sharma"
+                          required
+                        />
+                        {formErrors.lastName && <div style={{ color: 'var(--danger)', fontSize: '0.72rem', marginTop: '0.15rem' }}>{formErrors.lastName}</div>}
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Phone Number</label>
+                        <input
+                          className="form-input"
+                          style={{ padding: '0.42rem 0.65rem', fontSize: '0.85rem' }}
+                          value={formData.phoneNumber}
+                          onChange={(e) => handleFormChange('phoneNumber', e.target.value)}
+                          placeholder="+91 98765 43210"
+                        />
+                      </div>
                     </div>
-                  )}
+
+                    {modal === 'add' && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '0.5rem', marginTop: '0.45rem' }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Email Address *</label>
+                          <input
+                            className={`form-input ${formErrors.email ? 'input-error' : ''}`}
+                            style={{ padding: '0.42rem 0.65rem', fontSize: '0.85rem' }}
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => handleFormChange('email', e.target.value)}
+                            placeholder="arjun.sharma@university.edu.in"
+                            required
+                          />
+                          {formErrors.email && <div style={{ color: 'var(--danger)', fontSize: '0.72rem', marginTop: '0.15rem' }}>{formErrors.email}</div>}
+                        </div>
+
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Temporary Password</label>
+                          <input
+                            className="form-input"
+                            style={{ padding: '0.42rem 0.65rem', fontSize: '0.85rem' }}
+                            value={formData.password}
+                            onChange={(e) => handleFormChange('password', e.target.value)}
+                            placeholder="Student@1234"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Academic Details */}
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.65rem' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <GraduationCap size={13} /> Academic Roster
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1fr 1fr', gap: '0.5rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Department *</label>
+                        <select
+                          className="form-select"
+                          style={{ padding: '0.42rem 0.5rem', fontSize: '0.82rem' }}
+                          value={formData.department}
+                          onChange={(e) => handleFormChange('department', e.target.value)}
+                        >
+                          {DEPARTMENTS.filter(d => d !== 'All').map(d => <option key={d}>{d}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Degree Program</label>
+                        <select
+                          className="form-select"
+                          style={{ padding: '0.42rem 0.5rem', fontSize: '0.82rem' }}
+                          value={formData.degreeProgram}
+                          onChange={(e) => handleFormChange('degreeProgram', e.target.value)}
+                        >
+                          {DEGREE_PROGRAMS.map(d => <option key={d}>{d}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Semester</label>
+                        <select
+                          className="form-select"
+                          style={{ padding: '0.42rem 0.5rem', fontSize: '0.82rem' }}
+                          value={formData.currentSemester}
+                          onChange={(e) => handleFormChange('currentSemester', e.target.value)}
+                        >
+                          {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s} value={s}>Sem {s}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>CGPA (0 - 10)</label>
+                        <input
+                          className="form-input"
+                          style={{ padding: '0.42rem 0.5rem', fontSize: '0.85rem', textAlign: 'center' }}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="10"
+                          value={formData.cgpa}
+                          onChange={(e) => handleFormChange('cgpa', e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.45rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Roll No / Student ID</label>
+                        <input
+                          className="form-input"
+                          style={{ padding: '0.42rem 0.65rem', fontSize: '0.82rem' }}
+                          value={formData.studentId}
+                          onChange={(e) => handleFormChange('studentId', e.target.value)}
+                          placeholder="Auto-generated if blank"
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Batch</label>
+                        <input
+                          className="form-input"
+                          style={{ padding: '0.42rem 0.65rem', fontSize: '0.82rem' }}
+                          value={formData.batch}
+                          onChange={(e) => handleFormChange('batch', e.target.value)}
+                          placeholder="2024-2028"
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Credits Earned</label>
+                        <input
+                          className="form-input"
+                          style={{ padding: '0.42rem 0.65rem', fontSize: '0.82rem' }}
+                          type="number"
+                          min="0"
+                          max="240"
+                          value={formData.completedCredits}
+                          onChange={(e) => handleFormChange('completedCredits', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Emergency Contact */}
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.65rem' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Phone size={13} /> Emergency Contact
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1fr', gap: '0.5rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <input
+                          className="form-input"
+                          style={{ padding: '0.42rem 0.65rem', fontSize: '0.82rem' }}
+                          value={formData.emergencyContactName}
+                          onChange={(e) => handleFormChange('emergencyContactName', e.target.value)}
+                          placeholder="Contact Name (e.g. Parent)"
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <input
+                          className="form-input"
+                          style={{ padding: '0.42rem 0.65rem', fontSize: '0.82rem' }}
+                          value={formData.emergencyContactPhone}
+                          onChange={(e) => handleFormChange('emergencyContactPhone', e.target.value)}
+                          placeholder="Contact Phone"
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <select
+                          className="form-select"
+                          style={{ padding: '0.42rem 0.5rem', fontSize: '0.82rem' }}
+                          value={formData.emergencyContactRelation}
+                          onChange={(e) => handleFormChange('emergencyContactRelation', e.target.value)}
+                        >
+                          {['Parent', 'Guardian', 'Sibling', 'Spouse', 'Other'].map(r => <option key={r}>{r}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Section: Academic Details */}
-              <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <GraduationCap size={14} /> Academic Details
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  {modal === 'add' && (
-                    <div className="form-group">
-                      <label className="form-label">Student ID / Roll No.</label>
-                      <input className="form-input" value={formData.studentId}
-                        onChange={(e) => handleFormChange('studentId', e.target.value)}
-                        placeholder="Auto-generated if blank (e.g. STU-2024-12345)" />
-                    </div>
-                  )}
-                  <div className="form-group">
-                    <label className="form-label">Department *</label>
-                    <select className={`form-input ${formErrors.department ? 'input-error' : ''}`}
-                      value={formData.department} onChange={(e) => handleFormChange('department', e.target.value)}>
-                      {DEPARTMENTS.filter(d => d !== 'All').map(d => <option key={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Degree Program</label>
-                    <select className="form-input" value={formData.degreeProgram}
-                      onChange={(e) => handleFormChange('degreeProgram', e.target.value)}>
-                      {DEGREE_PROGRAMS.map(d => <option key={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Current Semester</label>
-                    <select className="form-input" value={formData.currentSemester}
-                      onChange={(e) => handleFormChange('currentSemester', e.target.value)}>
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s} value={s}>Semester {s}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Admission Year</label>
-                    <input className="form-input" type="number" min="2000" max="2040"
-                      value={formData.admissionYear} onChange={(e) => handleFormChange('admissionYear', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Batch (e.g. 2024-2028)</label>
-                    <input className="form-input" value={formData.batch}
-                      onChange={(e) => handleFormChange('batch', e.target.value)}
-                      placeholder="2024-2028" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">CGPA</label>
-                    <input className={`form-input ${formErrors.cgpa ? 'input-error' : ''}`}
-                      type="number" step="0.01" min="0" max="10"
-                      value={formData.cgpa} onChange={(e) => handleFormChange('cgpa', e.target.value)} />
-                    {formErrors.cgpa && <div style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: '0.25rem' }}>{formErrors.cgpa}</div>}
-                  </div>
-                  {modal === 'edit' && (
-                    <div className="form-group">
-                      <label className="form-label">Completed Credits</label>
-                      <input className="form-input" type="number" min="0" max="240"
-                        value={formData.completedCredits}
-                        onChange={(e) => handleFormChange('completedCredits', e.target.value)} />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Section: Emergency Contact */}
-              <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Phone size={14} /> Emergency Contact
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label className="form-label">Contact Name</label>
-                    <input className="form-input" value={formData.emergencyContactName}
-                      onChange={(e) => handleFormChange('emergencyContactName', e.target.value)}
-                      placeholder="Ramesh Sharma" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Contact Phone</label>
-                    <input className="form-input" value={formData.emergencyContactPhone}
-                      onChange={(e) => handleFormChange('emergencyContactPhone', e.target.value)}
-                      placeholder="+91 99887 76655" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Relationship</label>
-                    <select className="form-input" value={formData.emergencyContactRelation}
-                      onChange={(e) => handleFormChange('emergencyContactRelation', e.target.value)}>
-                      {['Parent', 'Guardian', 'Sibling', 'Spouse', 'Other'].map(r => <option key={r}>{r}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Form Actions */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)' }}>
-                <button type="button" onClick={() => setModal(null)} className="btn btn-secondary">
+              {/* Form Actions (Sticky Modal Footer) */}
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  onClick={() => setModal(null)}
+                  className="btn btn-secondary"
+                  style={{ padding: '0.5rem 1rem', fontSize: '0.82rem' }}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={actionLoading}
+                  style={{ padding: '0.5rem 1.4rem', fontSize: '0.82rem' }}
+                >
                   {actionLoading
-                    ? <><Loader2 size={16} className="animate-spin" /> Saving...</>
-                    : <><Check size={16} /> {modal === 'add' ? 'Add Student' : 'Save Changes'}</>}
+                    ? <><Loader2 size={15} className="animate-spin" /> Saving...</>
+                    : <><Check size={15} /> {modal === 'add' ? 'Confirm Add Student' : 'Save Student Changes'}</>}
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
 
       {/* ── VIEW PROFILE MODAL ─────────────────────────────────────────── */}
-      {modal === 'view' && selectedStudent && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 2000,
-          background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(8px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
-        }}
+      <ModalPortal isOpen={modal === 'view' && Boolean(selectedStudent)}>
+        <div
+          className="modal-overlay"
           onClick={(e) => { if (e.target === e.currentTarget) setModal(null); }}
+          role="dialog"
+          aria-modal="true"
         >
-          <div style={{
-            background: 'var(--bg-surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '600px',
-            maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-xl)'
-          }}>
-            {/* Header */}
-            <div style={{ padding: '1.5rem 1.75rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Student Profile</h2>
-              <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-                <X size={20} />
+          <div className="modal-container" style={{ maxWidth: '560px' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 'var(--radius-sm)',
+                  background: 'var(--primary-gradient)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', color: '#fff'
+                }}>
+                  <User size={18} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.15rem', fontWeight: 800 }}>Student Profile Overview</h2>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Verified database record</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="modal-close-btn"
+                title="Close (Esc)"
+              >
+                <X size={18} />
               </button>
             </div>
-            <div style={{ padding: '1.75rem' }}>
-              {/* Avatar & name */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '2rem' }}>
-                <StudentAvatar name={selectedStudent.name} size={64} />
-                <div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{selectedStudent.name}</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>{selectedStudent.email}</div>
-                  <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <span className="badge badge-primary" style={{ fontFamily: 'monospace' }}>{selectedStudent.studentId}</span>
-                    <StatusBadge isActive={selectedStudent.isActive} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Details grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-                {[
-                  { label: 'Department', value: selectedStudent.department, icon: Building },
-                  { label: 'Degree', value: selectedStudent.degreeProgram, icon: GraduationCap },
-                  { label: 'Current Semester', value: `Semester ${selectedStudent.currentSemester}`, icon: BookOpen },
-                  { label: 'Batch', value: selectedStudent.batch, icon: Calendar },
-                  { label: 'CGPA', value: selectedStudent.cgpa > 0 ? selectedStudent.cgpa.toFixed(2) : '—', icon: Award, valueColor: cgpaColor(selectedStudent.cgpa) },
-                  { label: 'Credits Earned', value: `${selectedStudent.completedCredits || 0} / 120`, icon: Hash },
-                  { label: 'Phone', value: selectedStudent.phoneNumber || '—', icon: Phone },
-                  { label: 'Admission Year', value: selectedStudent.admissionYear || '—', icon: Calendar },
-                ].map(({ label, value, icon: Icon, valueColor }) => (
-                  <div key={label} style={{ padding: '0.9rem 1rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 600, marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      <Icon size={12} /> {label}
+            <div className="modal-body" style={{ padding: '1.25rem' }}>
+              {selectedStudent && (
+                <>
+                  {/* Avatar & name */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem' }}>
+                    <StudentAvatar name={selectedStudent.name} size={54} />
+                    <div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{selectedStudent.name}</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{selectedStudent.email}</div>
+                      <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        <span className="badge badge-primary" style={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>{selectedStudent.studentId}</span>
+                        <StatusBadge isActive={selectedStudent.isActive} />
+                      </div>
                     </div>
-                    <div style={{ fontWeight: 700, fontSize: '0.92rem', color: valueColor || 'var(--text-primary)' }}>{value}</div>
                   </div>
-                ))}
-              </div>
 
-              {/* Enrolled Courses */}
-              {selectedStudent.enrolledCourses?.length > 0 && (
-                <div style={{ marginTop: '1.5rem' }}>
-                  <h4 style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>
-                    Enrolled Courses ({selectedStudent.enrolledCourses.length})
-                  </h4>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    {selectedStudent.enrolledCourses.map((c, i) => (
-                      <span key={i} className="badge badge-secondary" style={{ fontSize: '0.75rem' }}>
-                        {c.courseCode || 'Course'}
-                      </span>
+                  {/* Details grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    {[
+                      { label: 'Department', value: selectedStudent.department, icon: Building },
+                      { label: 'Degree', value: selectedStudent.degreeProgram, icon: GraduationCap },
+                      { label: 'Current Semester', value: `Semester ${selectedStudent.currentSemester}`, icon: BookOpen },
+                      { label: 'Batch', value: selectedStudent.batch, icon: Calendar },
+                      { label: 'CGPA', value: selectedStudent.cgpa > 0 ? selectedStudent.cgpa.toFixed(2) : '—', icon: Award, valueColor: cgpaColor(selectedStudent.cgpa) },
+                      { label: 'Credits Earned', value: `${selectedStudent.completedCredits || 0} / 120`, icon: Hash },
+                      { label: 'Phone', value: selectedStudent.phoneNumber || '—', icon: Phone },
+                      { label: 'Admission Year', value: selectedStudent.admissionYear || '—', icon: Calendar },
+                    ].map(({ label, value, icon: Icon, valueColor }) => (
+                      <div key={label} style={{ padding: '0.75rem 0.85rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <Icon size={12} /> {label}
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: valueColor || 'var(--text-primary)' }}>{value}</div>
+                      </div>
                     ))}
                   </div>
-                </div>
-              )}
 
-              {/* Emergency Contact */}
-              {selectedStudent.emergencyContact?.name && (
-                <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 'var(--radius-sm)' }}>
-                  <h4 style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--danger)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Emergency Contact</h4>
-                  <div style={{ fontSize: '0.85rem' }}>
-                    <strong>{selectedStudent.emergencyContact.name}</strong>
-                    {selectedStudent.emergencyContact.relationship && ` (${selectedStudent.emergencyContact.relationship})`}
-                    {selectedStudent.emergencyContact.phone && ` — ${selectedStudent.emergencyContact.phone}`}
-                  </div>
-                </div>
+                  {/* Enrolled Courses */}
+                  {selectedStudent.enrolledCourses?.length > 0 && (
+                    <div style={{ marginTop: '1rem' }}>
+                      <h4 style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                        Enrolled Courses ({selectedStudent.enrolledCourses.length})
+                      </h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        {selectedStudent.enrolledCourses.map((c, i) => (
+                          <span key={i} className="badge badge-secondary" style={{ fontSize: '0.72rem' }}>
+                            {c.courseCode || 'Course'}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
+            </div>
 
-              {/* Action buttons */}
-              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.75rem', paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)' }}>
-                <button onClick={() => { setModal(null); openEditModal(selectedStudent); }} className="btn btn-primary" style={{ flex: 1 }}>
-                  <Edit3 size={15} /> Edit Profile
-                </button>
-                <button onClick={() => setModal(null)} className="btn btn-secondary" style={{ flex: 1 }}>
-                  Close
-                </button>
-              </div>
+            <div className="modal-footer">
+              <button onClick={() => { setModal(null); if (selectedStudent) openEditModal(selectedStudent); }} className="btn btn-primary" style={{ padding: '0.55rem 1rem' }}>
+                <Edit3 size={15} /> Edit Profile
+              </button>
+              <button onClick={() => setModal(null)} className="btn btn-secondary" style={{ padding: '0.55rem 1rem' }}>
+                Close
+              </button>
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
 
       {/* ── DELETE / DEACTIVATE MODAL ─────────────────────────────────── */}
-      {modal === 'delete' && selectedStudent && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 2000,
-          background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(8px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
-        }}>
-          <div style={{
-            background: 'var(--bg-surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '440px',
-            padding: '2rem', boxShadow: 'var(--shadow-xl)'
-          }}>
-            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(239,68,68,0.12)', border: '2px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
-                <Trash2 size={28} color="var(--danger)" />
-              </div>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.5rem' }}>Deactivate Student?</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                This will deactivate <strong>{selectedStudent.name}</strong> ({selectedStudent.studentId})'s account. They will no longer be able to log in. This action can be reversed.
-              </p>
+      <ModalPortal isOpen={modal === 'delete' && Boolean(selectedStudent)}>
+        <div
+          className="modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setModal(null); }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="modal-container" style={{ maxWidth: '420px', padding: '1.75rem', textAlign: 'center' }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(239,68,68,0.12)', border: '2px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 0.85rem auto' }}>
+              <Trash2 size={24} color="var(--danger)" />
             </div>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button onClick={() => setModal(null)} className="btn btn-secondary" style={{ flex: 1 }}>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '0.4rem' }}>Deactivate Student?</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              This will deactivate <strong>{selectedStudent?.name}</strong> ({selectedStudent?.studentId})'s account. This action can be reversed at any time.
+            </p>
+            <div style={{ display: 'flex', gap: '0.65rem' }}>
+              <button onClick={() => setModal(null)} className="btn btn-secondary" style={{ flex: 1, padding: '0.55rem' }}>
                 Cancel
               </button>
-              <button onClick={handleDeleteStudent} className="btn btn-danger" disabled={actionLoading} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+              <button onClick={handleDeleteStudent} className="btn btn-danger" disabled={actionLoading} style={{ flex: 1, padding: '0.55rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
                 {actionLoading ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                 Deactivate
               </button>
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
 
       {/* Close menus on outside click */}
       {activeMenuId && (

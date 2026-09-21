@@ -191,10 +191,64 @@ export const getDocumentById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Document not found.' });
     }
 
+    const fullContent = (doc.chunks || [])
+      .sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0))
+      .map((c) => c.content)
+      .join('\n\n');
+
     res.status(200).json({
       success: true,
-      document: doc
+      document: {
+        id: doc._id,
+        docId: doc.docId,
+        title: doc.title,
+        originalName: doc.originalName,
+        category: doc.category,
+        mimeType: doc.mimeType,
+        sizeBytes: doc.sizeBytes,
+        uploadedBy: doc.uploadedBy,
+        uploadedAt: doc.createdAt,
+        totalChunks: doc.totalChunks,
+        azureIndexed: doc.azureIndexed,
+        fullContent,
+        chunks: doc.chunks
+      }
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Download extracted document text file
+ * @route   GET /api/v1/rag/documents/:id/download
+ * @access  Authenticated users
+ */
+export const downloadDocument = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    let query = { docId: id };
+    if (id.match(/^[0-9a-fA-F]{24}$/)) {
+      query = { $or: [{ _id: id }, { docId: id }] };
+    }
+
+    const doc = await Document.findOne(query);
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'Document not found.' });
+    }
+
+    const compiledText = (doc.chunks || [])
+      .sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0))
+      .map((c) => c.content)
+      .join('\n\n');
+
+    const fileName = doc.originalName.endsWith('.txt')
+      ? doc.originalName
+      : `${doc.originalName || doc.title}.txt`;
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+    return res.send(compiledText);
   } catch (error) {
     next(error);
   }

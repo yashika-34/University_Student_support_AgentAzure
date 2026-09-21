@@ -76,8 +76,11 @@ export const attendanceAPI = {
 export const marksAPI = {
   getMyMarks: () => api.get('/marks/my'),
   getMarksSummary: () => api.get('/marks/summary'),
-  getCourseMarks: (courseId, params) => api.get(`/marks/course/${courseId}`, { params }),
+  getCourseMarks: (courseId = 'all', params) => api.get(`/marks/course/${courseId}`, { params }),
   uploadMarks: (marksData) => api.post('/marks/upload', marksData),
+  addMarks: (marksData) => api.post('/marks', marksData),
+  updateMarks: (id, data) => api.put(`/marks/${id}`, data),
+  deleteMarks: (id) => api.delete(`/marks/${id}`),
   publishMarks: (publishData) => api.post('/marks/publish', publishData)
 };
 
@@ -128,6 +131,7 @@ export const ragAPI = {
   list: () => api.get('/rag/documents'),
   getById: (id) => api.get(`/rag/documents/${id}`),
   delete: (id) => api.delete(`/rag/documents/${id}`),
+  download: (id) => api.get(`/rag/documents/${id}/download`, { responseType: 'blob' }),
   upload: (formData) =>
     api.post('/rag/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }

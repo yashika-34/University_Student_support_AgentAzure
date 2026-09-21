@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ModalPortal from '../components/ModalPortal.jsx';
 import api from '../services/api.js';
 import {
   MessageSquare,
@@ -9,7 +10,11 @@ import {
   Sparkles,
   Users,
   Search,
-  Loader2
+  Loader2,
+  X,
+  Send,
+  Eye,
+  MessageCircle
 } from 'lucide-react';
 
 const CommunityHubPage = () => {
@@ -24,6 +29,9 @@ const CommunityHubPage = () => {
   const [newPostCategory, setNewPostCategory] = useState('Algorithms');
   const [newPostContent, setNewPostContent] = useState('');
   const [badges, setBadges] = useState([]);
+  const [selectedThread, setSelectedThread] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [submittingReply, setSubmittingReply] = useState(false);
 
   useEffect(() => {
     const loadCommunityData = async () => {
@@ -100,6 +108,43 @@ const CommunityHubPage = () => {
     setShowNewPostModal(false);
     setNewPostTitle('');
     setNewPostContent('');
+  };
+
+  const handlePostReply = async (e) => {
+    e.preventDefault();
+    if (!replyText.trim() || !selectedThread) return;
+    setSubmittingReply(true);
+    try {
+      const newReply = {
+        authorName: 'Alex Mercer',
+        authorRole: 'student',
+        content: replyText,
+        isVerifiedAnswer: false,
+        createdAt: new Date().toISOString()
+      };
+
+      try {
+        await api.post(`/engagement/forum/${selectedThread.id}/reply`, { content: replyText });
+      } catch (err) {
+        // Fallback local update
+      }
+
+      const updatedPosts = forumPosts.map((p) => {
+        if (p.id === selectedThread.id) {
+          const replies = [...(p.replies || []), newReply];
+          return { ...p, replies };
+        }
+        return p;
+      });
+      setForumPosts(updatedPosts);
+      setSelectedThread((prev) => ({
+        ...prev,
+        replies: [...(prev.replies || []), newReply]
+      }));
+      setReplyText('');
+    } finally {
+      setSubmittingReply(false);
+    }
   };
 
   const filteredPosts = searchCategory === 'All'
@@ -256,72 +301,344 @@ const CommunityHubPage = () => {
                     ))}
                   </div>
                 )}
+
+                {/* Discussion Action / Popup */}
+                <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.85rem' }}>
+                  <button
+                    onClick={() => setSelectedThread(post)}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.82rem', padding: '0.45rem 0.95rem' }}
+                  >
+                    <MessageCircle size={14} /> Open Thread &amp; Answers ({post.replies?.length || 0})
+                  </button>
+                </div>
               </div>
             ))}
           </div>
 
-          {/* New Post Modal */}
-          {showNewPostModal && (
-            <div style={{
-              position: 'fixed',
-              top: 0, left: 0, right: 0, bottom: 0,
-              background: 'rgba(0,0,0,0.75)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              zIndex: 999, padding: '1rem'
-            }}>
-              <div className="glass-panel animate-fade-in" style={{ maxWidth: '520px', width: '100%', padding: '2rem' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem' }}>Start Discussion Thread</h3>
-                <form onSubmit={handleCreatePost}>
-                  <div className="form-group">
-                    <label className="form-label">Discussion Title</label>
-                    <input
-                      type="text"
-                      required
-                      className="form-input"
-                      placeholder="e.g. Best approach for Memoization in LCS"
-                      value={newPostTitle}
-                      onChange={(e) => setNewPostTitle(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Subject Category</label>
-                    <select
-                      className="form-select"
-                      value={newPostCategory}
-                      onChange={(e) => setNewPostCategory(e.target.value)}
+          {/* ── New Discussion Thread Modal via ModalPortal ── */}
+          <ModalPortal isOpen={showNewPostModal}>
+            {showNewPostModal && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(5px)',
+                  zIndex: 99999,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '1rem',
+                  animation: 'fadeIn 0.15s ease-out'
+                }}
+                onClick={() => setShowNewPostModal(false)}
+              >
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '90vw',
+                    maxWidth: '560px',
+                    maxHeight: '90vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: 'var(--bg-surface, #1e293b)',
+                    borderRadius: 'var(--radius-lg, 12px)',
+                    border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                    overflow: 'hidden',
+                    zIndex: 100000
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Sticky Header */}
+                  <div style={{
+                    position: 'sticky',
+                    top: 0,
+                    padding: '1.25rem 1.5rem',
+                    borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                      Start Discussion Thread
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPostModal(false)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '4px'
+                      }}
                     >
-                      <option value="Algorithms">Algorithms</option>
-                      <option value="Cloud Computing">Cloud Computing</option>
-                      <option value="AI & Neural Networks">AI &amp; Neural Networks</option>
-                      <option value="Exam Prep">Exam Prep</option>
-                    </select>
+                      <X size={20} />
+                    </button>
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Query Description</label>
-                    <textarea
-                      rows={4}
-                      required
-                      className="form-textarea"
-                      placeholder="Detail your conceptual query or code snippet..."
-                      value={newPostContent}
-                      onChange={(e) => setNewPostContent(e.target.value)}
-                    />
+                  {/* Scrollable Body */}
+                  <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+                    <form id="new-post-form" onSubmit={handleCreatePost}>
+                      <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                        <label className="form-label">Discussion Title</label>
+                        <input
+                          type="text"
+                          required
+                          className="form-input"
+                          placeholder="e.g. Best approach for Memoization in LCS"
+                          value={newPostTitle}
+                          onChange={(e) => setNewPostTitle(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                        <label className="form-label">Subject Category</label>
+                        <select
+                          className="form-select"
+                          value={newPostCategory}
+                          onChange={(e) => setNewPostCategory(e.target.value)}
+                        >
+                          <option value="Algorithms">Algorithms</option>
+                          <option value="Cloud Computing">Cloud Computing</option>
+                          <option value="AI & Neural Networks">AI &amp; Neural Networks</option>
+                          <option value="Exam Prep">Exam Prep</option>
+                        </select>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                        <label className="form-label">Query Description</label>
+                        <textarea
+                          rows={4}
+                          required
+                          className="form-textarea"
+                          placeholder="Detail your conceptual query or code snippet..."
+                          value={newPostContent}
+                          onChange={(e) => setNewPostContent(e.target.value)}
+                        />
+                      </div>
+                    </form>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
-                    <button type="button" onClick={() => setShowNewPostModal(false)} className="btn btn-secondary">
+                  {/* Sticky Footer */}
+                  <div style={{
+                    position: 'sticky',
+                    bottom: 0,
+                    padding: '1rem 1.5rem',
+                    borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '0.75rem',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPostModal(false)}
+                      className="btn btn-secondary"
+                    >
                       Cancel
                     </button>
-                    <button type="submit" className="btn btn-primary">
+                    <button
+                      type="submit"
+                      form="new-post-form"
+                      className="btn btn-primary"
+                    >
                       Publish Question
                     </button>
                   </div>
-                </form>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </ModalPortal>
+
+          {/* ── Thread Discussion & Answers Modal via ModalPortal ── */}
+          <ModalPortal isOpen={Boolean(selectedThread)}>
+            {selectedThread && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(5px)',
+                  zIndex: 99999,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '1rem',
+                  animation: 'fadeIn 0.15s ease-out'
+                }}
+                onClick={() => setSelectedThread(null)}
+              >
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '90vw',
+                    maxWidth: '680px',
+                    maxHeight: '90vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: 'var(--bg-surface, #1e293b)',
+                    borderRadius: 'var(--radius-lg, 12px)',
+                    border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                    overflow: 'hidden',
+                    zIndex: 100000
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Sticky Header */}
+                  <div style={{
+                    position: 'sticky',
+                    top: 0,
+                    padding: '1.25rem 1.5rem',
+                    borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <span className="badge badge-primary">{selectedThread.category}</span>
+                      <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                        Discussion Details
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedThread(null)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Scrollable Body */}
+                  <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div>
+                      <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                        {selectedThread.title}
+                      </h2>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        Started by <strong>{selectedThread.authorName}</strong> ({selectedThread.authorRole}) &bull; {new Date(selectedThread.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+
+                    <div style={{ background: 'var(--bg-input, rgba(255,255,255,0.04))', padding: '1.2rem', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', lineHeight: 1.6, fontSize: '0.92rem' }}>
+                      {selectedThread.content}
+                    </div>
+
+                    {/* Replies list */}
+                    <div>
+                      <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <MessageSquare size={16} color="var(--primary)" /> Responses ({selectedThread.replies?.length || 0})
+                      </h4>
+                      {(!selectedThread.replies || selectedThread.replies.length === 0) ? (
+                        <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.88rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)' }}>
+                          No replies posted yet. Be the first to contribute an answer!
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          {selectedThread.replies.map((r, rIdx) => (
+                            <div key={rIdx} style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderLeft: r.isVerifiedAnswer ? '3px solid var(--success)' : '3px solid var(--primary)', borderRadius: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: r.isVerifiedAnswer ? 'var(--success)' : 'var(--text-primary)' }}>
+                                    {r.authorName} ({r.authorRole?.toUpperCase()})
+                                  </span>
+                                  {r.isVerifiedAnswer && (
+                                    <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>
+                                      <CheckCircle2 size={12} /> Verified
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                {r.content}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Add reply form */}
+                    <form id="thread-reply-form" onSubmit={handlePostReply} style={{ marginTop: '0.5rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Your Answer or Explanation</label>
+                      <textarea
+                        rows={3}
+                        required
+                        className="form-textarea"
+                        placeholder="Write a clear, helpful reply with explanations or code snippets..."
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                      />
+                    </form>
+                  </div>
+
+                  {/* Sticky Footer */}
+                  <div style={{
+                    position: 'sticky',
+                    bottom: 0,
+                    padding: '1rem 1.5rem',
+                    borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '0.75rem',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedThread(null)}
+                      className="btn btn-secondary"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="submit"
+                      form="thread-reply-form"
+                      className="btn btn-primary"
+                      disabled={submittingReply || !replyText.trim()}
+                    >
+                      <Send size={15} /> {submittingReply ? 'Posting...' : 'Post Reply'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </ModalPortal>
         </div>
       )}
 

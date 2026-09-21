@@ -100,7 +100,6 @@ function AppLayout() {
               <Route path="/teacher/students" element={<StudentProgressPage />} />
               <Route path="/teacher/students-manage" element={<StudentManagementPage />} />
               <Route path="/teacher/report" element={<TeacherAnalyticsPage />} />
-              <Route path="/rag-upload" element={<RagUploadPage />} />
             </Route>
 
             {/* ── Shared Protected Routes (student + faculty + teacher) ────── */}
@@ -110,6 +109,8 @@ function AppLayout() {
               <Route path="/marks" element={<MarksPage />} />
               <Route path="/chat" element={<AiChatbotPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/documents" element={<RagUploadPage />} />
+              <Route path="/rag-upload" element={<RagUploadPage />} />
             </Route>
 
             {/* ── Role redirect ───────────────────────────────────────────── */}

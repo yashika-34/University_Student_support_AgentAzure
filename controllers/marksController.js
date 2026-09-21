@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Marks from '../models/Marks.js';
 import Student from '../models/Student.js';
 import Course from '../models/Course.js';
@@ -111,26 +112,37 @@ export const getMarksSummary = async (req, res, next) => {
 export const getCourseMarks = async (req, res, next) => {
   try {
     const { courseId } = req.params;
-    const { examType, semester } = req.query;
+    const { examType, semester, studentId } = req.query;
 
-    const filter = { course: courseId };
-    if (examType) filter.examType = examType;
-    if (semester) filter.semester = Number(semester);
+    const filter = {};
+    if (courseId && courseId !== 'all') {
+      if (mongoose.Types.ObjectId.isValid(courseId)) {
+        filter.course = courseId;
+      }
+    }
+    if (examType && examType !== 'all') filter.examType = examType;
+    if (semester && semester !== 'all') filter.semester = Number(semester);
+    if (studentId && studentId !== 'all') {
+      if (mongoose.Types.ObjectId.isValid(studentId)) {
+        filter.student = studentId;
+      }
+    }
 
     const marks = await Marks.find(filter)
+      .populate('course', 'courseCode courseName credits department')
       .populate({
         path: 'student',
         populate: { path: 'userId', select: 'firstName lastName email' },
         select: 'studentId department currentSemester'
       })
-      .sort({ 'student.studentId': 1, examType: 1 });
+      .sort({ createdAt: -1 });
 
     const published = marks.filter((m) => m.isPublished);
     const avg = published.length
-      ? (published.reduce((acc, m) => acc + m.percentage, 0) / published.length).toFixed(1)
+      ? (published.reduce((acc, m) => acc + (m.percentage || 0), 0) / published.length).toFixed(1)
       : 0;
-    const highest = published.length ? Math.max(...published.map((m) => m.percentage)) : 0;
-    const lowest = published.length ? Math.min(...published.map((m) => m.percentage)) : 0;
+    const highest = published.length ? Math.max(...published.map((m) => m.percentage || 0)) : 0;
+    const lowest = published.length ? Math.min(...published.map((m) => m.percentage || 0)) : 0;
 
     res.status(200).json({
       success: true,
@@ -145,19 +157,54 @@ export const getCourseMarks = async (req, res, next) => {
 
 /**
  * @desc    Faculty adds marks for a student
- * @route   POST /api/v1/marks
- * @access  Faculty, Admin
+ * @route   POST /api/v1/marks or POST /api/v1/marks/upload
+ * @access  Faculty, Teacher, Admin
  */
 export const addMarks = async (req, res, next) => {
   try {
     const { studentId, courseId, subject, examType, examLabel, marksObtained, maxMarks, semester, academicYear, remarks } = req.body;
 
-    const faculty = await Faculty.findOne({ userId: req.user._id });
-    const student = await Student.findById(studentId);
-    if (!student) return res.status(404).json({ success: false, message: 'Student not found.' });
+    if (!studentId) {
+      return res.status(400).json({ success: false, message: 'Student selection is required.' });
+    }
+    if (marksObtained === undefined || marksObtained === null || marksObtained === '') {
+      return res.status(400).json({ success: false, message: 'Marks obtained is required.' });
+    }
+
+    // Auto-resolve / link faculty profile
+    let faculty = await Faculty.findOne({ userId: req.user._id });
+    if (!faculty && (req.user.role === 'faculty' || req.user.role === 'teacher')) {
+      try {
+        faculty = await Faculty.create({
+          userId: req.user._id,
+          employeeId: `FAC-${Date.now().toString().slice(-4)}`,
+          department: req.user.department || 'Computer Science & Engineering',
+          designation: 'Assistant Professor',
+          cabinOffice: 'Academic Block A, Room 301',
+          assignedCourses: []
+        });
+      } catch (fErr) {
+        console.warn('Faculty auto-create note:', fErr.message);
+      }
+    }
+
+    // Look up student by MongoDB _id, studentId string, or userId
+    let student = null;
+    if (mongoose.Types.ObjectId.isValid(studentId)) {
+      student = await Student.findById(studentId);
+    }
+    if (!student) {
+      student = await Student.findOne({ studentId });
+    }
+    if (!student) {
+      student = await Student.findOne({ userId: studentId });
+    }
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found in database.' });
+    }
 
     let course = null;
-    if (courseId) {
+    if (courseId && mongoose.Types.ObjectId.isValid(courseId)) {
       course = await Course.findById(courseId);
     }
 
@@ -172,18 +219,18 @@ export const addMarks = async (req, res, next) => {
       examLabel: examLabel || `${subjectName} Assessment`,
       marksObtained: Number(marksObtained),
       maxMarks: Number(maxMarks) || 100,
-      semester: semester || student.currentSemester || 1,
+      semester: Number(semester) || student.currentSemester || 1,
       academicYear: academicYear || '2026-2027',
       remarks: remarks || '',
       isPublished: true
     });
 
     if (entry.course) {
-      await entry.populate('course', 'courseCode courseName');
+      await entry.populate('course', 'courseCode courseName credits');
     }
     await entry.populate({ path: 'student', populate: { path: 'userId', select: 'firstName lastName email' } });
 
-    res.status(201).json({ success: true, message: 'Marks added successfully.', marks: entry });
+    res.status(201).json({ success: true, message: 'Marks recorded and published successfully.', marks: entry });
   } catch (error) {
     next(error);
   }
@@ -192,7 +239,7 @@ export const addMarks = async (req, res, next) => {
 /**
  * @desc    Faculty updates a marks entry
  * @route   PUT /api/v1/marks/:id
- * @access  Faculty, Admin
+ * @access  Faculty, Teacher, Admin
  */
 export const updateMarks = async (req, res, next) => {
   try {
@@ -216,13 +263,18 @@ export const updateMarks = async (req, res, next) => {
 
 /**
  * @desc    Publish marks (make visible to student)
- * @route   PATCH /api/v1/marks/:id/publish
- * @access  Faculty, Admin
+ * @route   PATCH /api/v1/marks/:id/publish or POST /api/v1/marks/publish
+ * @access  Faculty, Teacher, Admin
  */
 export const publishMarks = async (req, res, next) => {
   try {
+    const targetId = req.params.id || req.body.id || req.body.marksId || req.body._id;
+    if (!targetId) {
+      return res.status(400).json({ success: false, message: 'Marks entry ID is required.' });
+    }
+
     const entry = await Marks.findByIdAndUpdate(
-      req.params.id,
+      targetId,
       { isPublished: true },
       { new: true }
     );

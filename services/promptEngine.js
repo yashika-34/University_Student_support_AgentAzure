@@ -67,7 +67,7 @@ export const buildSystemPromptWithContext = (user, studentProfile = null, facult
     contextBlock += `- Academic Department: ${studentProfile.department}\n`;
     contextBlock += `- Degree Program: ${studentProfile.degreeProgram}\n`;
     contextBlock += `- Current Semester: Semester ${studentProfile.currentSemester}\n`;
-    contextBlock += `- Cumulative GPA: ${studentProfile.cgpa} / 4.0\n`;
+    contextBlock += `- Cumulative GPA: ${studentProfile.cgpa} / 10.0\n`;
     contextBlock += `- Enrolled Course Codes: [${activeCourses || 'CS-301, CS-305, CS-309'}]\n`;
   } else if (user.role === 'faculty' && facultyProfile) {
     contextBlock += `- Faculty Employee ID: ${facultyProfile.employeeId}\n`;

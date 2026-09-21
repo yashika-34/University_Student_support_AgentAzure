@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
+import ModalPortal from '../components/ModalPortal.jsx';
 import { attendanceAPI, courseAPI, teacherAPI } from '../services/api.js';
 import {
   Calculator,
@@ -9,11 +10,14 @@ import {
   Calendar,
   Save,
   Check,
-  Loader2
+  Loader2,
+  X,
+  Users
 } from 'lucide-react';
 
 const AttendancePage = () => {
   const { role } = useAuth();
+  const isTeacher = role === 'faculty' || role === 'teacher';
   const [courses, setCourses] = useState([]);
   const [selectedCourseCode, setSelectedCourseCode] = useState('');
   const [hypotheticalAction, setHypotheticalAction] = useState('miss'); // 'miss' or 'attend'
@@ -28,6 +32,20 @@ const AttendancePage = () => {
   const [batchSaved, setBatchSaved] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [showMarkModal, setShowMarkModal] = useState(false);
+
+  // Body scroll locking is handled by ModalPortal
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowMarkModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     const initAttendance = async () => {
@@ -151,13 +169,24 @@ const AttendancePage = () => {
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       
       {/* Page Header */}
-      <div>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.25rem' }}>
-          Attendance Tracking &amp; Simulator
-        </h1>
-        <p style={{ color: 'var(--text-secondary)' }}>
-          Real-time attendance calculated from MongoDB database sessions. Simulate hypothetical absences to ensure exam clearance.
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.25rem' }}>
+            Attendance Tracking &amp; Simulator
+          </h1>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            Real-time attendance calculated from MongoDB database sessions. Simulate hypothetical absences to ensure exam clearance.
+          </p>
+        </div>
+        {isTeacher && (
+          <button
+            onClick={() => setShowMarkModal(true)}
+            className="btn btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.65rem 1.25rem' }}
+          >
+            <CheckSquare size={16} /> Mark Attendance
+          </button>
+        )}
       </div>
 
       {/* ── STUDENT VIEW: Interactive Course Grid + Simulator ── */}
@@ -302,8 +331,178 @@ const AttendancePage = () => {
         </>
       )}
 
+      {/* ── CENTERED MODAL DIALOG: RECORD ATTENDANCE ──────────────────────── */}
+      <ModalPortal isOpen={showMarkModal}>
+        <div
+          className="modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowMarkModal(false); }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="modal-container" style={{ maxWidth: '640px' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 'var(--radius-sm)',
+                  background: 'var(--primary-gradient)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', color: '#fff',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)'
+                }}>
+                  <CheckSquare size={18} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.15rem', fontWeight: 800, lineHeight: 1.2 }}>
+                    Record Lecture Attendance
+                  </h2>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    Select course, session date, and mark student status
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMarkModal(false)}
+                className="modal-close-btn"
+                title="Close (Esc)"
+                aria-label="Close dialog"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '1rem 1.25rem' }}>
+              <form onSubmit={handleSaveBatch} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {/* Course & Date selectors */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '0.65rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Course *</label>
+                    <select
+                      className="form-select"
+                      style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                      value={selectedFacultyCourse}
+                      onChange={(e) => setSelectedFacultyCourse(e.target.value)}
+                      required
+                    >
+                      {facultyCourses.map((c) => (
+                        <option key={c._id} value={c._id}>
+                          {c.courseCode} — {c.courseName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Session Date *</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                      value={sessionDate}
+                      onChange={(e) => setSessionDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Quick actions row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0.2rem', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                    Student Roster ({roster.length} students)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRoster(roster.map((r) => ({ ...r, status: 'present' })));
+                    }}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}
+                  >
+                    ✓ Mark All Present
+                  </button>
+                </div>
+
+                {/* Roster list: Immediately visible without scrolling whole dialog */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '250px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                  {roster.map((student, idx) => (
+                    <div
+                      key={student.studentId}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.5rem 0.75rem',
+                        background: 'var(--bg-input)',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--border-subtle)',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {student.name}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                          {student.rollNo}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          className={`btn ${student.status === 'present' ? 'btn-success' : 'btn-secondary'}`}
+                          style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem' }}
+                          onClick={() => handleRosterStatusChange(idx, 'present')}
+                        >
+                          Present
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${student.status === 'absent' ? 'btn-danger' : 'btn-secondary'}`}
+                          style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem' }}
+                          onClick={() => handleRosterStatusChange(idx, 'absent')}
+                        >
+                          Absent
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${student.status === 'excused' ? 'btn-warning' : 'btn-secondary'}`}
+                          style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem' }}
+                          onClick={() => handleRosterStatusChange(idx, 'excused')}
+                        >
+                          Excused
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Submit & Cancel */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', marginTop: '0.35rem', paddingTop: '0.65rem', borderTop: '1px solid var(--border-subtle)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowMarkModal(false)}
+                    className="btn btn-secondary"
+                    style={{ padding: '0.5rem 1rem', fontSize: '0.82rem' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={saveLoading}
+                    style={{ padding: '0.5rem 1.35rem', fontSize: '0.82rem' }}
+                  >
+                    {saveLoading ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : <><Save size={14} /> Submit Attendance</>}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
+
       {/* ── FACULTY VIEW: Batch Attendance Session Marking ── */}
-      {role === 'faculty' && (
+      {isTeacher && (
         <div className="glass-panel" style={{ padding: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
             <div>
@@ -314,11 +513,20 @@ const AttendancePage = () => {
                 Select assigned course and mark session status. Saves directly to MongoDB collection.
               </p>
             </div>
-            {batchSaved && (
-              <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.5rem 0.85rem' }}>
-                <Check size={14} /> Batch Saved to DB
-              </span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <button
+                onClick={() => setShowMarkModal(true)}
+                className="btn btn-primary"
+                style={{ fontSize: '0.85rem', padding: '0.55rem 1.1rem' }}
+              >
+                <CheckSquare size={16} /> Mark Attendance Popup
+              </button>
+              {batchSaved && (
+                <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.5rem 0.85rem' }}>
+                  <Check size={14} /> Batch Saved to DB
+                </span>
+              )}
+            </div>
           </div>
 
           {saveMessage && (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ModalPortal from '../components/ModalPortal.jsx';
 import api from '../services/api.js';
 import {
   Calendar,
@@ -11,7 +12,10 @@ import {
   MapPin,
   Send,
   Check,
-  Loader2
+  Loader2,
+  X,
+  Award,
+  FileText
 } from 'lucide-react';
 
 const CampusServicesPage = () => {
@@ -34,6 +38,12 @@ const CampusServicesPage = () => {
   });
   const [appointmentBookedSuccess, setAppointmentBookedSuccess] = useState(false);
 
+  // Reschedule State
+  const [rescheduleItem, setRescheduleItem] = useState(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleSlot, setRescheduleSlot] = useState('14:30 - 15:00');
+  const [rescheduleSuccess, setRescheduleSuccess] = useState(false);
+
   // Tickets State
   const [showCreateTicketModal, setShowCreateTicketModal] = useState(false);
   const [newTicketData, setNewTicketData] = useState({
@@ -42,6 +52,15 @@ const CampusServicesPage = () => {
     priority: 'Medium',
     message: ''
   });
+  const [ticketSuccess, setTicketSuccess] = useState(false);
+
+  // Scholarship Grant Application State
+  const [selectedScholarship, setSelectedScholarship] = useState(null);
+  const [grantStatement, setGrantStatement] = useState('');
+  const [grantSuccess, setGrantSuccess] = useState(false);
+
+  // Event Details Modal State
+  const [selectedEventDetails, setSelectedEventDetails] = useState(null);
 
   useEffect(() => {
     const fetchServicesData = async () => {
@@ -111,38 +130,70 @@ const CampusServicesPage = () => {
     }, 1500);
   };
 
+  const handleOpenReschedule = (apt) => {
+    setRescheduleItem(apt);
+    setRescheduleDate(apt.appointmentDate || '');
+    setRescheduleSlot(apt.timeSlot || '14:30 - 15:00');
+    setRescheduleSuccess(false);
+  };
+
+  const handleConfirmReschedule = (e) => {
+    e.preventDefault();
+    if (!rescheduleItem) return;
+    setAppointments(appointments.map(a =>
+      a.id === rescheduleItem.id
+        ? { ...a, appointmentDate: rescheduleDate, timeSlot: rescheduleSlot, status: 'confirmed' }
+        : a
+    ));
+    setRescheduleSuccess(true);
+    setTimeout(() => {
+      setRescheduleItem(null);
+      setRescheduleSuccess(false);
+    }, 1500);
+  };
+
   const handleCreateTicket = async (e) => {
     e.preventDefault();
+    const createdTicket = {
+      ticketId: `TICK-${Math.floor(100000 + Math.random() * 900000)}`,
+      subject: newTicketData.subject,
+      category: newTicketData.category,
+      priority: newTicketData.priority,
+      status: 'Open',
+      assignedTo: 'Campus Helpdesk Support',
+      createdAt: new Date().toISOString()
+    };
     try {
       const res = await api.post('/services/tickets', newTicketData);
       if (res.data?.ticket) {
         setTickets([res.data.ticket, ...tickets]);
       } else {
-        const createdTicket = {
-          ticketId: `TICK-${Math.floor(100000 + Math.random() * 900000)}`,
-          subject: newTicketData.subject,
-          category: newTicketData.category,
-          priority: newTicketData.priority,
-          status: 'Open',
-          assignedTo: 'Campus Helpdesk Support',
-          createdAt: new Date().toISOString()
-        };
         setTickets([createdTicket, ...tickets]);
       }
     } catch {
-      const createdTicket = {
-        ticketId: `TICK-${Math.floor(100000 + Math.random() * 900000)}`,
-        subject: newTicketData.subject,
-        category: newTicketData.category,
-        priority: newTicketData.priority,
-        status: 'Open',
-        assignedTo: 'Campus Helpdesk Support',
-        createdAt: new Date().toISOString()
-      };
       setTickets([createdTicket, ...tickets]);
     }
-    setShowCreateTicketModal(false);
-    setNewTicketData({ subject: '', category: 'Academic Advisory', priority: 'Medium', message: '' });
+    setTicketSuccess(true);
+    setTimeout(() => {
+      setShowCreateTicketModal(false);
+      setTicketSuccess(false);
+      setNewTicketData({ subject: '', category: 'Academic Advisory', priority: 'Medium', message: '' });
+    }, 1500);
+  };
+
+  const handleOpenGrantModal = (sch) => {
+    setSelectedScholarship(sch);
+    setGrantStatement('');
+    setGrantSuccess(false);
+  };
+
+  const handleConfirmGrantSubmit = (e) => {
+    e.preventDefault();
+    setGrantSuccess(true);
+    setTimeout(() => {
+      setSelectedScholarship(null);
+      setGrantSuccess(false);
+    }, 1800);
   };
 
   const handleRsvp = async (id) => {
@@ -259,7 +310,11 @@ const CampusServicesPage = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.85rem' }}>
+                  <button
+                    onClick={() => handleOpenReschedule(apt)}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.8rem', padding: '0.4rem 0.85rem' }}
+                  >
                     Reschedule
                   </button>
                 </div>
@@ -267,88 +322,334 @@ const CampusServicesPage = () => {
             ))}
           </div>
 
-          {/* Book Modal */}
-          {showBookModal && (
-            <div style={{
-              position: 'fixed',
-              top: 0, left: 0, right: 0, bottom: 0,
-              background: 'rgba(0,0,0,0.75)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              zIndex: 999, padding: '1rem'
-            }}>
-              <div className="glass-panel animate-fade-in" style={{ maxWidth: '500px', width: '100%', padding: '2rem' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem' }}>Schedule Faculty Consultation</h3>
-                
-                {appointmentBookedSuccess ? (
-                  <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--success)' }}>
-                    <CheckCircle2 size={48} style={{ margin: '0 auto 0.75rem' }} />
-                    <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>Appointment Confirmed!</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Notification dispatched to professor and calendar synced.</div>
+          {/* ── Book Faculty Consultation Modal via ModalPortal ── */}
+          <ModalPortal isOpen={showBookModal}>
+            {showBookModal && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(5px)',
+                  zIndex: 99999,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '1rem',
+                  animation: 'fadeIn 0.15s ease-out'
+                }}
+                onClick={() => setShowBookModal(false)}
+              >
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '90vw',
+                    maxWidth: '540px',
+                    maxHeight: '90vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: 'var(--bg-surface, #1e293b)',
+                    borderRadius: 'var(--radius-lg, 12px)',
+                    border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                    overflow: 'hidden',
+                    zIndex: 100000
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Sticky Header */}
+                  <div style={{
+                    position: 'sticky',
+                    top: 0,
+                    padding: '1.25rem 1.5rem',
+                    borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                      Schedule Faculty Consultation
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowBookModal(false)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <X size={20} />
+                    </button>
                   </div>
-                ) : (
-                  <form onSubmit={handleBookAppointment}>
-                    <div className="form-group">
-                      <label className="form-label">Select Faculty Member</label>
-                      <select
-                        className="form-select"
-                        value={newAppointment.facultyName}
-                        onChange={(e) => setNewAppointment({ ...newAppointment, facultyName: e.target.value })}
+
+                  {/* Scrollable Body */}
+                  <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+                    {appointmentBookedSuccess ? (
+                      <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--success)' }}>
+                        <CheckCircle2 size={52} style={{ margin: '0 auto 0.75rem' }} />
+                        <div style={{ fontWeight: 700, fontSize: '1.15rem' }}>Appointment Confirmed!</div>
+                        <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                          Dispatched invitation to professor and synchronized calendar schedule.
+                        </div>
+                      </div>
+                    ) : (
+                      <form id="book-consult-form" onSubmit={handleBookAppointment}>
+                        <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                          <label className="form-label">Select Faculty Member</label>
+                          <select
+                            className="form-select"
+                            value={newAppointment.facultyName}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, facultyName: e.target.value })}
+                          >
+                            <option value="Dr. Alan Turing">Dr. Alan Turing (Algorithms &amp; Complexity)</option>
+                            <option value="Dr. Grace Hopper">Dr. Grace Hopper (Cloud Computing)</option>
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                          <div className="form-group">
+                            <label className="form-label">Date</label>
+                            <input
+                              type="date"
+                              required
+                              className="form-input"
+                              value={newAppointment.appointmentDate}
+                              onChange={(e) => setNewAppointment({ ...newAppointment, appointmentDate: e.target.value })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">Time Slot</label>
+                            <select
+                              className="form-select"
+                              value={newAppointment.timeSlot}
+                              onChange={(e) => setNewAppointment({ ...newAppointment, timeSlot: e.target.value })}
+                            >
+                              <option value="14:00 - 14:30">14:00 - 14:30</option>
+                              <option value="14:30 - 15:00">14:30 - 15:00</option>
+                              <option value="15:00 - 15:30">15:00 - 15:30</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">Consultation Reason / Topic</label>
+                          <textarea
+                            rows={3}
+                            required
+                            className="form-textarea"
+                            placeholder="Detail the query, research topic, or document you wish to review..."
+                            value={newAppointment.purpose}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, purpose: e.target.value })}
+                          />
+                        </div>
+                      </form>
+                    )}
+                  </div>
+
+                  {/* Sticky Footer */}
+                  <div style={{
+                    position: 'sticky',
+                    bottom: 0,
+                    padding: '1rem 1.5rem',
+                    borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '0.75rem',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowBookModal(false)}
+                      className="btn btn-secondary"
+                    >
+                      {appointmentBookedSuccess ? 'Close' : 'Cancel'}
+                    </button>
+                    {!appointmentBookedSuccess && (
+                      <button
+                        type="submit"
+                        form="book-consult-form"
+                        className="btn btn-primary"
                       >
-                        <option value="Dr. Alan Turing">Dr. Alan Turing (Algorithms &amp; Complexity)</option>
-                        <option value="Dr. Grace Hopper">Dr. Grace Hopper (Cloud Computing)</option>
-                      </select>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                      <div className="form-group">
-                        <label className="form-label">Date</label>
-                        <input
-                          type="date"
-                          required
-                          className="form-input"
-                          value={newAppointment.appointmentDate}
-                          onChange={(e) => setNewAppointment({ ...newAppointment, appointmentDate: e.target.value })}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Time Slot</label>
-                        <select
-                          className="form-select"
-                          value={newAppointment.timeSlot}
-                          onChange={(e) => setNewAppointment({ ...newAppointment, timeSlot: e.target.value })}
-                        >
-                          <option value="14:00 - 14:30">14:00 - 14:30</option>
-                          <option value="14:30 - 15:00">14:30 - 15:00</option>
-                          <option value="15:00 - 15:30">15:00 - 15:30</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Consultation Reason / Topic</label>
-                      <textarea
-                        rows={3}
-                        required
-                        className="form-textarea"
-                        placeholder="Detail the query or document you wish to review..."
-                        value={newAppointment.purpose}
-                        onChange={(e) => setNewAppointment({ ...newAppointment, purpose: e.target.value })}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
-                      <button type="button" onClick={() => setShowBookModal(false)} className="btn btn-secondary">
-                        Cancel
-                      </button>
-                      <button type="submit" className="btn btn-primary">
                         Confirm Appointment
                       </button>
-                    </div>
-                  </form>
-                )}
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </ModalPortal>
+
+          {/* ── Reschedule Appointment Modal via ModalPortal ── */}
+          <ModalPortal isOpen={Boolean(rescheduleItem)}>
+            {rescheduleItem && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(5px)',
+                  zIndex: 99999,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '1rem',
+                  animation: 'fadeIn 0.15s ease-out'
+                }}
+                onClick={() => setRescheduleItem(null)}
+              >
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '90vw',
+                    maxWidth: '520px',
+                    maxHeight: '90vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: 'var(--bg-surface, #1e293b)',
+                    borderRadius: 'var(--radius-lg, 12px)',
+                    border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                    overflow: 'hidden',
+                    zIndex: 100000
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Sticky Header */}
+                  <div style={{
+                    position: 'sticky',
+                    top: 0,
+                    padding: '1.25rem 1.5rem',
+                    borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                      Reschedule Consultation
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setRescheduleItem(null)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Scrollable Body */}
+                  <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+                    <div style={{ marginBottom: '1rem', padding: '0.85rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)' }}>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Faculty Member</div>
+                      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{rescheduleItem.facultyName}</div>
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{rescheduleItem.courseCode}</div>
+                    </div>
+
+                    {rescheduleSuccess ? (
+                      <div style={{ textAlign: 'center', padding: '1.5rem 0', color: 'var(--success)' }}>
+                        <CheckCircle2 size={48} style={{ margin: '0 auto 0.75rem' }} />
+                        <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>Rescheduled Successfully!</div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+                          Updated to {rescheduleDate} ({rescheduleSlot}).
+                        </div>
+                      </div>
+                    ) : (
+                      <form id="reschedule-form" onSubmit={handleConfirmReschedule}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                          <div className="form-group">
+                            <label className="form-label">New Date</label>
+                            <input
+                              type="date"
+                              required
+                              className="form-input"
+                              value={rescheduleDate}
+                              onChange={(e) => setRescheduleDate(e.target.value)}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">New Time Slot</label>
+                            <select
+                              className="form-select"
+                              value={rescheduleSlot}
+                              onChange={(e) => setRescheduleSlot(e.target.value)}
+                            >
+                              <option value="14:00 - 14:30">14:00 - 14:30</option>
+                              <option value="14:30 - 15:00">14:30 - 15:00</option>
+                              <option value="15:00 - 15:30">15:00 - 15:30</option>
+                              <option value="16:00 - 16:30">16:00 - 16:30</option>
+                            </select>
+                          </div>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+
+                  {/* Sticky Footer */}
+                  <div style={{
+                    position: 'sticky',
+                    bottom: 0,
+                    padding: '1rem 1.5rem',
+                    borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '0.75rem',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setRescheduleItem(null)}
+                      className="btn btn-secondary"
+                    >
+                      {rescheduleSuccess ? 'Close' : 'Cancel'}
+                    </button>
+                    {!rescheduleSuccess && (
+                      <button
+                        type="submit"
+                        form="reschedule-form"
+                        className="btn btn-primary"
+                      >
+                        Confirm New Slot
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </ModalPortal>
         </div>
       )}
 
@@ -404,85 +705,184 @@ const CampusServicesPage = () => {
             ))}
           </div>
 
-          {/* Create Ticket Modal */}
-          {showCreateTicketModal && (
-            <div style={{
-              position: 'fixed',
-              top: 0, left: 0, right: 0, bottom: 0,
-              background: 'rgba(0,0,0,0.75)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              zIndex: 999, padding: '1rem'
-            }}>
-              <div className="glass-panel animate-fade-in" style={{ maxWidth: '520px', width: '100%', padding: '2rem' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem' }}>Open Support Ticket</h3>
-                <form onSubmit={handleCreateTicket}>
-                  <div className="form-group">
-                    <label className="form-label">Subject</label>
-                    <input
-                      type="text"
-                      required
-                      className="form-input"
-                      placeholder="Summary of issue or discrepancy"
-                      value={newTicketData.subject}
-                      onChange={(e) => setNewTicketData({ ...newTicketData, subject: e.target.value })}
-                    />
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <div className="form-group">
-                      <label className="form-label">Category</label>
-                      <select
-                        className="form-select"
-                        value={newTicketData.category}
-                        onChange={(e) => setNewTicketData({ ...newTicketData, category: e.target.value })}
-                      >
-                        <option value="Academic Advisory">Academic Advisory</option>
-                        <option value="Attendance Query">Attendance Query</option>
-                        <option value="Fees & Bursar">Fees &amp; Bursar</option>
-                        <option value="Examinations">Examinations</option>
-                        <option value="IT Support">IT Support</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Urgency</label>
-                      <select
-                        className="form-select"
-                        value={newTicketData.priority}
-                        onChange={(e) => setNewTicketData({ ...newTicketData, priority: e.target.value })}
-                      >
-                        <option value="Low">Low Priority</option>
-                        <option value="Medium">Medium Priority</option>
-                        <option value="High">High Priority</option>
-                        <option value="Urgent">Urgent</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Detailed Explanation</label>
-                    <textarea
-                      rows={4}
-                      required
-                      className="form-textarea"
-                      placeholder="Include relevant dates, subject codes, and transaction/reference numbers..."
-                      value={newTicketData.message}
-                      onChange={(e) => setNewTicketData({ ...newTicketData, message: e.target.value })}
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
-                    <button type="button" onClick={() => setShowCreateTicketModal(false)} className="btn btn-secondary">
-                      Cancel
+          {/* ── Create Ticket Modal via ModalPortal ── */}
+          <ModalPortal isOpen={showCreateTicketModal}>
+            {showCreateTicketModal && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(5px)',
+                  zIndex: 99999,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '1rem',
+                  animation: 'fadeIn 0.15s ease-out'
+                }}
+                onClick={() => setShowCreateTicketModal(false)}
+              >
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '90vw',
+                    maxWidth: '540px',
+                    maxHeight: '90vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: 'var(--bg-surface, #1e293b)',
+                    borderRadius: 'var(--radius-lg, 12px)',
+                    border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                    overflow: 'hidden',
+                    zIndex: 100000
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Sticky Header */}
+                  <div style={{
+                    position: 'sticky',
+                    top: 0,
+                    padding: '1.25rem 1.5rem',
+                    borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                      Open Support Ticket
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateTicketModal(false)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <X size={20} />
                     </button>
-                    <button type="submit" className="btn btn-primary">
-                      <Send size={16} /> Submit Ticket
-                    </button>
                   </div>
-                </form>
+
+                  {/* Scrollable Body */}
+                  <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+                    {ticketSuccess ? (
+                      <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--success)' }}>
+                        <CheckCircle2 size={52} style={{ margin: '0 auto 0.75rem' }} />
+                        <div style={{ fontWeight: 700, fontSize: '1.15rem' }}>Support Ticket Registered!</div>
+                        <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+                          Our campus advisory team will review and respond shortly.
+                        </div>
+                      </div>
+                    ) : (
+                      <form id="create-ticket-form" onSubmit={handleCreateTicket}>
+                        <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                          <label className="form-label">Subject</label>
+                          <input
+                            type="text"
+                            required
+                            className="form-input"
+                            placeholder="Summary of issue or discrepancy"
+                            value={newTicketData.subject}
+                            onChange={(e) => setNewTicketData({ ...newTicketData, subject: e.target.value })}
+                          />
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                          <div className="form-group">
+                            <label className="form-label">Category</label>
+                            <select
+                              className="form-select"
+                              value={newTicketData.category}
+                              onChange={(e) => setNewTicketData({ ...newTicketData, category: e.target.value })}
+                            >
+                              <option value="Academic Advisory">Academic Advisory</option>
+                              <option value="Attendance Query">Attendance Query</option>
+                              <option value="Fees & Bursar">Fees &amp; Bursar</option>
+                              <option value="Examinations">Examinations</option>
+                              <option value="IT Support">IT Support</option>
+                            </select>
+                          </div>
+
+                          <div className="form-group">
+                            <label className="form-label">Urgency</label>
+                            <select
+                              className="form-select"
+                              value={newTicketData.priority}
+                              onChange={(e) => setNewTicketData({ ...newTicketData, priority: e.target.value })}
+                            >
+                              <option value="Low">Low Priority</option>
+                              <option value="Medium">Medium Priority</option>
+                              <option value="High">High Priority</option>
+                              <option value="Urgent">Urgent</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">Detailed Explanation</label>
+                          <textarea
+                            rows={4}
+                            required
+                            className="form-textarea"
+                            placeholder="Include relevant dates, subject codes, and transaction/reference numbers..."
+                            value={newTicketData.message}
+                            onChange={(e) => setNewTicketData({ ...newTicketData, message: e.target.value })}
+                          />
+                        </div>
+                      </form>
+                    )}
+                  </div>
+
+                  {/* Sticky Footer */}
+                  <div style={{
+                    position: 'sticky',
+                    bottom: 0,
+                    padding: '1rem 1.5rem',
+                    borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '0.75rem',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateTicketModal(false)}
+                      className="btn btn-secondary"
+                    >
+                      {ticketSuccess ? 'Close' : 'Cancel'}
+                    </button>
+                    {!ticketSuccess && (
+                      <button
+                        type="submit"
+                        form="create-ticket-form"
+                        className="btn btn-primary"
+                      >
+                        <Send size={16} /> Submit Ticket
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </ModalPortal>
         </div>
       )}
 
@@ -493,7 +893,7 @@ const CampusServicesPage = () => {
             <DollarSign size={20} color="var(--success)" /> Scholarship Recommendation Engine
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-            Financial grants matched with your 3.82 CGPA, engineering branch, and verified merit credentials.
+            Financial grants matched with your 8.65 CGPA, engineering branch, and verified merit credentials.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -527,13 +927,171 @@ const CampusServicesPage = () => {
                 </div>
 
                 <div>
-                  <button className="btn btn-primary" style={{ padding: '0.65rem 1.4rem' }}>
+                  <button
+                    onClick={() => handleOpenGrantModal(sch)}
+                    className="btn btn-primary"
+                    style={{ padding: '0.65rem 1.4rem' }}
+                  >
                     Apply for Grant
                   </button>
                 </div>
               </div>
             ))}
           </div>
+
+          {/* ── Scholarship Application Modal via ModalPortal ── */}
+          <ModalPortal isOpen={Boolean(selectedScholarship)}>
+            {selectedScholarship && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(5px)',
+                  zIndex: 99999,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '1rem',
+                  animation: 'fadeIn 0.15s ease-out'
+                }}
+                onClick={() => setSelectedScholarship(null)}
+              >
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '90vw',
+                    maxWidth: '560px',
+                    maxHeight: '90vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: 'var(--bg-surface, #1e293b)',
+                    borderRadius: 'var(--radius-lg, 12px)',
+                    border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                    overflow: 'hidden',
+                    zIndex: 100000
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Sticky Header */}
+                  <div style={{
+                    position: 'sticky',
+                    top: 0,
+                    padding: '1.25rem 1.5rem',
+                    borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <Award size={20} color="var(--success)" />
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                        Grant Application
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedScholarship(null)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Scrollable Body */}
+                  <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ background: 'var(--bg-input)', padding: '1.25rem', borderRadius: 'var(--radius-sm)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                        <span className="badge badge-success">{selectedScholarship.amount}</span>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Deadline: {selectedScholarship.deadline}</span>
+                      </div>
+                      <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{selectedScholarship.title}</h4>
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                        Offered by {selectedScholarship.provider}
+                      </div>
+                    </div>
+
+                    {grantSuccess ? (
+                      <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--success)' }}>
+                        <CheckCircle2 size={52} style={{ margin: '0 auto 0.75rem' }} />
+                        <div style={{ fontWeight: 700, fontSize: '1.15rem' }}>Application Submitted!</div>
+                        <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                          Your candidate profile and statement have been routed to the scholarship committee.
+                        </div>
+                      </div>
+                    ) : (
+                      <form id="grant-apply-form" onSubmit={handleConfirmGrantSubmit}>
+                        <div className="form-group" style={{ marginBottom: '1rem' }}>
+                          <label className="form-label">Statement of Academic Purpose &amp; Financial Need</label>
+                          <textarea
+                            rows={4}
+                            required
+                            className="form-textarea"
+                            placeholder="Describe how this endowment will advance your research or semester tuition..."
+                            value={grantStatement}
+                            onChange={(e) => setGrantStatement(e.target.value)}
+                          />
+                        </div>
+
+                        <div style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.08)', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.25)', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                          ℹ️ Verified metrics (8.65 CGPA, B.S. in Computer Science, and attendance record) will be attached automatically from your student dossier.
+                        </div>
+                      </form>
+                    )}
+                  </div>
+
+                  {/* Sticky Footer */}
+                  <div style={{
+                    position: 'sticky',
+                    bottom: 0,
+                    padding: '1rem 1.5rem',
+                    borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '0.75rem',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedScholarship(null)}
+                      className="btn btn-secondary"
+                    >
+                      {grantSuccess ? 'Close' : 'Cancel'}
+                    </button>
+                    {!grantSuccess && (
+                      <button
+                        type="submit"
+                        form="grant-apply-form"
+                        className="btn btn-primary"
+                      >
+                        Submit Grant Application
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </ModalPortal>
         </div>
       )}
 
@@ -578,20 +1136,187 @@ const CampusServicesPage = () => {
                   </div>
                 </div>
 
-                <div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => setSelectedEventDetails(ev)}
+                    className="btn btn-secondary"
+                    style={{ flex: 1, fontSize: '0.82rem', padding: '0.6rem' }}
+                  >
+                    Event Details
+                  </button>
                   {ev.isRegistered ? (
-                    <div style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.88rem' }}>
-                      <Check size={16} /> RSVP Confirmed ({ev.badgeAwarded} Allocated)
+                    <div style={{ flex: 1, color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.85rem' }}>
+                      <Check size={16} /> RSVP Confirmed
                     </div>
                   ) : (
-                    <button onClick={() => handleRsvp(ev.id)} className="btn btn-primary" style={{ width: '100%' }}>
-                      Confirm RSVP Registration
+                    <button
+                      onClick={() => handleRsvp(ev.id)}
+                      className="btn btn-primary"
+                      style={{ flex: 1, fontSize: '0.82rem', padding: '0.6rem' }}
+                    >
+                      Confirm RSVP
                     </button>
                   )}
                 </div>
               </div>
             ))}
           </div>
+
+          {/* ── Event Details Modal via ModalPortal ── */}
+          <ModalPortal isOpen={Boolean(selectedEventDetails)}>
+            {selectedEventDetails && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(5px)',
+                  zIndex: 99999,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '1rem',
+                  animation: 'fadeIn 0.15s ease-out'
+                }}
+                onClick={() => setSelectedEventDetails(null)}
+              >
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '90vw',
+                    maxWidth: '560px',
+                    maxHeight: '90vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: 'var(--bg-surface, #1e293b)',
+                    borderRadius: 'var(--radius-lg, 12px)',
+                    border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                    overflow: 'hidden',
+                    zIndex: 100000
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Sticky Header */}
+                  <div style={{
+                    position: 'sticky',
+                    top: 0,
+                    padding: '1.25rem 1.5rem',
+                    borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <span className="badge badge-primary">{selectedEventDetails.category}</span>
+                      <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                        Event Overview
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEventDetails(null)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Scrollable Body */}
+                  <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      {selectedEventDetails.title}
+                    </h2>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', background: 'var(--bg-input)', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Date &amp; Time</div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.88rem' }}>
+                          {new Date(selectedEventDetails.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Location</div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.88rem' }}>
+                          {selectedEventDetails.venue}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Badge Award</div>
+                        <div style={{ fontWeight: 600, color: 'var(--warning)', marginTop: '0.2rem', fontSize: '0.88rem' }}>
+                          {selectedEventDetails.badgeAwarded}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>
+                        Description
+                      </div>
+                      <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, fontSize: '0.92rem' }}>
+                        {selectedEventDetails.description}
+                      </p>
+                    </div>
+
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      Registered: <strong>{selectedEventDetails.registeredCount}</strong> / {selectedEventDetails.capacity} seats taken
+                    </div>
+                  </div>
+
+                  {/* Sticky Footer */}
+                  <div style={{
+                    position: 'sticky',
+                    bottom: 0,
+                    padding: '1rem 1.5rem',
+                    borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '0.75rem',
+                    background: 'var(--bg-surface, #1e293b)',
+                    zIndex: 10
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEventDetails(null)}
+                      className="btn btn-secondary"
+                    >
+                      Close
+                    </button>
+                    {!selectedEventDetails.isRegistered && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleRsvp(selectedEventDetails.id);
+                          setSelectedEventDetails(prev => ({ ...prev, isRegistered: true, registeredCount: (prev.registeredCount || 0) + 1 }));
+                        }}
+                        className="btn btn-primary"
+                      >
+                        Confirm RSVP Registration
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </ModalPortal>
         </div>
       )}
 

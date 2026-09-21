@@ -38,7 +38,8 @@ const STUDENT_NAV = [
     { to: '/attendance', icon: CalendarCheck, label: 'Attendance' },
     { to: '/marks', icon: Award, label: 'Marks & Grades' },
     { to: '/assignments', icon: FileText, label: 'Assignments' },
-    { to: '/exam-schedule', icon: ClipboardList, label: 'Exam Schedule' }
+    { to: '/exam-schedule', icon: ClipboardList, label: 'Exam Schedule' },
+    { to: '/documents', icon: BookOpen, label: 'University Documents' }
   ]},
   { section: 'AI Tools', items: [
     { to: '/chat', icon: MessageSquare, label: 'AI Assistant' },
@@ -73,7 +74,7 @@ const FACULTY_NAV = [
   { section: 'AI Tools', items: [
     { to: '/teacher/question-paper', icon: Sparkles, label: 'Question Paper AI' },
     { to: '/chat', icon: MessageSquare, label: 'AI Assistant' },
-    { to: '/rag-upload', icon: Upload, label: 'Upload Documents' }
+    { to: '/documents', icon: Upload, label: 'Knowledge & Documents' }
   ]},
   { section: 'Campus', items: [
     { to: '/faqs', icon: HelpCircle, label: 'FAQs' }

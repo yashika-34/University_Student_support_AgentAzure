@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ModalPortal from '../components/ModalPortal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { assignmentAPI, courseAPI } from '../services/api.js';
 import {
@@ -11,7 +12,8 @@ import {
   Bell,
   Loader2,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Eye
 } from 'lucide-react';
 
 const AssignmentPage = () => {
@@ -19,6 +21,7 @@ const AssignmentPage = () => {
   const [assignments, setAssignments] = useState([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [viewAssignment, setViewAssignment] = useState(null);
   const [uploadFile, setUploadFile] = useState(null);
   const [submissionText, setSubmissionText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -238,21 +241,30 @@ const AssignmentPage = () => {
                     <span>Max Points: <strong>{item.maxScore}</strong></span>
                   </div>
 
-                  {role === 'student' && (
-                    item.status === 'pending' || item.status === 'overdue' ? (
-                      <button
-                        onClick={() => handleOpenSubmit(item)}
-                        className="btn btn-primary"
-                        style={{ width: '100%', padding: '0.6rem', fontSize: '0.85rem' }}
-                      >
-                        <Upload size={14} /> Submit Solution
-                      </button>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: 'var(--success)', fontSize: '0.85rem', fontWeight: 600 }}>
-                        <CheckCircle2 size={16} /> Submitted Successfully
-                      </div>
-                    )
-                  )}
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <button
+                      onClick={() => setViewAssignment(item)}
+                      className="btn btn-secondary"
+                      style={{ flex: 1, padding: '0.6rem', fontSize: '0.85rem' }}
+                    >
+                      <Eye size={14} /> View Details
+                    </button>
+                    {role === 'student' && (
+                      item.status === 'pending' || item.status === 'overdue' ? (
+                        <button
+                          onClick={() => handleOpenSubmit(item)}
+                          className="btn btn-primary"
+                          style={{ flex: 1, padding: '0.6rem', fontSize: '0.85rem' }}
+                        >
+                          <Upload size={14} /> Submit Solution
+                        </button>
+                      ) : (
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: 'var(--success)', fontSize: '0.82rem', fontWeight: 600 }}>
+                          <CheckCircle2 size={15} /> Submitted
+                        </div>
+                      )
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -260,153 +272,492 @@ const AssignmentPage = () => {
         )}
       </div>
 
-      {/* Submission Modal */}
-      {selectedAssignment && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '2rem', background: 'var(--bg-surface)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Submit Assignment</h3>
-              <button onClick={() => setSelectedAssignment(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                <X size={20} />
-              </button>
-            </div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
-              Submitting for: <strong>{selectedAssignment.title}</strong>
-            </p>
-
-            {submittedSuccess ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--success)' }}>
-                <CheckCircle2 size={48} style={{ margin: '0 auto 1rem auto' }} />
-                <h4 style={{ fontWeight: 700 }}>Submission Received!</h4>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Recorded in database.</p>
+      {/* ── View Assignment Details Modal via ModalPortal ── */}
+      <ModalPortal isOpen={Boolean(viewAssignment)}>
+        {viewAssignment && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              backdropFilter: 'blur(5px)',
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+              animation: 'fadeIn 0.15s ease-out'
+            }}
+            onClick={() => setViewAssignment(null)}
+          >
+            <div
+              style={{
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '90vw',
+                maxWidth: '620px',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: 'var(--bg-surface, #1e293b)',
+                borderRadius: 'var(--radius-lg, 12px)',
+                border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                overflow: 'hidden',
+                zIndex: 100000
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Sticky Header */}
+              <div style={{
+                position: 'sticky',
+                top: 0,
+                padding: '1.25rem 1.5rem',
+                borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'var(--bg-surface, #1e293b)',
+                zIndex: 10
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <span className="badge badge-primary">{viewAssignment.courseCode || 'Course'}</span>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                    Assignment Overview
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewAssignment(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '4px'
+                  }}
+                >
+                  <X size={20} />
+                </button>
               </div>
-            ) : (
-              <form onSubmit={handleConfirmSubmit}>
-                <div style={{ marginBottom: '1.25rem' }}>
-                  <label className="form-label">Upload Solution File (PDF, DOCX, ZIP)</label>
-                  <input
-                    type="file"
-                    className="form-input"
-                    accept=".pdf,.docx,.doc,.zip,.ipynb"
-                    onChange={(e) => setUploadFile(e.target.files[0])}
-                  />
-                  {uploadFile && (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--primary)', marginTop: '0.35rem' }}>
-                      Selected: {uploadFile.name} ({(uploadFile.size / 1024).toFixed(1)} KB)
+
+              {/* Scrollable Body */}
+              <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                    Title
+                  </div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {viewAssignment.title}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', background: 'var(--bg-input, rgba(255,255,255,0.04))', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Status</div>
+                    <div style={{ fontWeight: 600, color: viewAssignment.isSubmitted ? 'var(--success)' : 'var(--warning)', marginTop: '0.2rem' }}>
+                      {viewAssignment.status || (viewAssignment.isSubmitted ? 'Submitted' : 'Pending')}
                     </div>
-                  )}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Max Score</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.2rem' }}>
+                      {viewAssignment.maxScore} Points
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Due Date</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.2rem' }}>
+                      {new Date(viewAssignment.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
                 </div>
 
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label className="form-label">Submission Notes / Code Repository URL (Optional)</label>
-                  <textarea
-                    className="form-input"
-                    rows={3}
-                    placeholder="Enter notes, explanation, or GitHub repository link..."
-                    value={submissionText}
-                    onChange={(e) => setSubmissionText(e.target.value)}
-                  />
+                <div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+                    Description &amp; Rubric Instructions
+                  </div>
+                  <div style={{ background: 'var(--bg-input, rgba(255,255,255,0.04))', padding: '1.2rem', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', lineHeight: 1.6, fontSize: '0.92rem', whiteSpace: 'pre-wrap' }}>
+                    {viewAssignment.description || 'No detailed instructions provided.'}
+                  </div>
                 </div>
+              </div>
 
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setSelectedAssignment(null)}>
-                    Cancel
+              {/* Sticky Footer */}
+              <div style={{
+                position: 'sticky',
+                bottom: 0,
+                padding: '1rem 1.5rem',
+                borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '0.75rem',
+                background: 'var(--bg-surface, #1e293b)',
+                zIndex: 10
+              }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setViewAssignment(null)}
+                >
+                  Close
+                </button>
+                {role === 'student' && (viewAssignment.status === 'pending' || viewAssignment.status === 'overdue') && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => {
+                      const cur = viewAssignment;
+                      setViewAssignment(null);
+                      handleOpenSubmit(cur);
+                    }}
+                  >
+                    <Upload size={14} /> Submit Solution
                   </button>
-                  <button type="submit" className="btn btn-primary" disabled={submitting}>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </ModalPortal>
+
+      {/* ── Submission Modal via ModalPortal ── */}
+      <ModalPortal isOpen={Boolean(selectedAssignment)}>
+        {selectedAssignment && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              backdropFilter: 'blur(5px)',
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+              animation: 'fadeIn 0.15s ease-out'
+            }}
+            onClick={() => setSelectedAssignment(null)}
+          >
+            <div
+              style={{
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '90vw',
+                maxWidth: '540px',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: 'var(--bg-surface, #1e293b)',
+                borderRadius: 'var(--radius-lg, 12px)',
+                border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                overflow: 'hidden',
+                zIndex: 100000
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Sticky Header */}
+              <div style={{
+                position: 'sticky',
+                top: 0,
+                padding: '1.25rem 1.5rem',
+                borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'var(--bg-surface, #1e293b)',
+                zIndex: 10
+              }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                  Submit Assignment
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAssignment(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '4px'
+                  }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Scrollable Body */}
+              <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                  Submitting solution for: <strong style={{ color: 'var(--text-primary)' }}>{selectedAssignment.title}</strong>
+                </p>
+
+                {submittedSuccess ? (
+                  <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--success)' }}>
+                    <CheckCircle2 size={52} style={{ margin: '0 auto 1rem auto' }} />
+                    <h4 style={{ fontWeight: 700, fontSize: '1.2rem' }}>Submission Received!</h4>
+                    <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                      Solution record updated in university database.
+                    </p>
+                  </div>
+                ) : (
+                  <form id="assignment-submit-form" onSubmit={handleConfirmSubmit}>
+                    <div style={{ marginBottom: '1.25rem' }}>
+                      <label className="form-label">Upload Solution File (PDF, DOCX, ZIP, IPYNB)</label>
+                      <input
+                        type="file"
+                        className="form-input"
+                        accept=".pdf,.docx,.doc,.zip,.ipynb"
+                        onChange={(e) => setUploadFile(e.target.files[0])}
+                      />
+                      {uploadFile && (
+                        <div style={{ fontSize: '0.82rem', color: 'var(--primary)', marginTop: '0.4rem', fontWeight: 600 }}>
+                          Selected: {uploadFile.name} ({(uploadFile.size / 1024).toFixed(1)} KB)
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ marginBottom: '1.25rem' }}>
+                      <label className="form-label">Submission Notes / Code Repository URL (Optional)</label>
+                      <textarea
+                        className="form-input"
+                        rows={3}
+                        placeholder="Enter notes, explanation, or GitHub repository link..."
+                        value={submissionText}
+                        onChange={(e) => setSubmissionText(e.target.value)}
+                      />
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              {/* Sticky Footer */}
+              <div style={{
+                position: 'sticky',
+                bottom: 0,
+                padding: '1rem 1.5rem',
+                borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '0.75rem',
+                background: 'var(--bg-surface, #1e293b)',
+                zIndex: 10
+              }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedAssignment(null)}
+                >
+                  {submittedSuccess ? 'Close' : 'Cancel'}
+                </button>
+                {!submittedSuccess && (
+                  <button
+                    type="submit"
+                    form="assignment-submit-form"
+                    className="btn btn-primary"
+                    disabled={submitting}
+                  >
                     {submitting ? 'Submitting...' : 'Confirm Submission'}
                   </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Faculty Create Assignment Modal */}
-      {showCreateModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '520px', padding: '2rem', background: 'var(--bg-surface)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Post Course Assignment</h3>
-              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                <X size={20} />
-              </button>
+                )}
+              </div>
             </div>
+          </div>
+        )}
+      </ModalPortal>
 
-            <form onSubmit={handleCreateAssignment}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label className="form-label">Course</label>
-                <select
-                  className="form-input"
-                  value={newAssignment.courseId}
-                  onChange={(e) => setNewAssignment({ ...newAssignment, courseId: e.target.value })}
-                  required
+      {/* ── Faculty Create Assignment Modal via ModalPortal ── */}
+      <ModalPortal isOpen={showCreateModal}>
+        {showCreateModal && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              backdropFilter: 'blur(5px)',
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+              animation: 'fadeIn 0.15s ease-out'
+            }}
+            onClick={() => setShowCreateModal(false)}
+          >
+            <div
+              style={{
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '90vw',
+                maxWidth: '560px',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: 'var(--bg-surface, #1e293b)',
+                borderRadius: 'var(--radius-lg, 12px)',
+                border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                overflow: 'hidden',
+                zIndex: 100000
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Sticky Header */}
+              <div style={{
+                position: 'sticky',
+                top: 0,
+                padding: '1.25rem 1.5rem',
+                borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'var(--bg-surface, #1e293b)',
+                zIndex: 10
+              }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                  Post Course Assignment
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '4px'
+                  }}
                 >
-                  {facultyCourses.map((c) => (
-                    <option key={c._id} value={c._id}>{c.courseCode} — {c.courseName}</option>
-                  ))}
-                </select>
+                  <X size={20} />
+                </button>
               </div>
 
-              <div style={{ marginBottom: '1rem' }}>
-                <label className="form-label">Assignment Title</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. Lab Exercise 3: Azure Cosmos DB"
-                  value={newAssignment.title}
-                  onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
-                  required
-                />
+              {/* Scrollable Body */}
+              <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+                <form id="create-assignment-form" onSubmit={handleCreateAssignment}>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label className="form-label">Course</label>
+                    <select
+                      className="form-input"
+                      value={newAssignment.courseId}
+                      onChange={(e) => setNewAssignment({ ...newAssignment, courseId: e.target.value })}
+                      required
+                    >
+                      {facultyCourses.map((c) => (
+                        <option key={c._id} value={c._id}>{c.courseCode} — {c.courseName}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label className="form-label">Assignment Title</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Lab Exercise 3: Azure Cosmos DB"
+                      value={newAssignment.title}
+                      onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label className="form-label">Description &amp; Rubric</label>
+                    <textarea
+                      className="form-input"
+                      rows={3}
+                      placeholder="Describe requirements, instructions, and grading criteria..."
+                      value={newAssignment.description}
+                      onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label className="form-label">Max Score</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={newAssignment.maxScore}
+                        onChange={(e) => setNewAssignment({ ...newAssignment, maxScore: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Due Date &amp; Time</label>
+                      <input
+                        type="datetime-local"
+                        className="form-input"
+                        value={newAssignment.dueDate}
+                        onChange={(e) => setNewAssignment({ ...newAssignment, dueDate: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                </form>
               </div>
 
-              <div style={{ marginBottom: '1rem' }}>
-                <label className="form-label">Description &amp; Rubric</label>
-                <textarea
-                  className="form-input"
-                  rows={3}
-                  placeholder="Describe requirements, instructions, and grading criteria..."
-                  value={newAssignment.description}
-                  onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-                <div>
-                  <label className="form-label">Max Score</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={newAssignment.maxScore}
-                    onChange={(e) => setNewAssignment({ ...newAssignment, maxScore: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Due Date &amp; Time</label>
-                  <input
-                    type="datetime-local"
-                    className="form-input"
-                    value={newAssignment.dueDate}
-                    onChange={(e) => setNewAssignment({ ...newAssignment, dueDate: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
+              {/* Sticky Footer */}
+              <div style={{
+                position: 'sticky',
+                bottom: 0,
+                padding: '1rem 1.5rem',
+                borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '0.75rem',
+                background: 'var(--bg-surface, #1e293b)',
+                zIndex: 10
+              }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowCreateModal(false)}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={createLoading}>
+                <button
+                  type="submit"
+                  form="create-assignment-form"
+                  className="btn btn-primary"
+                  disabled={createLoading}
+                >
                   {createLoading ? 'Publishing...' : 'Publish to Students'}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </ModalPortal>
 
     </div>
   );

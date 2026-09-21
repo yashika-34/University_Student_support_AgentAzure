@@ -140,11 +140,11 @@ async function seed() {
 
     // ── 3. Create 5 Student Users ───────────────────────────────────────────
     const studentData = [
-      { firstName: 'Alex', lastName: 'Mercer', email: 'alex.student@university.edu', id: 'STU-2024-8842', cgpa: 3.82, credits: 74 },
-      { firstName: 'Emma', lastName: 'Watson', email: 'emma.student@university.edu', id: 'STU-2024-9102', cgpa: 3.56, credits: 68 },
-      { firstName: 'Liam', lastName: 'Smith', email: 'liam.student@university.edu', id: 'STU-2024-7731', cgpa: 3.10, credits: 62 },
-      { firstName: 'Priya', lastName: 'Patel', email: 'priya.student@university.edu', id: 'STU-2024-6621', cgpa: 3.91, credits: 80 },
-      { firstName: 'Carlos', lastName: 'Rivera', email: 'carlos.student@university.edu', id: 'STU-2024-5510', cgpa: 3.40, credits: 70 }
+      { firstName: 'Alex', lastName: 'Mercer', email: 'alex.student@university.edu', id: 'STU-2024-8842', cgpa: 8.65, credits: 74 },
+      { firstName: 'Emma', lastName: 'Watson', email: 'emma.student@university.edu', id: 'STU-2024-9102', cgpa: 7.85, credits: 68 },
+      { firstName: 'Liam', lastName: 'Smith', email: 'liam.student@university.edu', id: 'STU-2024-7731', cgpa: 6.90, credits: 62 },
+      { firstName: 'Priya', lastName: 'Patel', email: 'priya.student@university.edu', id: 'STU-2024-6621', cgpa: 9.40, credits: 80 },
+      { firstName: 'Carlos', lastName: 'Rivera', email: 'carlos.student@university.edu', id: 'STU-2024-5510', cgpa: 7.60, credits: 70 }
     ];
 
     const studentProfiles = [];
@@ -614,7 +614,7 @@ async function seed() {
         {
           chunkId: 'doc-bursar-chunk-1',
           chunkIndex: 1,
-          content: 'Merit Scholarship Waivers. Students maintaining a CGPA of 3.75 or higher qualify for the Presidential Merit Fellowship providing up to $5,000 per semester tuition reduction. Applications must be submitted through the Campus Services portal before October 31st.'
+          content: 'Merit Scholarship Waivers. Students maintaining a CGPA of 8.5 or higher (out of 10.0) qualify for the Presidential Merit Fellowship providing up to $5,000 per semester tuition reduction. Applications must be submitted through the Campus Services portal before October 31st.'
         }
       ]
     });
@@ -688,7 +688,7 @@ async function seed() {
         title: 'Presidential Academic Excellence Merit Fellowship',
         provider: 'University Board of Regents',
         amount: '$5,000 / semester',
-        minCgpa: 3.75,
+        minCgpa: 8.5,
         deadline: new Date('2026-10-31'),
         isEligible: true,
         matchScore: '98% Match',
@@ -698,7 +698,7 @@ async function seed() {
         title: 'Women in Technology & AI Innovation Grant',
         provider: 'Azure Global STEM Foundation',
         amount: '$3,500 / year',
-        minCgpa: 3.4,
+        minCgpa: 7.5,
         deadline: new Date('2026-11-15'),
         isEligible: true,
         matchScore: '92% Match',
@@ -712,7 +712,7 @@ async function seed() {
         tier: 'Tier-1 (Super Dream)',
         roleTitle: 'Software Development Engineer I',
         packageLPA: 45.0,
-        minCgpa: 3.5,
+        minCgpa: 8.0,
         maxBacklogsAllowed: 0,
         eligibleDepartments: ['Computer Science & Engineering', 'Information Technology'],
         requiredSkills: ['Data Structures & Algorithms', 'System Design', 'C++/Java/Python'],
@@ -723,7 +723,7 @@ async function seed() {
         tier: 'Tier-1 (Super Dream)',
         roleTitle: 'Cloud Support / DevOps Associate',
         packageLPA: 32.5,
-        minCgpa: 3.3,
+        minCgpa: 7.0,
         maxBacklogsAllowed: 0,
         eligibleDepartments: ['Computer Science & Engineering'],
         requiredSkills: ['Linux', 'Docker', 'Networking', 'Distributed Systems'],

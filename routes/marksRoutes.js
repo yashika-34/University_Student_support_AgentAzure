@@ -22,20 +22,22 @@ router.get('/my', authorizeRoles('student'), getMyMarks);
 // GET /api/v1/marks/summary — Student: GPA, grade summary per semester
 router.get('/summary', authorizeRoles('student'), getMarksSummary);
 
-// ── Faculty / Admin Routes ──────────────────────────────────────────────────
+// ── Faculty / Teacher / Admin Routes ───────────────────────────────────────
 // GET /api/v1/marks/course/:courseId — Faculty: see all marks for a course
-router.get('/course/:courseId', authorizeRoles('faculty', 'admin', 'super_admin'), getCourseMarks);
+router.get('/course/:courseId', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), getCourseMarks);
 
-// POST /api/v1/marks — Faculty: add marks for a student
-router.post('/', authorizeRoles('faculty', 'admin', 'super_admin'), addMarks);
+// POST /api/v1/marks & POST /api/v1/marks/upload — Faculty: record marks for a student
+router.post('/', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), addMarks);
+router.post('/upload', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), addMarks);
 
 // PUT /api/v1/marks/:id — Faculty: update marks entry
-router.put('/:id', authorizeRoles('faculty', 'admin', 'super_admin'), updateMarks);
+router.put('/:id', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), updateMarks);
 
 // DELETE /api/v1/marks/:id — Faculty: delete marks entry
-router.delete('/:id', authorizeRoles('faculty', 'admin', 'super_admin'), deleteMarks);
+router.delete('/:id', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), deleteMarks);
 
-// PATCH /api/v1/marks/:id/publish — Faculty: publish marks (make visible to student)
-router.patch('/:id/publish', authorizeRoles('faculty', 'admin', 'super_admin'), publishMarks);
+// PATCH /api/v1/marks/:id/publish & POST /api/v1/marks/publish — Faculty: publish marks (make visible to student)
+router.patch('/:id/publish', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), publishMarks);
+router.post('/publish', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), publishMarks);
 
 export default router;

@@ -43,7 +43,9 @@ const ProfilePage = () => {
     department: displayDepartment,
     currentSemester: displaySemester,
     degreeProgram: profile.degreeProgram || 'B.S. in Computer Science',
-    cgpa: profile.cgpa ?? 3.82,
+    cgpa: profile.cgpa
+      ? (profile.cgpa <= 4.0 ? Number((profile.cgpa * 2.5).toFixed(2)) : profile.cgpa)
+      : 8.65,
     batch: profile.batch || '2022-2026',
     completedCredits: profile.completedCredits || 74,
     advisor: profile.academicAdvisor?.userId?.firstName 
@@ -361,8 +363,10 @@ const ProfilePage = () => {
                   </div>
 
                   <div>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>CGPA</div>
-                    <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--primary)' }}>{student.cgpa}</div>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Cumulative GPA (out of 10.0)</div>
+                    <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--primary)' }}>
+                      {student.cgpa} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 500 }}>/ 10.0</span>
+                    </div>
                   </div>
                 </>
               )}

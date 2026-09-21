@@ -1,7 +1,13 @@
 import express from 'express';
 import multer from 'multer';
 import { verifyToken, authorizeRoles } from '../middleware/authMiddleware.js';
-import { uploadDocument, listDocuments, deleteDocument } from '../controllers/ragController.js';
+import {
+  uploadDocument,
+  listDocuments,
+  getDocumentById,
+  downloadDocument,
+  deleteDocument
+} from '../controllers/ragController.js';
 
 const router = express.Router();
 
@@ -25,24 +31,30 @@ const upload = multer({
   }
 });
 
-// All RAG routes require auth. Upload/delete requires faculty/admin role.
+// All RAG routes require authentication
 router.use(verifyToken);
+
+// GET /api/v1/rag/documents — List all indexed documents (accessible to students & faculty)
+router.get('/documents', listDocuments);
+
+// GET /api/v1/rag/documents/:id — Single document preview & details
+router.get('/documents/:id', getDocumentById);
+
+// GET /api/v1/rag/documents/:id/download — Download document text content
+router.get('/documents/:id/download', downloadDocument);
 
 // POST /api/v1/rag/upload — Upload and index a university document
 router.post(
   '/upload',
-  authorizeRoles('faculty', 'admin', 'super_admin'),
+  authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'),
   upload.single('document'),
   uploadDocument
 );
 
-// GET /api/v1/rag/documents — List all indexed documents
-router.get('/documents', listDocuments);
-
 // DELETE /api/v1/rag/documents/:id — Remove a document from the index
 router.delete(
   '/documents/:id',
-  authorizeRoles('faculty', 'admin', 'super_admin'),
+  authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'),
   deleteDocument
 );
 

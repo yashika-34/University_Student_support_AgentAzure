@@ -171,7 +171,7 @@ const Login = () => {
               disabled={isLoading}
             >
               <span style={{ fontWeight: 700, color: 'var(--accent-purple)' }}>🎓 Student Role</span>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Alex Mercer (3.82 CGPA)</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Alex Mercer (8.65 CGPA)</span>
             </button>
           </div>
           <div style={{ marginTop: '0.5rem' }}>
@@ -182,7 +182,7 @@ const Login = () => {
               style={{ width: '100%', fontSize: '0.75rem', padding: '0.4rem', textAlign: 'center' }}
               disabled={isLoading}
             >
-              🎓 Student: Emma Watson (3.56 CGPA)
+              🎓 Student: Emma Watson (7.85 CGPA)
             </button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import ModalPortal from '../components/ModalPortal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import {
   studentAPI,
@@ -11,7 +12,7 @@ import {
 } from '../services/api.js';
 import {
   Award, Sparkles, BarChart2, AlertTriangle, Clock, BookOpen, HelpCircle,
-  FileText, CalendarCheck, MessageSquare, TrendingUp, Bell, ChevronRight, Loader2
+  FileText, CalendarCheck, MessageSquare, TrendingUp, Bell, ChevronRight, Loader2, X, MapPin
 } from 'lucide-react';
 
 const StudentDashboard = () => {
@@ -22,6 +23,8 @@ const StudentDashboard = () => {
   const [recentMarks, setRecentMarks] = useState([]);
   const [upcomingExams, setUpcomingExams] = useState([]);
   const [notices, setNotices] = useState([]);
+  const [selectedNotice, setSelectedNotice] = useState(null);
+  const [selectedExam, setSelectedExam] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -70,7 +73,8 @@ const StudentDashboard = () => {
   const rollNo = studentProfile.studentId || user?.id || '—';
   const degree = studentProfile.degreeProgram || 'Computer Science';
   const semester = studentProfile.currentSemester || 5;
-  const cgpa = studentProfile.cgpa || 3.82;
+  const rawCgpa = studentProfile.cgpa;
+  const cgpa = rawCgpa ? (rawCgpa <= 4.0 ? (rawCgpa * 2.5).toFixed(2) : Number(rawCgpa).toFixed(2)) : '8.65';
   const completedCredits = studentProfile.completedCredits || 74;
 
   // Calculate overall average attendance
@@ -145,7 +149,9 @@ const StudentDashboard = () => {
             <div className="stat-label">Cumulative GPA</div>
             <Award size={18} color="var(--primary)" />
           </div>
-          <div className="stat-value" style={{ color: 'var(--primary)' }}>{cgpa}</div>
+          <div className="stat-value" style={{ color: 'var(--primary)' }}>
+            {cgpa} <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 500 }}>/ 10.0</span>
+          </div>
           <div className="stat-sub" style={{ color: 'var(--success)' }}>Top 10% in Department</div>
         </div>
 
@@ -297,7 +303,22 @@ const StudentDashboard = () => {
                 const examDate = new Date(exam.date);
                 const diffDays = Math.ceil((examDate - new Date()) / (1000 * 60 * 60 * 24));
                 return (
-                  <div key={exam._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0.85rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div
+                    key={exam._id}
+                    onClick={() => setSelectedExam(exam)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.75rem 0.85rem',
+                      background: 'var(--bg-input)',
+                      borderRadius: 'var(--radius-sm)',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                       <span className="badge badge-primary">{exam.courseCode}</span>
                       <div>
@@ -328,17 +349,286 @@ const StudentDashboard = () => {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
           {notices.map((n) => (
-            <div key={n._id} style={{ padding: '1rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', borderLeft: n.priority === 'urgent' ? '4px solid var(--danger)' : '4px solid var(--primary)' }}>
+            <div
+              key={n._id}
+              onClick={() => setSelectedNotice(n)}
+              style={{
+                padding: '1rem',
+                background: 'var(--bg-input)',
+                borderRadius: 'var(--radius-sm)',
+                borderLeft: n.priority === 'urgent' ? '4px solid var(--danger)' : '4px solid var(--primary)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
                 <span className="badge badge-secondary">{n.category}</span>
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{new Date(n.publishedAt).toLocaleDateString()}</span>
               </div>
               <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '0.35rem' }}>{n.title}</h4>
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{n.content}</p>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                {n.content}
+              </p>
+              <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>
+                Click to view bulletin →
+              </div>
             </div>
           ))}
         </div>
       </div>
+
+      {/* ── Notice Details Modal via ModalPortal ── */}
+      <ModalPortal isOpen={Boolean(selectedNotice)}>
+        {selectedNotice && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              backdropFilter: 'blur(5px)',
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+              animation: 'fadeIn 0.15s ease-out'
+            }}
+            onClick={() => setSelectedNotice(null)}
+          >
+            <div
+              style={{
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '90vw',
+                maxWidth: '560px',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: 'var(--bg-surface, #1e293b)',
+                borderRadius: 'var(--radius-lg, 12px)',
+                border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                overflow: 'hidden',
+                zIndex: 100000
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Sticky Header */}
+              <div style={{
+                position: 'sticky',
+                top: 0,
+                padding: '1.25rem 1.5rem',
+                borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'var(--bg-surface, #1e293b)',
+                zIndex: 10
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <Bell size={18} color="var(--warning)" />
+                  <span className="badge badge-secondary">{selectedNotice.category}</span>
+                  <span className={`badge ${selectedNotice.priority === 'urgent' ? 'badge-danger' : 'badge-primary'}`}>
+                    {selectedNotice.priority}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedNotice(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '4px'
+                  }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Scrollable Body */}
+              <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {selectedNotice.title}
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Published: {new Date(selectedNotice.publishedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </div>
+                <div style={{ background: 'var(--bg-input)', padding: '1.25rem', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', lineHeight: 1.6, fontSize: '0.92rem', whiteSpace: 'pre-wrap' }}>
+                  {selectedNotice.content}
+                </div>
+              </div>
+
+              {/* Sticky Footer */}
+              <div style={{
+                position: 'sticky',
+                bottom: 0,
+                padding: '1rem 1.5rem',
+                borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                background: 'var(--bg-surface, #1e293b)',
+                zIndex: 10
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedNotice(null)}
+                  className="btn btn-primary"
+                >
+                  Close Bulletin
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </ModalPortal>
+
+      {/* ── Exam Details Modal via ModalPortal ── */}
+      <ModalPortal isOpen={Boolean(selectedExam)}>
+        {selectedExam && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              backdropFilter: 'blur(5px)',
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+              animation: 'fadeIn 0.15s ease-out'
+            }}
+            onClick={() => setSelectedExam(null)}
+          >
+            <div
+              style={{
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '90vw',
+                maxWidth: '520px',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: 'var(--bg-surface, #1e293b)',
+                borderRadius: 'var(--radius-lg, 12px)',
+                border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                overflow: 'hidden',
+                zIndex: 100000
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Sticky Header */}
+              <div style={{
+                position: 'sticky',
+                top: 0,
+                padding: '1.25rem 1.5rem',
+                borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'var(--bg-surface, #1e293b)',
+                zIndex: 10
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <CalendarCheck size={18} color="var(--primary)" />
+                  <span className="badge badge-primary">{selectedExam.courseCode}</span>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                    Examination Timetable
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedExam(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '4px'
+                  }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Scrollable Body */}
+              <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {selectedExam.courseName}
+                </h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', background: 'var(--bg-input)', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Date</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.2rem' }}>
+                      {new Date(selectedExam.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Timing</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.2rem' }}>
+                      {selectedExam.startTime} - {selectedExam.endTime}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.85rem', background: 'rgba(59, 130, 246, 0.08)', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+                  <MapPin size={18} color="var(--primary)" />
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Exam Hall / Venue</div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{selectedExam.venue}</div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  ⚠️ Please arrive 15 minutes prior to start time with your student identification card. Calculators permitted per instructor instructions.
+                </div>
+              </div>
+
+              {/* Sticky Footer */}
+              <div style={{
+                position: 'sticky',
+                bottom: 0,
+                padding: '1rem 1.5rem',
+                borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                background: 'var(--bg-surface, #1e293b)',
+                zIndex: 10
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedExam(null)}
+                  className="btn btn-primary"
+                >
+                  Understood
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </ModalPortal>
 
       {/* Quick Access Shortcuts */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>

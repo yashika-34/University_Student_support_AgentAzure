@@ -4,11 +4,11 @@ import { Users, Search, ChevronDown, ChevronUp, BarChart2, AlertTriangle, Award,
 
 // Mock student list for demo
 const MOCK_STUDENTS = [
-  { id: '1', studentId: 'STU-2024-8842', name: 'Alex Mercer', email: 'alex.student@university.edu', department: 'CSE', semester: 5, cgpa: 3.82, attendancePercentage: 85, isLowAttendance: false },
-  { id: '2', studentId: 'STU-2024-9102', name: 'Emma Watson', email: 'emma.student@university.edu', department: 'CSE', semester: 5, cgpa: 3.56, attendancePercentage: 72, isLowAttendance: true },
-  { id: '3', studentId: 'STU-2024-7731', name: 'Liam Smith', email: 'liam.student@university.edu', department: 'CSE', semester: 5, cgpa: 3.10, attendancePercentage: 66, isLowAttendance: true },
-  { id: '4', studentId: 'STU-2024-6621', name: 'Priya Patel', email: 'priya.student@university.edu', department: 'CSE', semester: 5, cgpa: 3.91, attendancePercentage: 95, isLowAttendance: false },
-  { id: '5', studentId: 'STU-2024-5510', name: 'Carlos Rivera', email: 'carlos.student@university.edu', department: 'CSE', semester: 5, cgpa: 3.40, attendancePercentage: 83, isLowAttendance: false }
+  { id: '1', studentId: 'STU-2024-8842', name: 'Alex Mercer', email: 'alex.student@university.edu', department: 'CSE', semester: 5, cgpa: 8.65, attendancePercentage: 85, isLowAttendance: false },
+  { id: '2', studentId: 'STU-2024-9102', name: 'Emma Watson', email: 'emma.student@university.edu', department: 'CSE', semester: 5, cgpa: 7.85, attendancePercentage: 72, isLowAttendance: true },
+  { id: '3', studentId: 'STU-2024-7731', name: 'Liam Smith', email: 'liam.student@university.edu', department: 'CSE', semester: 5, cgpa: 6.90, attendancePercentage: 66, isLowAttendance: true },
+  { id: '4', studentId: 'STU-2024-6621', name: 'Priya Patel', email: 'priya.student@university.edu', department: 'CSE', semester: 5, cgpa: 9.40, attendancePercentage: 95, isLowAttendance: false },
+  { id: '5', studentId: 'STU-2024-5510', name: 'Carlos Rivera', email: 'carlos.student@university.edu', department: 'CSE', semester: 5, cgpa: 7.60, attendancePercentage: 83, isLowAttendance: false }
 ];
 
 const MOCK_MARKS = [
@@ -155,8 +155,10 @@ const StudentProgressPage = () => {
                 {/* Quick stats */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--primary)' }}>{student.cgpa}</div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>CGPA</div>
+                    <div style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                      {student.cgpa > 4 ? Number(student.cgpa).toFixed(2) : (student.cgpa * 2.5).toFixed(2)}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>CGPA (/10)</div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontWeight: 700, color: student.attendancePercentage >= 75 ? 'var(--success)' : 'var(--danger)' }}>
