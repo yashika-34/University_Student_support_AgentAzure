@@ -17,9 +17,19 @@ const ProtectedRoute = ({ allowedRoles = [] }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
+  const isTeacherOrFaculty = role === 'faculty' || role === 'teacher';
+
+  const isAuthorized =
+    allowedRoles.length === 0 ||
+    allowedRoles.includes(role) ||
+    (allowedRoles.includes('faculty') && role === 'teacher') ||
+    (allowedRoles.includes('teacher') && role === 'faculty') ||
+    role === 'admin' ||
+    role === 'super_admin';
+
+  if (!isAuthorized) {
     // Redirect to respective dashboard if unauthorized for this specific view
-    return <Navigate to={role === 'faculty' ? '/faculty/dashboard' : '/student/dashboard'} replace />;
+    return <Navigate to={isTeacherOrFaculty ? '/faculty/dashboard' : '/student/dashboard'} replace />;
   }
 
   return <Outlet />;

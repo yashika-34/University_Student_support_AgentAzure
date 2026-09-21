@@ -1389,7 +1389,21 @@ export const getDepartmentStats = async (req, res, next) => {
     ]);
 
     const totalStudents = await Student.countDocuments();
-    const activeStudents = await User.countDocuments({ role: 'student', isActive: true });
+    // Count active students by joining Student profiles with their User accounts
+    const activeStudentUsers = await Student.aggregate([
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'userInfo'
+        }
+      },
+      { $unwind: '$userInfo' },
+      { $match: { 'userInfo.isActive': true } },
+      { $count: 'count' }
+    ]);
+    const activeStudents = activeStudentUsers[0]?.count || 0;
 
     res.status(200).json({
       success: true,

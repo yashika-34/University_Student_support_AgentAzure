@@ -16,10 +16,12 @@ const ProfileDropdown = ({ onClose }) => {
   const navigate = useNavigate();
 
   const isStudent = role === 'student';
+  const isTeacherOrFaculty = role === 'faculty' || role === 'teacher';
+  const roleLabel = role === 'faculty' ? '👨‍🏫 Faculty' : role === 'teacher' ? '👨‍🏫 Teacher' : '🎓 Student';
 
-  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (isStudent ? 'Alex Mercer' : 'Dr. Alan Turing');
-  const displayEmail = user?.email || (isStudent ? 'alex.student@university.edu' : 'dr.alan@university.edu');
-  const displayId = user?.profile?.studentId || user?.profile?.employeeId || user?.id || (isStudent ? 'STU-2024-8842' : 'FAC-CS-101');
+  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (!isTeacherOrFaculty ? 'Alex Mercer' : 'Dr. Alan Turing');
+  const displayEmail = user?.email || (!isTeacherOrFaculty ? 'alex.student@university.edu' : 'dr.alan@university.edu');
+  const displayId = user?.profile?.studentId || user?.profile?.employeeId || user?.id || (!isTeacherOrFaculty ? 'STU-2024-8842' : 'FAC-CS-101');
   const initials = displayName
     .split(' ')
     .filter(Boolean)
@@ -54,8 +56,8 @@ const ProfileDropdown = ({ onClose }) => {
             <div className="profile-dropdown-name">{displayName}</div>
             <div className="profile-dropdown-email">{displayEmail}</div>
             <div className="profile-dropdown-role">
-              <span className={`badge ${isStudent ? 'badge-primary' : 'badge-purple'}`} style={{ fontSize: '0.65rem' }}>
-                {isStudent ? '🎓 Student' : '👨‍🏫 Faculty'} · {displayId}
+              <span className={`badge ${!isTeacherOrFaculty ? 'badge-primary' : 'badge-purple'}`} style={{ fontSize: '0.65rem' }}>
+                {roleLabel} · {displayId}
               </span>
             </div>
           </div>
@@ -80,9 +82,9 @@ const ProfileDropdown = ({ onClose }) => {
 
           <div className="profile-dropdown-separator" />
 
-          <button className="profile-dropdown-item" role="menuitem" onClick={() => handleNavigate(isStudent ? '/student/dashboard' : '/faculty/dashboard')}>
-            <span className="profile-dropdown-item-icon">{isStudent ? <GraduationCap size={16} /> : <Briefcase size={16} />}</span>
-            {isStudent ? 'Student Dashboard' : 'Faculty Dashboard'}
+          <button className="profile-dropdown-item" role="menuitem" onClick={() => handleNavigate(isTeacherOrFaculty ? '/faculty/dashboard' : '/student/dashboard')}>
+            <span className="profile-dropdown-item-icon">{isTeacherOrFaculty ? <Briefcase size={16} /> : <GraduationCap size={16} />}</span>
+            {isTeacherOrFaculty ? 'Teacher Dashboard' : 'Student Dashboard'}
           </button>
 
           <div className="profile-dropdown-separator" />
@@ -171,7 +173,7 @@ const Navbar = ({ showSidebar = false, onMenuClick, sidebarCollapsed }) => {
 
           {isAuthenticated ? (
             <>
-              <Link to={role === 'faculty' ? '/faculty/dashboard' : '/student/dashboard'} className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>
+              <Link to={role === 'faculty' || role === 'teacher' ? '/faculty/dashboard' : '/student/dashboard'} className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>
                 Dashboard
               </Link>
 

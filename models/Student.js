@@ -55,9 +55,9 @@ const studentSchema = new mongoose.Schema(
       index: true // e.g., "STU-2024-001"
     },
     department: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department',
       required: [true, 'Academic department is required'],
-      trim: true,
       index: true
     },
     degreeProgram: {
@@ -90,7 +90,7 @@ const studentSchema = new mongoose.Schema(
     cgpa: {
       type: Number,
       min: [0.0, 'CGPA cannot be negative'],
-      max: [4.0, 'CGPA cannot exceed 4.0'],
+      max: [10.0, 'CGPA cannot exceed 10.0'],
       default: 0.0
     },
     completedCredits: {

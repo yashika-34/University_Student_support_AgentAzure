@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import api from '../services/api.js';
+import api, { authAPI } from '../services/api.js';
 import {
   GraduationCap, Shield, Save, Check, Edit2, Lock, Users, User,
   Mail, Phone, Building, BookOpen, CalendarDays, Hash, Eye, EyeOff,
@@ -9,11 +9,12 @@ import {
 } from 'lucide-react';
 
 const ProfilePage = () => {
-  const { user, role, switchRole, logout } = useAuth();
+  const { user, role, switchRole, logout, updateUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   const isStudent = role === 'student';
+  const isTeacherOrFaculty = role === 'faculty' || role === 'teacher';
   const profile = user?.profile || {};
 
   // ── Active Section (from hash in URL) ──────────────────────────────────
@@ -82,7 +83,9 @@ const ProfilePage = () => {
     phone: user?.phoneNumber || (isStudent ? '+1-555-0123' : '+1-555-0100'),
     emergencyName: student.emergencyContact?.name || '',
     emergencyPhone: student.emergencyContact?.phone || '',
-    emergencyRelationship: student.emergencyContact?.relationship || ''
+    emergencyRelationship: student.emergencyContact?.relationship || '',
+    cabinOffice: faculty.cabinOffice || '',
+    officeHours: typeof faculty.officeHours === 'string' ? faculty.officeHours : ''
   });
   const [editSaving, setEditSaving] = useState(false);
   const [editSuccess, setEditSuccess] = useState(false);
@@ -102,13 +105,33 @@ const ProfilePage = () => {
     e.preventDefault();
     setEditSaving(true);
     try {
-      await api.put('/students/profile', editForm);
-    } catch {
-      // Demo fallback
+      const payload = {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
+        phoneNumber: editForm.phone,
+        ...(isStudent ? {
+          emergencyContact: {
+            name: editForm.emergencyName,
+            relationship: editForm.emergencyRelationship,
+            phone: editForm.emergencyPhone
+          }
+        } : {
+          cabinOffice: editForm.cabinOffice,
+          officeHours: editForm.officeHours
+        })
+      };
+
+      const res = await authAPI.updateProfile(payload);
+      if (res.data?.user) {
+        updateUser(res.data.user);
+      }
+      setEditSuccess(true);
+      setTimeout(() => setEditSuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to update profile:', err);
+    } finally {
+      setEditSaving(false);
     }
-    setEditSaving(false);
-    setEditSuccess(true);
-    setTimeout(() => setEditSuccess(false), 3000);
   };
 
   const handlePasswordChange = async (e) => {
@@ -130,17 +153,21 @@ const ProfilePage = () => {
 
     setPwSaving(true);
     try {
-      await api.put('/auth/change-password', {
+      const res = await authAPI.updatePassword({
         currentPassword: pwForm.currentPassword,
         newPassword: pwForm.newPassword
       });
-      setPwResult({ type: 'success', message: 'Password changed successfully! Please use your new password next time you login.' });
-    } catch {
-      // Demo
-      setPwResult({ type: 'success', message: 'Password updated successfully. (Demo mode)' });
+      setPwResult({
+        type: 'success',
+        message: res.data?.message || 'Password changed successfully! Please use your new password next time you login.'
+      });
+      setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to update password. Please check your current password.';
+      setPwResult({ type: 'error', message: msg });
+    } finally {
+      setPwSaving(false);
     }
-    setPwSaving(false);
-    setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
   };
 
   const handleLogout = () => {
@@ -516,6 +543,35 @@ const ProfilePage = () => {
                   </div>
                 </div>
               </>
+            )}
+
+            {/* Teacher Office Information */}
+            {!isStudent && (
+              <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '1.5rem 0', paddingTop: '1.5rem' }}>
+                <h4 style={{ fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Building size={16} color="var(--primary)" /> Office & Working Hours
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Cabin / Office Room</label>
+                    <input
+                      className="form-input"
+                      value={editForm.cabinOffice}
+                      onChange={e => setEditForm({ ...editForm, cabinOffice: e.target.value })}
+                      placeholder="e.g. Turing Hall, Room 302"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Office Hours</label>
+                    <input
+                      className="form-input"
+                      value={editForm.officeHours}
+                      onChange={e => setEditForm({ ...editForm, officeHours: e.target.value })}
+                      placeholder="e.g. Tue/Thu 2:00 PM - 4:00 PM"
+                    />
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Action Buttons */}

@@ -217,3 +217,202 @@ export const enrollStudentInCourse = async (req, res, next) => {
     next(error);
   }
 };
+
+// ---------------------------------------------------------------------
+// Additional Course Management Functions
+// ---------------------------------------------------------------------
+
+/**
+ * @desc    Update course details
+ * @route   PUT /api/v1/courses/:id
+ * @access  Private (Faculty/Admin)
+ */
+export const updateCourse = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    // Ensure courseCode remains uppercase if provided
+    if (updates.courseCode) updates.courseCode = updates.courseCode.toUpperCase();
+    const course = await Course.findByIdAndUpdate(id, updates, { new: true, runValidators: true })
+      .populate({ path: 'leadFaculty', populate: { path: 'userId', select: 'firstName lastName email' } });
+    if (!course) {
+      return res.status(404).json({ success: false, message: `Course '${id}' not found.` });
+    }
+    res.status(200).json({ success: true, message: 'Course updated.', data: course });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Soft delete a course (set isActive false)
+ * @route   DELETE /api/v1/courses/:id
+ * @access  Private (Faculty/Admin)
+ */
+export const deleteCourse = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const course = await Course.findByIdAndUpdate(id, { isActive: false }, { new: true });
+    if (!course) {
+      return res.status(404).json({ success: false, message: `Course '${id}' not found.` });
+    }
+    res.status(200).json({ success: true, message: 'Course deactivated.', data: course });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get enrollment list for a course
+ * @route   GET /api/v1/courses/:id/enrollment
+ * @access  Private (Faculty/Admin)
+ */
+export const getCourseEnrollment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const course = await Course.findById(id);
+    if (!course || !course.isActive) {
+      return res.status(404).json({ success: false, message: 'Active course not found.' });
+    }
+    // Find students enrolled in this course
+    const students = await Student.find({ 'enrolledCourses.courseId': course._id })
+      .populate('userId', 'firstName lastName email');
+    const enrollment = students.map(s => ({
+      studentId: s._id,
+      name: `${s.userId.firstName} ${s.userId.lastName}`,
+      email: s.userId.email,
+      semester: s.enrolledCourses.find(ec => ec.courseId.toString() === course._id.toString()).semester,
+      status: s.enrolledCourses.find(ec => ec.courseId.toString() === course._id.toString()).status,
+    }));
+    res.status(200).json({ success: true, count: enrollment.length, data: enrollment });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Bulk enroll multiple students into a course
+ * @route   POST /api/v1/courses/:id/enroll-students
+ * @access  Private (Faculty/Admin)
+ */
+export const enrollStudentsInCourse = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { studentIds } = req.body; // array of student ObjectIds
+    const course = await Course.findById(id);
+    if (!course || !course.isActive) {
+      return res.status(404).json({ success: false, message: 'Active course not found.' });
+    }
+    const results = [];
+    for (const sid of studentIds) {
+      const student = await Student.findById(sid);
+      if (!student) {
+        results.push({ studentId: sid, status: 'not_found' });
+        continue;
+      }
+      const already = student.enrolledCourses.some(ec => ec.courseId.toString() === id);
+      if (already) {
+        results.push({ studentId: sid, status: 'already_enrolled' });
+        continue;
+      }
+      student.enrolledCourses.push({ courseId: course._id, semester: course.semester, status: 'enrolled' });
+      await student.save();
+      results.push({ studentId: sid, status: 'enrolled' });
+    }
+    res.status(200).json({ success: true, results });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Unenroll a single student from a course
+ * @route   DELETE /api/v1/courses/:id/enroll/:studentId
+ * @access  Private (Faculty/Admin)
+ */
+export const unenrollStudentFromCourse = async (req, res, next) => {
+  try {
+    const { id, studentId } = req.params;
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found.' });
+    }
+    const before = student.enrolledCourses.length;
+    student.enrolledCourses = student.enrolledCourses.filter(ec => ec.courseId.toString() !== id);
+    if (student.enrolledCourses.length === before) {
+      return res.status(400).json({ success: false, message: 'Student not enrolled in this course.' });
+    }
+    await student.save();
+    res.status(200).json({ success: true, message: 'Student unenrolled.', data: student.enrolledCourses });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get courses grouped by department with enrollment counts
+ * @route   GET /api/v1/courses/by-department
+ * @access  Private (Faculty/Admin)
+ */
+export const getCoursesByDepartment = async (req, res, next) => {
+  try {
+    const aggregation = await Course.aggregate([
+      { $match: { isActive: true } },
+      {
+        $lookup: {
+          from: 'students',
+          localField: '_id',
+          foreignField: 'enrolledCourses.courseId',
+          as: 'enrolledStudents'
+        }
+      },
+      {
+        $group: {
+          _id: '$department',
+          courses: { $push: { _id: '$_id', name: '$courseName', code: '$courseCode', count: { $size: '$enrolledStudents' } } },
+          totalCourses: { $sum: 1 },
+          totalEnrolled: { $sum: { $size: '$enrolledStudents' } }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+    res.status(200).json({ success: true, data: aggregation });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get courses grouped by semester with enrollment counts
+ * @route   GET /api/v1/courses/by-semester
+ * @access  Private (Faculty/Admin)
+ */
+export const getCoursesBySemester = async (req, res, next) => {
+  try {
+    const aggregation = await Course.aggregate([
+      { $match: { isActive: true } },
+      {
+        $lookup: {
+          from: 'students',
+          localField: '_id',
+          foreignField: 'enrolledCourses.courseId',
+          as: 'enrolledStudents'
+        }
+      },
+      {
+        $group: {
+          _id: '$semester',
+          courses: { $push: { _id: '$_id', name: '$courseName', code: '$courseCode', count: { $size: '$enrolledStudents' } } },
+          totalCourses: { $sum: 1 },
+          totalEnrolled: { $sum: { $size: '$enrolledStudents' } }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+    res.status(200).json({ success: true, data: aggregation });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// End of additional functions

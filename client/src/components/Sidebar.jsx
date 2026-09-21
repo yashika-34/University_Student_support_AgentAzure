@@ -85,7 +85,8 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
 
-  const navItems = role === 'faculty' ? FACULTY_NAV : STUDENT_NAV;
+  const isTeacherOrFaculty = role === 'faculty' || role === 'teacher';
+  const navItems = isTeacherOrFaculty ? FACULTY_NAV : STUDENT_NAV;
 
   const handleLogout = () => {
     logout();
@@ -136,8 +137,8 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
         {/* Role badge */}
         {!collapsed && (
           <div style={{ padding: '0.5rem 1.25rem 0' }}>
-            <span className={`badge ${role === 'faculty' ? 'badge-purple' : 'badge-primary'}`}>
-              {role === 'faculty' ? '👨‍🏫 Faculty' : '🎓 Student'}
+            <span className={`badge ${isTeacherOrFaculty ? 'badge-purple' : 'badge-primary'}`}>
+              {role === 'faculty' ? '👨‍🏫 Faculty' : role === 'teacher' ? '👨‍🏫 Teacher' : '🎓 Student'}
             </span>
           </div>
         )}

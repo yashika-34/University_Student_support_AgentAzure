@@ -19,7 +19,7 @@ const Login = () => {
     try {
       const res = await login(email, password);
       if (res && res.success) {
-        if (res.user?.role === 'faculty') {
+        if (res.user?.role === 'faculty' || res.user?.role === 'teacher') {
           navigate('/faculty/dashboard');
         } else {
           navigate('/student/dashboard');
@@ -42,7 +42,7 @@ const Login = () => {
     try {
       const res = await login(demoEmail, demoPass);
       if (res && res.success) {
-        if (res.user?.role === 'faculty') {
+        if (res.user?.role === 'faculty' || res.user?.role === 'teacher') {
           navigate('/faculty/dashboard');
         } else {
           navigate('/student/dashboard');

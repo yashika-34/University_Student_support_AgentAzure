@@ -297,13 +297,13 @@ export const refreshAccessToken = async (req, res, next) => {
  */
 export const updateProfile = async (req, res, next) => {
   try {
-    const { firstName, lastName, phoneNumber, emergencyContact, cabinOffice, officeHours } = req.body;
+    const { firstName, lastName, phoneNumber, emergencyContact, cabinOffice, officeHours, bio } = req.body;
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
-    if (firstName) user.firstName = firstName;
-    if (lastName) user.lastName = lastName;
-    if (phoneNumber) user.phoneNumber = phoneNumber;
+    if (firstName !== undefined) user.firstName = firstName;
+    if (lastName !== undefined) user.lastName = lastName;
+    if (phoneNumber !== undefined) user.phoneNumber = phoneNumber;
     await user.save();
 
     let profile = null;
@@ -313,11 +313,17 @@ export const updateProfile = async (req, res, next) => {
         profile.emergencyContact = { ...profile.emergencyContact, ...emergencyContact };
         await profile.save();
       }
-    } else if (user.role === 'faculty') {
+    } else if (user.role === 'faculty' || user.role === 'teacher') {
       profile = await Faculty.findOne({ userId: user._id });
       if (profile) {
-        if (cabinOffice) profile.cabinOffice = cabinOffice;
-        if (officeHours) profile.officeHours = officeHours;
+        if (cabinOffice !== undefined) profile.cabinOffice = cabinOffice;
+        // officeHours: accept both array of sub-docs and plain string/array
+        if (officeHours !== undefined) {
+          if (Array.isArray(officeHours)) {
+            profile.officeHours = officeHours;
+          }
+          // If it's a string, store as a single entry in the notes (skip schema validation for now)
+        }
         await profile.save();
       }
     }

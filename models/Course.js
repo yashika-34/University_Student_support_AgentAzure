@@ -48,9 +48,9 @@ const courseSchema = new mongoose.Schema(
       trim: true
     },
     department: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department',
       required: [true, 'Department is required'],
-      trim: true,
       index: true
     },
     credits: {
@@ -84,6 +84,7 @@ const courseSchema = new mongoose.Schema(
       weeklyTopics: [weeklyTopicSubSchema]
     },
     schedule: [classScheduleSubSchema],
+    subjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
     maxCapacity: {
       type: Number,
       default: 60

@@ -40,22 +40,58 @@ const app = express();
 app.use(helmet());
 
 // CORS Setup
+const parseOrigins = () => {
+  const envOrigins = [process.env.CLIENT_URL, process.env.FRONTEND_URL].filter(Boolean);
+  const defaults = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173'
+  ];
+  const list = [];
+  envOrigins.forEach((item) => {
+    if (item.includes(',')) {
+      list.push(...item.split(',').map((o) => o.trim()));
+    } else {
+      list.push(item.trim());
+    }
+  });
+  return [...new Set([...list, ...defaults])];
+};
+
+const allowedOriginList = parseOrigins();
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      const allowedOrigins = [
-        process.env.CLIENT_URL || 'http://localhost:5173',
-        'http://localhost:5173',
-        'http://localhost:5174'
-      ];
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server, Render health checks)
+      if (!origin) return callback(null, true);
+
+      // Check explicit allowed origins
+      if (allowedOriginList.includes(origin)) {
+        return callback(null, true);
       }
+
+      // Allow all Vercel deployments (*.vercel.app)
+      if (/^https:\/\/([a-zA-Z0-9_-]+\.)*vercel\.app$/.test(origin)) {
+        return callback(null, true);
+      }
+
+      // Allow all Render deployments (*.onrender.com)
+      if (/^https:\/\/([a-zA-Z0-9_-]+\.)*onrender\.com$/.test(origin)) {
+        return callback(null, true);
+      }
+
+      // Allow development origins
+      if (process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
   })
 );
 

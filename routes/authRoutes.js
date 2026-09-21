@@ -25,5 +25,6 @@ router.put('/profile', verifyToken, updateProfile);
 router.post('/forgot-password', forgotPassword);
 router.put('/reset-password/:token', resetPassword);
 router.put('/update-password', verifyToken, updatePassword);
+router.put('/change-password', verifyToken, updatePassword);
 
 export default router;

@@ -1,18 +1,26 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { authAPI } from '../services/api.js';
 import { KeyRound, Mail, Lock, ArrowRight, CheckCircle2, AlertTriangle, ArrowLeft } from 'lucide-react';
 
 const ForgotPasswordPage = () => {
-  const [step, setStep] = useState(1); // 1 = request reset token, 2 = enter new password
+  const { token } = useParams();
+  const [step, setStep] = useState(token ? 2 : 1); // 1 = request reset token, 2 = enter new password
   const [email, setEmail] = useState('');
-  const [resetToken, setResetToken] = useState('');
+  const [resetToken, setResetToken] = useState(token || '');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (token) {
+      setResetToken(token);
+      setStep(2);
+    }
+  }, [token]);
 
   const handleRequestToken = async (e) => {
     e.preventDefault();

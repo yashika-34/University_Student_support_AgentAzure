@@ -93,7 +93,7 @@ function AppLayout() {
             </Route>
 
             {/* ── Faculty Protected Routes ────────────────────────────────── */}
-            <Route element={<ProtectedRoute allowedRoles={['faculty']} />}>
+            <Route element={<ProtectedRoute allowedRoles={['faculty', 'teacher']} />}>
               <Route path="/faculty/dashboard" element={<FacultyDashboard />} />
               <Route path="/teacher/analytics" element={<TeacherAnalyticsPage />} />
               <Route path="/teacher/question-paper" element={<QuestionPaperPage />} />
@@ -103,8 +103,8 @@ function AppLayout() {
               <Route path="/rag-upload" element={<RagUploadPage />} />
             </Route>
 
-            {/* ── Shared Protected Routes (student + faculty) ──────────────── */}
-            <Route element={<ProtectedRoute allowedRoles={['student', 'faculty']} />}>
+            {/* ── Shared Protected Routes (student + faculty + teacher) ────── */}
+            <Route element={<ProtectedRoute allowedRoles={['student', 'faculty', 'teacher']} />}>
               <Route path="/attendance" element={<AttendancePage />} />
               <Route path="/assignments" element={<AssignmentPage />} />
               <Route path="/marks" element={<MarksPage />} />
@@ -131,7 +131,8 @@ function AppLayout() {
 function RoleRedirect() {
   const { role, isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  return <Navigate to={role === 'faculty' ? '/faculty/dashboard' : '/student/dashboard'} replace />;
+  const isTeacherOrFaculty = role === 'faculty' || role === 'teacher';
+  return <Navigate to={isTeacherOrFaculty ? '/faculty/dashboard' : '/student/dashboard'} replace />;
 }
 
 function App() {
