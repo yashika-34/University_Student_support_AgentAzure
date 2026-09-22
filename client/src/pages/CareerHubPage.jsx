@@ -94,13 +94,19 @@ const CareerHubPage = () => {
   const [eligibleCount, setEligibleCount] = useState(0);
   const [totalDrives, setTotalDrives] = useState(0);
 
-  // Registration modal
+  // Registration modal & persistence
+  const [registeredIds, setRegisteredIds] = useState(new Set());
   const [registerModal, setRegisterModal] = useState(null);
   const [registerSuccess, setRegisterSuccess] = useState(false);
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerError, setRegisterError] = useState('');
 
   /* ── Resume Analyzer State ─────────────────────────────────────────── */
+  const [resumeMode, setResumeMode] = useState('pdf'); // 'pdf' | 'paste'
+  const [resumeFile, setResumeFile] = useState(null);
   const [resumeText, setResumeText] = useState('');
   const [targetRole, setTargetRole] = useState('Fullstack Cloud Engineer');
+  const [jobDescription, setJobDescription] = useState('');
   const [atsAnalysis, setAtsAnalysis] = useState(null);
   const [isAnalyzingResume, setIsAnalyzingResume] = useState(false);
   const [atsModalOpen, setAtsModalOpen] = useState(false);
@@ -168,37 +174,116 @@ const CareerHubPage = () => {
     }
   }, [user]);
 
+  // Fetch existing registrations on mount / user change
   useEffect(() => {
-    if (!studentCgpa) return;
-    const timer = setTimeout(() => fetchPlacements(), 500);
-    return () => clearTimeout(timer);
-  }, [studentCgpa, studentBacklogs, fetchPlacements]);
+    if (!user) return;
+    api.get('/career/my-registrations')
+      .then((res) => {
+        if (res.data?.data?.registeredIds) {
+          setRegisteredIds(new Set(res.data.data.registeredIds.map(String)));
+        }
+      })
+      .catch(() => {});
+  }, [user]);
 
-  /* ── Resume ATS Analysis ───────────────────────────────────────────── */
+  /* ── Resume ATS Analysis (PDF / Text) ──────────────────────────────── */
   const handleAnalyzeResume = async () => {
-    if (!resumeText.trim()) {
-      setResumeError('Please paste your resume content to analyze.');
-      return;
-    }
     setResumeError('');
-    setIsAnalyzingResume(true);
-    try {
-      const res = await api.post('/career/analyze-resume', { resumeText, targetRole });
-      if (res.data?.data) {
-        setAtsAnalysis({
-          score: res.data.data.atsScore,
-          grade: res.data.data.grade,
-          matched: res.data.data.matchedKeywords || [],
-          missing: res.data.data.missingKeywords || [],
-          feedback: res.data.data.feedback || []
-        });
-        setAtsModalOpen(true);
+    if (resumeMode === 'pdf') {
+      if (!resumeFile) {
+        setResumeError('Please select a PDF or DOCX resume file to upload.');
+        return;
       }
-    } catch (err) {
-      console.error('Failed to analyze resume:', err);
-      setResumeError('Analysis failed. Please check your connection and try again.');
-    } finally {
-      setIsAnalyzingResume(false);
+      setIsAnalyzingResume(true);
+      try {
+        const formData = new FormData();
+        formData.append('resume', resumeFile);
+        formData.append('targetRole', targetRole);
+        if (jobDescription.trim()) formData.append('jobDescription', jobDescription);
+
+        const res = await api.post('/career/upload-resume', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        if (res.data?.data) {
+          const d = res.data.data;
+          setAtsAnalysis({
+            score: d.atsScore,
+            grade: d.grade,
+            resumeSummary: d.resumeSummary || '',
+            matched: d.matchedKeywords || d.keywordMatchAnalysis?.matchedKeywords || [],
+            missing: d.missingKeywords || d.keywordMatchAnalysis?.missingKeywords || [],
+            suggestedKeywords: d.keywordMatchAnalysis?.suggestedKeywords || [],
+            feedback: d.feedback || d.improvementSuggestions || [],
+            strengths: d.strengths || [],
+            weaknesses: d.weaknesses || [],
+            improvementSuggestions: d.improvementSuggestions || [],
+            skillsDetected: d.skillsDetected || [],
+            missingSkills: d.missingSkills || [],
+            sectionFeedback: d.sectionFeedback || {},
+            experienceAnalysis: d.experienceAnalysis || null,
+            educationAnalysis: d.educationAnalysis || null,
+            careerRecommendations: d.careerRecommendations || null,
+            jobDescriptionComparison: d.jobDescriptionComparison || null,
+            keywordMatchAnalysis: d.keywordMatchAnalysis || null,
+            wordCount: d.wordCount || 0,
+            analyzedBy: d.analyzedBy || 'Azure OpenAI',
+            fileName: d.fileName || resumeFile.name,
+            targetRole
+          });
+          setAtsModalOpen(true);
+        }
+      } catch (err) {
+        console.error('Failed to analyze uploaded resume:', err);
+        setResumeError(err.response?.data?.message || 'Failed to extract and analyze resume. Please ensure it is a text-based PDF or DOCX.');
+      } finally {
+        setIsAnalyzingResume(false);
+      }
+    } else {
+      if (!resumeText.trim()) {
+        setResumeError('Please paste your resume content to analyze.');
+        return;
+      }
+      setIsAnalyzingResume(true);
+      try {
+        const res = await api.post('/career/analyze-resume', {
+          resumeText,
+          targetRole,
+          jobDescription: jobDescription.trim() || undefined
+        });
+        if (res.data?.data) {
+          const d = res.data.data;
+          setAtsAnalysis({
+            score: d.atsScore,
+            grade: d.grade,
+            resumeSummary: d.resumeSummary || '',
+            matched: d.matchedKeywords || d.keywordMatchAnalysis?.matchedKeywords || [],
+            missing: d.missingKeywords || d.keywordMatchAnalysis?.missingKeywords || [],
+            suggestedKeywords: d.keywordMatchAnalysis?.suggestedKeywords || [],
+            feedback: d.feedback || d.improvementSuggestions || [],
+            strengths: d.strengths || [],
+            weaknesses: d.weaknesses || [],
+            improvementSuggestions: d.improvementSuggestions || [],
+            skillsDetected: d.skillsDetected || [],
+            missingSkills: d.missingSkills || [],
+            sectionFeedback: d.sectionFeedback || {},
+            experienceAnalysis: d.experienceAnalysis || null,
+            educationAnalysis: d.educationAnalysis || null,
+            careerRecommendations: d.careerRecommendations || null,
+            jobDescriptionComparison: d.jobDescriptionComparison || null,
+            keywordMatchAnalysis: d.keywordMatchAnalysis || null,
+            wordCount: d.wordCount || 0,
+            analyzedBy: d.analyzedBy || 'Azure OpenAI',
+            targetRole
+          });
+          setAtsModalOpen(true);
+        }
+      } catch (err) {
+        console.error('Failed to analyze resume text:', err);
+        setResumeError('Analysis failed. Please check your connection and try again.');
+      } finally {
+        setIsAnalyzingResume(false);
+      }
     }
   };
 
@@ -256,18 +341,42 @@ const CareerHubPage = () => {
     setInterviewModalOpen(false);
   };
 
-  /* ── Registration Modal Handler ────────────────────────────────────── */
+  /* ── Registration Modal & DB-Backed Handlers ───────────────────────── */
   const handleRegister = (drive) => {
+    if (registeredIds.has(String(drive.id))) {
+      alert(`You are already registered for ${drive.name}.`);
+      return;
+    }
     setRegisterModal(drive);
     setRegisterSuccess(false);
+    setRegisterError('');
   };
 
-  const confirmRegistration = () => {
-    setRegisterSuccess(true);
-    setTimeout(() => {
-      setRegisterModal(null);
-      setRegisterSuccess(false);
-    }, 2500);
+  const confirmRegistration = async () => {
+    if (!registerModal) return;
+    setRegisterLoading(true);
+    setRegisterError('');
+    try {
+      const res = await api.post(`/career/placements/${registerModal.id}/register`);
+      if (res.data?.success) {
+        setRegisteredIds((prev) => new Set([...prev, String(registerModal.id)]));
+        setRegisterSuccess(true);
+        setTimeout(() => {
+          setRegisterModal(null);
+          setRegisterSuccess(false);
+        }, 2500);
+      }
+    } catch (err) {
+      console.error('Registration failed:', err);
+      if (err.response?.status === 409 || err.response?.data?.alreadyRegistered) {
+        setRegisteredIds((prev) => new Set([...prev, String(registerModal.id)]));
+        setRegisterError('You are already registered for this placement drive.');
+      } else {
+        setRegisterError(err.response?.data?.message || 'Registration failed. Please try again.');
+      }
+    } finally {
+      setRegisterLoading(false);
+    }
   };
 
   /* ── Tab Configuration ─────────────────────────────────────────────── */
@@ -392,6 +501,7 @@ const CareerHubPage = () => {
               </div>
             ) : placements.map((drive) => {
               const isEligible = drive.isEligible;
+              const isRegistered = registeredIds.has(String(drive.id));
               const packageDisplay = drive.packageLPA ? `${drive.packageLPA} LPA` : 'Competitive';
               return (
                 <div
@@ -399,19 +509,22 @@ const CareerHubPage = () => {
                   style={{
                     padding: '1.5rem', background: 'var(--bg-input)',
                     borderRadius: 'var(--radius-sm)',
-                    border: `1px solid ${isEligible ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.2)'}`,
+                    border: `1px solid ${isRegistered ? 'rgba(99,102,241,0.4)' : isEligible ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.2)'}`,
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     flexWrap: 'wrap', gap: '1.25rem',
                     transition: 'all 0.2s',
-                    cursor: 'pointer'
+                    cursor: isEligible && !isRegistered ? 'pointer' : 'default'
                   }}
-                  onClick={() => isEligible && handleRegister(drive)}
+                  onClick={() => isEligible && !isRegistered && handleRegister(drive)}
                 >
                   <div style={{ flex: 1, minWidth: '280px' }}>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                       <span className="badge badge-primary">{drive.tier}</span>
-                      <span className={`badge ${isEligible ? 'badge-success' : 'badge-danger'}`}>
-                        {isEligible ? '✅ Eligible' : '❌ Cutoff Unmet'}
+                      <span
+                        className={`badge ${isRegistered ? '' : isEligible ? 'badge-success' : 'badge-danger'}`}
+                        style={isRegistered ? { background: 'rgba(99,102,241,0.2)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.4)' } : {}}
+                      >
+                        {isRegistered ? '✅ Registered' : isEligible ? '✅ Eligible' : '❌ Cutoff Unmet'}
                       </span>
                       {drive.openPositions && (
                         <span className="badge" style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--primary)', fontSize: '0.7rem' }}>
@@ -436,7 +549,26 @@ const CareerHubPage = () => {
                   </div>
 
                   <div>
-                    {isEligible ? (
+                    {isRegistered ? (
+                      <button
+                        disabled
+                        style={{
+                          padding: '0.65rem 1.4rem',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid rgba(99,102,241,0.4)',
+                          background: 'rgba(99,102,241,0.12)',
+                          color: '#818cf8',
+                          fontWeight: 700,
+                          fontSize: '0.88rem',
+                          cursor: 'not-allowed',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem'
+                        }}
+                      >
+                        <CheckCircle2 size={16} /> Registered
+                      </button>
+                    ) : isEligible ? (
                       <button className="btn btn-primary" style={{ padding: '0.65rem 1.4rem' }} onClick={(e) => { e.stopPropagation(); handleRegister(drive); }}>
                         <CheckCircle2 size={16} /> Register
                       </button>
@@ -458,11 +590,47 @@ const CareerHubPage = () => {
          ═══════════════════════════════════════════════════════════════ */}
       {activeTab === 'resume' && (
         <div className="glass-panel" style={{ padding: '2rem' }}>
-          <h2 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Upload size={20} color="var(--primary)" /> Intelligent Resume ATS Parser &amp; Scoring
-          </h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Upload size={20} color="var(--primary)" /> Intelligent Resume ATS Parser &amp; Scoring
+            </h2>
+            <div style={{ display: 'flex', background: 'var(--bg-input)', padding: '0.25rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+              <button
+                type="button"
+                onClick={() => setResumeMode('pdf')}
+                style={{
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  border: 'none',
+                  background: resumeMode === 'pdf' ? 'var(--primary-gradient)' : 'transparent',
+                  color: resumeMode === 'pdf' ? '#fff' : 'var(--text-secondary)',
+                  cursor: 'pointer'
+                }}
+              >
+                Upload PDF Resume
+              </button>
+              <button
+                type="button"
+                onClick={() => setResumeMode('paste')}
+                style={{
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  border: 'none',
+                  background: resumeMode === 'paste' ? 'var(--primary-gradient)' : 'transparent',
+                  color: resumeMode === 'paste' ? '#fff' : 'var(--text-secondary)',
+                  cursor: 'pointer'
+                }}
+              >
+                Paste Text
+              </button>
+            </div>
+          </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-            Paste your resume text to evaluate keyword match index, industry phrasing, and ATS rejection risks.
+            Upload your PDF resume or paste text to evaluate keyword match index, industry phrasing, and ATS rejection risks.
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
@@ -485,27 +653,105 @@ const CareerHubPage = () => {
               </select>
             </div>
 
-            {/* Resume Text */}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Resume Content / Experience Summary</label>
-              <textarea
-                rows={10}
-                className="form-textarea"
-                value={resumeText}
-                onChange={(e) => { setResumeText(e.target.value); setResumeError(''); }}
-                placeholder="Paste your full resume text here... Include your skills, experience, projects, education, and certifications for the most accurate ATS analysis."
-                style={{ fontSize: '0.88rem', lineHeight: 1.6 }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  {resumeText.length} characters • {resumeText.split(/\s+/).filter(Boolean).length} words
-                </span>
-                {resumeText.length > 0 && resumeText.length < 200 && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--warning)' }}>
-                    ⚠️ Add more content for accurate analysis (min 200 chars)
-                  </span>
-                )}
+            {/* Resume Input Mode: PDF vs Paste */}
+            {resumeMode === 'pdf' ? (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Upload Resume (PDF or DOCX)</label>
+                <div
+                  style={{
+                    border: '2px dashed var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '2.5rem 1.5rem',
+                    textAlign: 'center',
+                    background: resumeFile ? 'rgba(16,185,129,0.06)' : 'var(--bg-input)',
+                    transition: 'all 0.2s',
+                    position: 'relative'
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    id="resume-file-input"
+                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 2 }}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setResumeFile(e.target.files[0]);
+                        setResumeError('');
+                      }
+                    }}
+                  />
+                  {resumeFile ? (
+                    <div>
+                      <CheckCircle2 size={44} color="var(--success)" style={{ marginBottom: '0.75rem' }} />
+                      <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
+                        {resumeFile.name}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                        {(resumeFile.size / 1024).toFixed(1)} KB &bull; Ready for backend parsing
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setResumeFile(null);
+                        }}
+                        className="btn btn-secondary"
+                        style={{ marginTop: '1rem', padding: '0.35rem 0.85rem', fontSize: '0.78rem', position: 'relative', zIndex: 3 }}
+                      >
+                        Choose Different File
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <Upload size={44} color="var(--primary)" style={{ opacity: 0.8, marginBottom: '0.75rem' }} />
+                      <div style={{ fontWeight: 600, fontSize: '0.98rem', marginBottom: '0.35rem' }}>
+                        Click to select or drag and drop your resume file
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        Supports PDF and DOCX files up to 5MB
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
+            ) : (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Resume Content / Experience Summary</label>
+                <textarea
+                  rows={10}
+                  className="form-textarea"
+                  value={resumeText}
+                  onChange={(e) => { setResumeText(e.target.value); setResumeError(''); }}
+                  placeholder="Paste your full resume text here... Include your skills, experience, projects, education, and certifications for the most accurate ATS analysis."
+                  style={{ fontSize: '0.88rem', lineHeight: 1.6 }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {resumeText.length} characters • {resumeText.split(/\s+/).filter(Boolean).length} words
+                  </span>
+                  {resumeText.length > 0 && resumeText.length < 200 && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--warning)' }}>
+                      ⚠️ Add more content for accurate analysis (min 200 chars)
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Job Description (optional) */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <MessageSquare size={14} color="var(--accent-purple)" />
+                Job Description <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>(optional — paste JD to get a targeted match score)</span>
+              </label>
+              <textarea
+                rows={4}
+                className="form-textarea"
+                value={jobDescription}
+                onChange={(e) => setJobDescription(e.target.value)}
+                placeholder="Paste the target job description here to get a precise JD match score and tailored keyword recommendations..."
+                style={{ fontSize: '0.85rem', lineHeight: 1.6, resize: 'vertical' }}
+              />
             </div>
 
             {resumeError && (
@@ -516,9 +762,9 @@ const CareerHubPage = () => {
 
             <button onClick={handleAnalyzeResume} className="btn btn-primary" disabled={isAnalyzingResume} style={{ width: '100%', padding: '0.85rem' }}>
               {isAnalyzingResume ? (
-                <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Parsing Technical Keywords...</>
+                <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Analyzing with Azure AI (GPT-4.1-mini)...</>
               ) : (
-                <><BarChart3 size={16} /> Run ATS Match Analysis</>
+                <><BarChart3 size={16} /> Run Full ATS Analysis with Azure AI</>
               )}
             </button>
           </div>
@@ -765,15 +1011,21 @@ const CareerHubPage = () => {
       </ModalPortal>
 
       {/* ═══════════════════════════════════════════════════════════════
-         MODAL — ATS Resume Analysis Results
+         MODAL — ATS Resume Analysis Results (Full Azure AI Output)
          ═══════════════════════════════════════════════════════════════ */}
       <ModalPortal isOpen={atsModalOpen}>
         <div style={overlayStyle} onClick={() => setAtsModalOpen(false)}>
-          <div style={{ ...modalBoxStyle, maxWidth: '720px' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...modalBoxStyle, maxWidth: '800px' }} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <BarChart3 size={18} color="var(--primary)" /> ATS Analysis Report
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <BarChart3 size={18} color="var(--primary)" />
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>ATS Analysis Report</h3>
+                {atsAnalysis?.analyzedBy && (
+                  <span style={{ fontSize: '0.7rem', background: 'rgba(59,130,246,0.15)', color: 'var(--primary)', padding: '0.2rem 0.55rem', borderRadius: '999px', fontWeight: 600 }}>
+                    {atsAnalysis.analyzedBy}
+                  </span>
+                )}
+              </div>
               <button className="icon-btn" onClick={() => setAtsModalOpen(false)} style={{ width: 32, height: 32 }}>
                 <X size={16} />
               </button>
@@ -781,63 +1033,208 @@ const CareerHubPage = () => {
             <div style={modalBodyStyle}>
               {atsAnalysis && (
                 <>
-                  {/* Score */}
-                  <div style={{ textAlign: 'center', padding: '1.5rem 0 2rem', borderBottom: '1px solid var(--border-subtle)', marginBottom: '1.5rem' }}>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>ATS Compatibility Score</div>
-                    <div style={{
-                      fontSize: '4.5rem', fontWeight: 800, lineHeight: 1,
-                      background: atsAnalysis.score >= 70 ? 'linear-gradient(135deg, #10b981, #34d399)' : 'linear-gradient(135deg, #f59e0b, #fbbf24)',
-                      WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
-                    }}>
-                      {atsAnalysis.score}%
+                  {/* ── Hero Score Block ── */}
+                  <div style={{
+                    display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '1.5rem', borderRadius: 'var(--radius-sm)',
+                    background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(139,92,246,0.08) 100%)',
+                    border: '1px solid rgba(59,130,246,0.2)', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem'
+                  }}>
+                    <div style={{ textAlign: 'center', flex: '0 0 auto' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ATS Score</div>
+                      <div style={{
+                        fontSize: '4rem', fontWeight: 800, lineHeight: 1,
+                        background: atsAnalysis.score >= 75 ? 'linear-gradient(135deg, #10b981, #34d399)' : atsAnalysis.score >= 55 ? 'linear-gradient(135deg, #3b82f6, #60a5fa)' : 'linear-gradient(135deg, #f59e0b, #fbbf24)',
+                        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
+                      }}>
+                        {atsAnalysis.score}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>/ 100</div>
                     </div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 600, marginTop: '0.3rem' }}>
-                      <span className={`badge ${atsAnalysis.score >= 80 ? 'badge-success' : atsAnalysis.score >= 65 ? 'badge-primary' : 'badge-danger'}`}>
-                        {atsAnalysis.grade || (atsAnalysis.score >= 80 ? 'Optimal Match' : atsAnalysis.score >= 65 ? 'Competitive' : 'Needs Work')}
-                      </span>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <div style={{ marginBottom: '0.4rem' }}>
+                        <span className={`badge ${atsAnalysis.score >= 80 ? 'badge-success' : atsAnalysis.score >= 60 ? 'badge-primary' : 'badge-danger'}`} style={{ fontSize: '0.82rem' }}>
+                          {atsAnalysis.grade || 'Evaluated'}
+                        </span>
+                      </div>
+                      {atsAnalysis.fileName && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>📄 {atsAnalysis.fileName}</div>}
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>🎯 Target: <strong style={{ color: 'var(--text-primary)' }}>{atsAnalysis.targetRole}</strong></div>
+                      {atsAnalysis.wordCount > 0 && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>📝 {atsAnalysis.wordCount} words detected</div>}
                     </div>
+                    {atsAnalysis.keywordMatchAnalysis && (
+                      <div style={{ textAlign: 'center', flex: '0 0 auto' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Keyword Match</div>
+                        <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--accent-purple)' }}>
+                          {atsAnalysis.keywordMatchAnalysis.matchPercentage ?? Math.round((atsAnalysis.matched.length / Math.max(atsAnalysis.matched.length + atsAnalysis.missing.length, 1)) * 100)}%
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Matched Keywords */}
-                  <div style={{ marginBottom: '1.25rem' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--success)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <CheckCircle2 size={14} /> Matched Keywords ({atsAnalysis.matched.length})
+                  {/* ── AI Resume Summary ── */}
+                  {atsAnalysis.resumeSummary && (
+                    <div style={{ padding: '1rem 1.25rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', marginBottom: '1.25rem' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI Resume Summary</div>
+                      <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.65, margin: 0 }}>{atsAnalysis.resumeSummary}</p>
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                      {atsAnalysis.matched.map((k) => (
-                        <span key={k} className="badge badge-success" style={{ fontSize: '0.75rem' }}>{k}</span>
-                      ))}
-                      {atsAnalysis.matched.length === 0 && (
-                        <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No keywords matched yet</span>
+                  )}
+
+                  {/* ── Strengths & Weaknesses ── */}
+                  {(atsAnalysis.strengths?.length > 0 || atsAnalysis.weaknesses?.length > 0) && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                      {atsAnalysis.strengths?.length > 0 && (
+                        <div style={{ padding: '1rem', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--success)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <CheckCircle2 size={13} /> Strengths
+                          </div>
+                          <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                            {atsAnalysis.strengths.map((s, i) => (
+                              <li key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', lineHeight: 1.5 }}>{s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {atsAnalysis.weaknesses?.length > 0 && (
+                        <div style={{ padding: '1rem', background: 'rgba(239,68,68,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--danger)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <AlertCircle size={13} /> Areas to Improve
+                          </div>
+                          <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                            {atsAnalysis.weaknesses.map((w, i) => (
+                              <li key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', lineHeight: 1.5 }}>{w}</li>
+                            ))}
+                          </ul>
+                        </div>
                       )}
                     </div>
-                  </div>
+                  )}
 
-                  {/* Missing Keywords */}
-                  {atsAnalysis.missing.length > 0 && (
+                  {/* ── Section-wise Feedback ── */}
+                  {atsAnalysis.sectionFeedback && Object.keys(atsAnalysis.sectionFeedback).length > 0 && (
                     <div style={{ marginBottom: '1.25rem' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--danger)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <AlertCircle size={14} /> Missing Keywords ({atsAnalysis.missing.length})
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <BarChart3 size={13} /> Section-wise Analysis
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                        {atsAnalysis.missing.map((k) => (
-                          <span key={k} className="badge badge-danger" style={{ fontSize: '0.75rem' }}>{k}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {Object.entries(atsAnalysis.sectionFeedback).map(([section, info]) => (
+                          <div key={section} style={{ padding: '0.75rem 1rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 700, textTransform: 'capitalize' }}>{section.replace(/([A-Z])/g, ' $1').trim()}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                {info.status && (
+                                  <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: info.score >= 80 ? 'rgba(16,185,129,0.15)' : info.score >= 60 ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)', color: info.score >= 80 ? 'var(--success)' : info.score >= 60 ? 'var(--primary)' : 'var(--danger)', fontWeight: 600 }}>{info.status}</span>
+                                )}
+                                {info.score !== undefined && (
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: info.score >= 80 ? 'var(--success)' : info.score >= 60 ? 'var(--primary)' : 'var(--danger)' }}>{info.score}%</span>
+                                )}
+                              </div>
+                            </div>
+                            {info.score !== undefined && (
+                              <div style={{ height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '2px', marginBottom: '0.35rem' }}>
+                                <div style={{ height: '4px', borderRadius: '2px', width: `${info.score}%`, background: info.score >= 80 ? 'var(--success)' : info.score >= 60 ? 'var(--primary)' : 'var(--danger)', transition: 'width 0.6s ease' }} />
+                              </div>
+                            )}
+                            {info.feedback && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{info.feedback}</div>}
+                          </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Recommendations */}
-                  <div style={{ padding: '1.25rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Zap size={14} color="var(--primary)" /> Key Recommendations
+                  {/* ── Matched / Missing Keywords ── */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                    <div style={{ padding: '1rem', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--success)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <CheckCircle2 size={13} /> Matched ({atsAnalysis.matched.length})
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        {atsAnalysis.matched.slice(0, 18).map((k) => (<span key={k} className="badge badge-success" style={{ fontSize: '0.7rem' }}>{k}</span>))}
+                        {atsAnalysis.matched.length === 0 && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>None detected</span>}
+                      </div>
                     </div>
-                    <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
-                      {atsAnalysis.feedback.map((f, i) => (
-                        <li key={i} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem', lineHeight: 1.5 }}>{f}</li>
-                      ))}
-                    </ul>
+                    <div style={{ padding: '1rem', background: 'rgba(239,68,68,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--danger)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <AlertCircle size={13} /> Missing ({atsAnalysis.missing.length})
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        {atsAnalysis.missing.slice(0, 15).map((k) => (<span key={k} className="badge badge-danger" style={{ fontSize: '0.7rem' }}>{k}</span>))}
+                        {atsAnalysis.missing.length === 0 && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>All key terms present</span>}
+                      </div>
+                    </div>
                   </div>
+
+                  {/* ── JD Match Score ── */}
+                  {atsAnalysis.jobDescriptionComparison?.hasJd && (
+                    <div style={{ padding: '1rem 1.25rem', background: 'rgba(139,92,246,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(139,92,246,0.2)', marginBottom: '1.25rem' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent-purple)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <Target size={13} /> Job Description Match: {atsAnalysis.jobDescriptionComparison.matchScore}%
+                      </div>
+                      {atsAnalysis.jobDescriptionComparison.alignmentSummary && (
+                        <p style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>{atsAnalysis.jobDescriptionComparison.alignmentSummary}</p>
+                      )}
+                      {atsAnalysis.jobDescriptionComparison.missingRequirements?.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Add to resume:</span>
+                          {atsAnalysis.jobDescriptionComparison.missingRequirements.slice(0, 10).map((r, i) => (
+                            <span key={i} className="badge" style={{ fontSize: '0.7rem', background: 'rgba(139,92,246,0.15)', color: '#a78bfa' }}>{r}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Improvement Suggestions ── */}
+                  {atsAnalysis.feedback?.length > 0 && (
+                    <div style={{ padding: '1.25rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', marginBottom: '1.25rem' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <Zap size={13} color="var(--primary)" /> Improvement Suggestions
+                      </div>
+                      <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                        {atsAnalysis.feedback.map((f, i) => (
+                          <li key={i} style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', marginBottom: '0.4rem', lineHeight: 1.55 }}>{f}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* ── Career Recommendations ── */}
+                  {atsAnalysis.careerRecommendations && (
+                    <div style={{ padding: '1.25rem', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--success)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <GraduationCap size={13} /> AI Career Recommendations
+                      </div>
+                      {atsAnalysis.careerRecommendations.recommendedRoles?.length > 0 && (
+                        <div style={{ marginBottom: '0.75rem' }}>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Recommended Roles</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            {atsAnalysis.careerRecommendations.recommendedRoles.map((r, i) => (
+                              <span key={i} className="badge badge-success" style={{ fontSize: '0.75rem' }}>{r}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {atsAnalysis.careerRecommendations.recommendedCertifications?.length > 0 && (
+                        <div style={{ marginBottom: '0.75rem' }}>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Certifications to Pursue</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            {atsAnalysis.careerRecommendations.recommendedCertifications.map((c, i) => (
+                              <span key={i} className="badge badge-primary" style={{ fontSize: '0.75rem' }}>{c}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {atsAnalysis.careerRecommendations.actionPlan?.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Action Plan</div>
+                          <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
+                            {atsAnalysis.careerRecommendations.actionPlan.map((step, i) => (
+                              <li key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>{step}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>

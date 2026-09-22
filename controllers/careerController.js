@@ -4,6 +4,7 @@ import CareerProfile from '../models/CareerProfile.js';
 import Student from '../models/Student.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
+import { AzureOpenAI } from 'openai';
 
 /**
  * Career & Placement Controller
@@ -261,6 +262,194 @@ const computeAtsScore = (text, role, jobDescription) => {
 };
 
 /**
+ * ─── Run Azure OpenAI GPT-4.1-mini ATS Evaluation ────────────────────────────
+ */
+const runAzureOpenAiAtsAnalysis = async (resumeText, targetRole, jobDescription = '') => {
+  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+  const apiKey = process.env.AZURE_OPENAI_API_KEY;
+
+  // Fallback to rule engine if credentials are not configured or mock
+  if (!endpoint || !apiKey || endpoint.includes('mock-')) {
+    const fallback = computeAtsScore(resumeText, targetRole, jobDescription);
+    return {
+      atsScore: fallback.atsScore,
+      grade: fallback.grade,
+      resumeSummary: `Resume evaluated for ${targetRole} with ${fallback.wordCount} words across ${(fallback.detectedSections || []).length} recognized sections.`,
+      skillsDetected: fallback.matched || [],
+      missingSkills: fallback.missing || [],
+      keywordMatchAnalysis: {
+        matchPercentage: fallback.sectionScores?.keywords ? Math.round((fallback.sectionScores.keywords / 40) * 100) : 65,
+        matchedKeywords: fallback.matched || [],
+        missingKeywords: fallback.missing || [],
+        suggestedKeywords: fallback.missing?.slice(0, 5) || []
+      },
+      experienceAnalysis: {
+        rating: fallback.sectionScores?.actionVerbs > 6 ? 'Strong' : 'Moderate',
+        feedback: 'Experience contains technical phrasing. Ensure each bullet point contains quantifiable metric outcomes.',
+        strengths: fallback.strengths || [],
+        improvements: ['Include more metrics (e.g. % improved, ms reduced, users impacted)']
+      },
+      educationAnalysis: {
+        rating: fallback.detectedSections?.includes('education') ? 'Strong' : 'Needs Optimization',
+        feedback: 'Education credentials identified. Include coursework and cumulative GPA.'
+      },
+      sectionFeedback: {
+        contactInfo: { score: 90, status: 'Complete', feedback: 'Contact information present.' },
+        summary: { score: fallback.detectedSections?.includes('summary') ? 85 : 50, status: fallback.detectedSections?.includes('summary') ? 'Present' : 'Missing', feedback: 'Include a 2-3 line summary tailored to ' + targetRole },
+        skills: { score: fallback.matched?.length > 6 ? 90 : 65, status: 'Evaluated', feedback: `Detected ${fallback.matched?.length || 0} core technical skills.` },
+        projects: { score: fallback.detectedSections?.includes('projects') ? 85 : 60, status: 'Evaluated', feedback: 'Highlight architecture, tools, and live deployment links.' },
+        experience: { score: fallback.sectionScores?.actionVerbs || 70, status: 'Evaluated', feedback: 'Ensure action verbs begin every bullet point.' },
+        education: { score: 90, status: 'Complete', feedback: 'Degree and university details formatted.' }
+      },
+      strengths: fallback.strengths || ['Good overall structure', 'Relevant domain keywords present'],
+      weaknesses: fallback.feedback || ['Add quantifiable metrics', 'Include missing target keywords'],
+      improvementSuggestions: fallback.feedback || ['Add missing core keywords', 'Emphasize cloud technologies'],
+      careerRecommendations: {
+        recommendedRoles: [targetRole, 'Cloud Solutions Associate', 'Software Development Engineer'],
+        recommendedCertifications: ['Microsoft Certified: Azure Fundamentals (AZ-900)', 'AWS Certified Cloud Practitioner'],
+        actionPlan: ['Align resume bullets with job posting requirements', 'Build a production cloud capstone project']
+      },
+      jobDescriptionComparison: {
+        hasJd: Boolean(jobDescription && jobDescription.trim().length > 30),
+        matchScore: fallback.jdMatchScore || 0,
+        alignmentSummary: jobDescription ? 'Evaluated against custom job description.' : 'Evaluated against industry benchmarks.',
+        matchedRequirements: fallback.jdMatched || [],
+        missingRequirements: fallback.jdMissing || []
+      },
+      wordCount: fallback.wordCount,
+      detectedSections: fallback.detectedSections,
+      analyzedBy: 'UniAssist Rule Engine'
+    };
+  }
+
+  const client = new AzureOpenAI({
+    endpoint,
+    apiKey,
+    apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
+    deployment: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini'
+  });
+
+  const systemPrompt = `You are a principal technical recruiter and expert ATS (Applicant Tracking System) optimization engine.
+Analyze candidate resumes objectively against target industry roles and job descriptions.
+Return ONLY valid raw JSON adhering strictly to the schema below.
+Rules:
+1. Do NOT wrap output in markdown code fences (no \`\`\`json or \`\`\`).
+2. Provide constructive, precise feedback and high-impact keyword recommendations.
+3. Every required field must be populated with meaningful content.`;
+
+  const userPrompt = `Target Job Role: "${targetRole}"
+${jobDescription && jobDescription.trim().length > 20 ? `Job Description: """${jobDescription.substring(0, 3000)}"""` : 'No specific Job Description provided. Evaluate against top industry benchmarks for this role.'}
+
+Candidate Resume Text:
+"""
+${resumeText.substring(0, 8000)}
+"""
+
+JSON Schema:
+{
+  "atsScore": 85,
+  "grade": "Strong Match",
+  "resumeSummary": "Executive professional summary of candidate...",
+  "skillsDetected": ["skill1", "skill2"],
+  "missingSkills": ["skill3", "skill4"],
+  "keywordMatchAnalysis": {
+    "matchPercentage": 82,
+    "matchedKeywords": ["kw1", "kw2"],
+    "missingKeywords": ["kw3", "kw4"],
+    "suggestedKeywords": ["suggestedKw1", "suggestedKw2"]
+  },
+  "experienceAnalysis": {
+    "rating": "Strong",
+    "feedback": "Detailed assessment of work, internships, leadership, and metrics...",
+    "strengths": ["Clear metrics provided", "Action-driven bullets"],
+    "improvements": ["Elaborate on production scale"]
+  },
+  "educationAnalysis": {
+    "rating": "Strong",
+    "feedback": "Assessment of degree, GPA, coursework relevance..."
+  },
+  "sectionFeedback": {
+    "contactInfo": { "score": 95, "status": "Complete", "feedback": "..." },
+    "summary": { "score": 75, "status": "Present", "feedback": "..." },
+    "skills": { "score": 88, "status": "Strong", "feedback": "..." },
+    "projects": { "score": 85, "status": "Strong", "feedback": "..." },
+    "experience": { "score": 82, "status": "Good", "feedback": "..." },
+    "education": { "score": 90, "status": "Complete", "feedback": "..." }
+  },
+  "strengths": [
+    "Strength 1...",
+    "Strength 2...",
+    "Strength 3..."
+  ],
+  "weaknesses": [
+    "Weakness 1...",
+    "Weakness 2...",
+    "Weakness 3..."
+  ],
+  "improvementSuggestions": [
+    "Actionable suggestion 1...",
+    "Actionable suggestion 2...",
+    "Actionable suggestion 3...",
+    "Actionable suggestion 4..."
+  ],
+  "careerRecommendations": {
+    "recommendedRoles": ["Role 1", "Role 2", "Role 3"],
+    "recommendedCertifications": ["Cert 1", "Cert 2"],
+    "actionPlan": ["Step 1", "Step 2", "Step 3"]
+  },
+  "jobDescriptionComparison": {
+    "hasJd": ${Boolean(jobDescription && jobDescription.trim().length > 30)},
+    "matchScore": 75,
+    "alignmentSummary": "Summary of alignment with the target role...",
+    "matchedRequirements": ["Req 1", "Req 2"],
+    "missingRequirements": ["Req 3", "Req 4"]
+  }
+}`;
+
+  let parsed = null;
+  let lastErr = null;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const response = await client.chat.completions.create({
+        model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: attempt === 1 ? 0.3 : 0.1,
+        max_tokens: 3500
+      });
+
+      let content = response.choices[0]?.message?.content?.trim() || '';
+      if (content.startsWith('```')) {
+        content = content.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+      }
+
+      parsed = JSON.parse(content);
+      if (parsed && typeof parsed.atsScore === 'number') {
+        break;
+      }
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[Azure ATS Analyzer] Attempt ${attempt} failed:`, err.message);
+    }
+  }
+
+  if (!parsed || typeof parsed.atsScore !== 'number') {
+    console.warn('[Azure ATS Analyzer] AI parsing failed, falling back to rule engine:', lastErr?.message);
+    return computeAtsScore(resumeText, targetRole, jobDescription);
+  }
+
+  // Enrich with basic text metrics
+  parsed.wordCount = (resumeText.match(/\S+/g) || []).length;
+  parsed.detectedSections = detectSections(resumeText);
+  parsed.analyzedBy = `Azure OpenAI (${process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini'})`;
+
+  return parsed;
+};
+
+/**
  * Get all placement drives from MongoDB
  */
 export const getPlacements = async (req, res, next) => {
@@ -412,35 +601,40 @@ export const uploadAndAnalyzeResume = async (req, res, next) => {
 
     const { targetRole = 'Fullstack Cloud Engineer', jobDescription = '' } = req.body;
 
-    // Extract text
+    // Extract text from buffer (pdfParse or mammoth)
     const extractedText = await extractTextFromBuffer(req.file.buffer, req.file.mimetype, req.file.originalname);
 
     if (!extractedText || extractedText.trim().length < 30) {
       return res.status(422).json({ success: false, message: 'Could not extract meaningful text from the uploaded file. Please ensure it is a text-based (non-scanned) PDF or DOCX.' });
     }
 
-    // Run ATS analysis
-    const analysis = computeAtsScore(extractedText, targetRole, jobDescription);
+    // Run Azure OpenAI GPT-4.1-mini ATS analysis
+    const analysis = await runAzureOpenAiAtsAnalysis(extractedText, targetRole, jobDescription);
 
-    // Build analysis record
+    // Build analysis record to persist in MongoDB
     const analysisRecord = {
       originalFileName: req.file.originalname,
       uploadedAt: new Date(),
       targetRole,
-      jobDescription: jobDescription.substring(0, 2000),
+      jobDescription: jobDescription.substring(0, 3000),
       extractedTextSnippet: extractedText.substring(0, 500),
-      wordCount: analysis.wordCount,
-      detectedSections: analysis.detectedSections,
+      wordCount: analysis.wordCount || (extractedText.match(/\S+/g) || []).length,
+      detectedSections: analysis.detectedSections || [],
       atsScore: analysis.atsScore,
-      jdMatchScore: analysis.jdMatchScore,
       grade: analysis.grade,
-      matchedKeywords: analysis.matched,
-      missingKeywords: analysis.missing,
-      jdMatchedKeywords: analysis.jdMatched || [],
-      jdMissingKeywords: analysis.jdMissing || [],
-      sectionScores: analysis.sectionScores,
-      feedback: analysis.feedback,
-      strengths: analysis.strengths
+      resumeSummary: analysis.resumeSummary,
+      skillsDetected: analysis.skillsDetected || [],
+      missingSkills: analysis.missingSkills || [],
+      keywordMatchAnalysis: analysis.keywordMatchAnalysis || {},
+      experienceAnalysis: analysis.experienceAnalysis || {},
+      educationAnalysis: analysis.educationAnalysis || {},
+      sectionFeedback: analysis.sectionFeedback || {},
+      strengths: analysis.strengths || [],
+      weaknesses: analysis.weaknesses || [],
+      improvementSuggestions: analysis.improvementSuggestions || [],
+      careerRecommendations: analysis.careerRecommendations || {},
+      jobDescriptionComparison: analysis.jobDescriptionComparison || {},
+      analyzedBy: analysis.analyzedBy || 'Azure OpenAI (gpt-4.1-mini)'
     };
 
     // Persist to MongoDB if authenticated
@@ -453,9 +647,9 @@ export const uploadAndAnalyzeResume = async (req, res, next) => {
           {
             targetDomain: targetRole,
             atsScore: analysis.atsScore,
-            resumeKeywordsMatched: analysis.matched,
-            missingKeywords: analysis.missing,
-            resumeFeedback: analysis.feedback,
+            resumeKeywordsMatched: analysis.keywordMatchAnalysis?.matchedKeywords || analysis.matchedKeywords || [],
+            missingKeywords: analysis.keywordMatchAnalysis?.missingKeywords || analysis.missingKeywords || [],
+            resumeFeedback: analysis.improvementSuggestions || analysis.feedback || [],
             $push: { resumeAnalyses: { $each: [analysisRecord], $position: 0 } }
           },
           { upsert: true, new: true }
@@ -466,24 +660,20 @@ export const uploadAndAnalyzeResume = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
+      message: `Resume successfully analyzed with ${analysis.analyzedBy}`,
       data: {
         analysisId: savedAnalysisId,
         fileName: req.file.originalname,
         fileSize: req.file.size,
         targetRole,
-        wordCount: analysis.wordCount,
-        detectedSections: analysis.detectedSections,
-        atsScore: analysis.atsScore,
-        jdMatchScore: analysis.jdMatchScore,
-        grade: analysis.grade,
-        matchedKeywords: analysis.matched,
-        missingKeywords: analysis.missing,
-        jdMatchedKeywords: analysis.jdMatched || [],
-        jdMissingKeywords: analysis.jdMissing || [],
-        sectionScores: analysis.sectionScores,
-        feedback: analysis.feedback,
-        strengths: analysis.strengths,
-        hasJobDescription: jobDescription.trim().length > 30
+        extractedTextSnippet: extractedText.substring(0, 200),
+        ...analysis,
+        // Backward-compatibility aliases
+        matchedKeywords: analysis.keywordMatchAnalysis?.matchedKeywords || analysis.matched || [],
+        missingKeywords: analysis.keywordMatchAnalysis?.missingKeywords || analysis.missing || [],
+        feedback: analysis.improvementSuggestions || analysis.feedback || [],
+        jdMatchScore: analysis.jobDescriptionComparison?.matchScore || 0,
+        hasJobDescription: Boolean(jobDescription && jobDescription.trim().length > 30)
       }
     });
   } catch (err) {
@@ -492,7 +682,7 @@ export const uploadAndAnalyzeResume = async (req, res, next) => {
 };
 
 /**
- * ─── NEW: Get resume analysis history for authenticated student ───────────────
+ * ─── Get resume analysis history for authenticated student ────────────────────
  * GET /api/v1/career/resume-history
  */
 export const getResumeHistory = async (req, res, next) => {
@@ -508,23 +698,54 @@ export const getResumeHistory = async (req, res, next) => {
 
     const summaries = profile.resumeAnalyses.map((a) => ({
       id: a._id,
+      _id: a._id,
       fileName: a.originalFileName,
       uploadedAt: a.uploadedAt,
       targetRole: a.targetRole,
       atsScore: a.atsScore,
-      jdMatchScore: a.jdMatchScore,
       grade: a.grade,
-      wordCount: a.wordCount,
-      detectedSections: a.detectedSections,
-      matchedKeywords: a.matchedKeywords,
-      missingKeywords: a.missingKeywords,
-      sectionScores: a.sectionScores,
-      feedback: a.feedback,
+      resumeSummary: a.resumeSummary,
+      skillsDetected: a.skillsDetected,
+      missingSkills: a.missingSkills,
+      keywordMatchAnalysis: a.keywordMatchAnalysis,
+      experienceAnalysis: a.experienceAnalysis,
+      educationAnalysis: a.educationAnalysis,
+      sectionFeedback: a.sectionFeedback,
       strengths: a.strengths,
+      weaknesses: a.weaknesses,
+      improvementSuggestions: a.improvementSuggestions,
+      careerRecommendations: a.careerRecommendations,
+      jobDescriptionComparison: a.jobDescriptionComparison,
+      jdMatchScore: a.jobDescriptionComparison?.matchScore || a.jdMatchScore || 0,
+      wordCount: a.wordCount,
+      analyzedBy: a.analyzedBy,
       hasJobDescription: !!(a.jobDescription && a.jobDescription.trim().length > 10)
     }));
 
     res.status(200).json({ success: true, data: { analyses: summaries, totalAnalyses: summaries.length } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * ─── Get Single Past Resume Analysis by ID ─────────────────────────────────────
+ * GET /api/v1/career/resume-history/:analysisId
+ */
+export const getSingleResumeAnalysis = async (req, res, next) => {
+  try {
+    const { analysisId } = req.params;
+    if (!req.user) return res.status(401).json({ success: false, message: 'Authentication required.' });
+    const student = await Student.findOne({ userId: req.user._id });
+    if (!student) return res.status(404).json({ success: false, message: 'Student profile not found.' });
+
+    const profile = await CareerProfile.findOne({ student: student._id });
+    if (!profile) return res.status(404).json({ success: false, message: 'Career profile not found.' });
+
+    const analysis = profile.resumeAnalyses.id(analysisId);
+    if (!analysis) return res.status(404).json({ success: false, message: 'Analysis not found.' });
+
+    res.status(200).json({ success: true, data: analysis });
   } catch (err) {
     next(err);
   }
@@ -695,28 +916,68 @@ export const analyzeResume = async (req, res, next) => {
     const { resumeText = '', targetRole = 'Fullstack Cloud Engineer', jobDescription = '' } = req.body;
     if (!resumeText.trim()) return res.status(400).json({ success: false, message: 'Resume text is required.' });
 
-    const analysis = computeAtsScore(resumeText, targetRole, jobDescription);
+    const analysis = await runAzureOpenAiAtsAnalysis(resumeText, targetRole, jobDescription);
 
+    const analysisRecord = {
+      originalFileName: 'Pasted_Resume_Text',
+      uploadedAt: new Date(),
+      targetRole,
+      jobDescription: jobDescription.substring(0, 3000),
+      extractedTextSnippet: resumeText.substring(0, 500),
+      wordCount: analysis.wordCount || (resumeText.match(/\S+/g) || []).length,
+      detectedSections: analysis.detectedSections || [],
+      atsScore: analysis.atsScore,
+      grade: analysis.grade,
+      resumeSummary: analysis.resumeSummary,
+      skillsDetected: analysis.skillsDetected || [],
+      missingSkills: analysis.missingSkills || [],
+      keywordMatchAnalysis: analysis.keywordMatchAnalysis || {},
+      experienceAnalysis: analysis.experienceAnalysis || {},
+      educationAnalysis: analysis.educationAnalysis || {},
+      sectionFeedback: analysis.sectionFeedback || {},
+      strengths: analysis.strengths || [],
+      weaknesses: analysis.weaknesses || [],
+      improvementSuggestions: analysis.improvementSuggestions || [],
+      careerRecommendations: analysis.careerRecommendations || {},
+      jobDescriptionComparison: analysis.jobDescriptionComparison || {},
+      analyzedBy: analysis.analyzedBy || 'Azure OpenAI (gpt-4.1-mini)'
+    };
+
+    let savedAnalysisId = null;
     if (req.user) {
       const student = await Student.findOne({ userId: req.user._id });
       if (student) {
-        await CareerProfile.findOneAndUpdate(
+        const profile = await CareerProfile.findOneAndUpdate(
           { student: student._id },
-          { targetDomain: targetRole, atsScore: analysis.atsScore, resumeKeywordsMatched: analysis.matched, missingKeywords: analysis.missing, resumeFeedback: analysis.feedback },
+          {
+            targetDomain: targetRole,
+            atsScore: analysis.atsScore,
+            resumeKeywordsMatched: analysis.keywordMatchAnalysis?.matchedKeywords || analysis.matched || [],
+            missingKeywords: analysis.keywordMatchAnalysis?.missingKeywords || analysis.missing || [],
+            resumeFeedback: analysis.improvementSuggestions || analysis.feedback || [],
+            $push: { resumeAnalyses: { $each: [analysisRecord], $position: 0 } }
+          },
           { upsert: true, new: true }
         );
+        savedAnalysisId = profile.resumeAnalyses?.[0]?._id;
       }
     }
 
     res.status(200).json({
       success: true,
+      message: `Resume successfully analyzed with ${analysis.analyzedBy}`,
       data: {
+        analysisId: savedAnalysisId,
+        fileName: 'Pasted Resume Text',
         targetRole,
-        atsScore: analysis.atsScore,
-        grade: analysis.grade,
-        matchedKeywords: analysis.matched,
-        missingKeywords: analysis.missing,
-        feedback: analysis.feedback
+        extractedTextSnippet: resumeText.substring(0, 200),
+        ...analysis,
+        // Backward-compatibility aliases
+        matchedKeywords: analysis.keywordMatchAnalysis?.matchedKeywords || analysis.matched || [],
+        missingKeywords: analysis.keywordMatchAnalysis?.missingKeywords || analysis.missing || [],
+        feedback: analysis.improvementSuggestions || analysis.feedback || [],
+        jdMatchScore: analysis.jobDescriptionComparison?.matchScore || 0,
+        hasJobDescription: Boolean(jobDescription && jobDescription.trim().length > 30)
       }
     });
   } catch (err) {

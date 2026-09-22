@@ -208,6 +208,9 @@ export const academicAPI = {
   predictAttendance: (data) => api.post('/academic/predict-attendance', data),
   predictSGPA: (data) => api.post('/academic/predict-sgpa', data),
   generateQuiz: (data) => api.post('/academic/generate-quiz', data),
+  submitQuiz: (data) => api.post('/academic/submit-quiz', data),
+  getQuizHistory: () => api.get('/academic/quiz-history'),
+  getQuizById: (id) => api.get(`/academic/quizzes/${id}`),
   getStudyPlan: () => api.get('/academic/study-plan'),
   getRecommendations: () => api.get('/academic/recommendations')
 };

@@ -349,6 +349,12 @@ export const runStudentSupportAgent = async ({
     process.env.AZURE_OPENAI_ENDPOINT &&
     process.env.AZURE_OPENAI_API_KEY &&
     !process.env.AZURE_OPENAI_ENDPOINT.includes('mock-');
+  console.log("=== AZURE DEBUG ===");
+  console.log("ENDPOINT:", process.env.AZURE_OPENAI_ENDPOINT);
+  console.log("API KEY EXISTS:", !!process.env.AZURE_OPENAI_API_KEY);
+  console.log("DEPLOYMENT:", process.env.AZURE_OPENAI_DEPLOYMENT_NAME);
+  console.log("IS CONFIGURED:", isAzureConfigured);
+  console.log("===================");
 
   if (isAzureConfigured) {
     try {

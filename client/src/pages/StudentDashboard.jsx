@@ -631,7 +631,14 @@ const StudentDashboard = () => {
       </ModalPortal>
 
       {/* Quick Access Shortcuts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+        <Link to="/academic-tools?tab=quiz" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <BookOpen size={24} color="var(--accent-cyan)" />
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>AI Quiz Studio</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Azure AI (gpt-4.1-mini)</div>
+          </div>
+        </Link>
         <Link to="/attendance" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <BarChart2 size={24} color="var(--primary)" />
           <div>

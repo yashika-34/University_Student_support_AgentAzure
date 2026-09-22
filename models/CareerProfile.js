@@ -1,30 +1,62 @@
 import mongoose from 'mongoose';
 
-const resumeAnalysisSchema = new mongoose.Schema({
-  originalFileName: { type: String, default: 'resume.pdf' },
-  uploadedAt: { type: Date, default: Date.now },
-  targetRole: { type: String, default: 'Fullstack Cloud Engineer' },
-  jobDescription: { type: String, default: '' },
-  extractedTextSnippet: { type: String, default: '' }, // first 500 chars
-  wordCount: { type: Number, default: 0 },
-  detectedSections: [{ type: String }],
-  atsScore: { type: Number, min: 0, max: 100, default: 0 },
-  jdMatchScore: { type: Number, min: 0, max: 100, default: 0 },
-  grade: { type: String, default: 'Needs Optimization' },
-  matchedKeywords: [{ type: String }],
-  missingKeywords: [{ type: String }],
-  jdMatchedKeywords: [{ type: String }],
-  jdMissingKeywords: [{ type: String }],
-  sectionScores: {
-    keywords: { type: Number, default: 0 },
-    sections: { type: Number, default: 0 },
-    quantification: { type: Number, default: 0 },
-    actionVerbs: { type: Number, default: 0 },
-    length: { type: Number, default: 0 }
+const resumeAnalysisSchema = new mongoose.Schema(
+  {
+    originalFileName: { type: String, default: 'resume.pdf' },
+    uploadedAt: { type: Date, default: Date.now },
+    targetRole: { type: String, default: 'Fullstack Cloud Engineer' },
+    jobDescription: { type: String, default: '' },
+    extractedTextSnippet: { type: String, default: '' },
+    wordCount: { type: Number, default: 0 },
+    detectedSections: [{ type: String }],
+    atsScore: { type: Number, min: 0, max: 100, default: 0 },
+    grade: { type: String, default: 'Needs Optimization' },
+    resumeSummary: { type: String, default: '' },
+    skillsDetected: [{ type: String }],
+    missingSkills: [{ type: String }],
+    keywordMatchAnalysis: {
+      matchPercentage: { type: Number, default: 0 },
+      matchedKeywords: [{ type: String }],
+      missingKeywords: [{ type: String }],
+      suggestedKeywords: [{ type: String }]
+    },
+    experienceAnalysis: {
+      rating: { type: String, default: '' },
+      feedback: { type: String, default: '' },
+      strengths: [{ type: String }],
+      improvements: [{ type: String }]
+    },
+    educationAnalysis: {
+      rating: { type: String, default: '' },
+      feedback: { type: String, default: '' }
+    },
+    sectionFeedback: {
+      contactInfo: { score: Number, status: String, feedback: String },
+      summary: { score: Number, status: String, feedback: String },
+      skills: { score: Number, status: String, feedback: String },
+      projects: { score: Number, status: String, feedback: String },
+      experience: { score: Number, status: String, feedback: String },
+      education: { score: Number, status: String, feedback: String }
+    },
+    strengths: [{ type: String }],
+    weaknesses: [{ type: String }],
+    improvementSuggestions: [{ type: String }],
+    careerRecommendations: {
+      recommendedRoles: [{ type: String }],
+      recommendedCertifications: [{ type: String }],
+      actionPlan: [{ type: String }]
+    },
+    jobDescriptionComparison: {
+      hasJd: { type: Boolean, default: false },
+      matchScore: { type: Number, default: 0 },
+      alignmentSummary: { type: String, default: '' },
+      matchedRequirements: [{ type: String }],
+      missingRequirements: [{ type: String }]
+    },
+    analyzedBy: { type: String, default: 'Azure OpenAI gpt-4.1-mini' }
   },
-  feedback: [{ type: String }],
-  strengths: [{ type: String }]
-}, { _id: true });
+  { _id: true }
+);
 
 const careerProfileSchema = new mongoose.Schema(
   {
@@ -47,7 +79,6 @@ const careerProfileSchema = new mongoose.Schema(
     resumeKeywordsMatched: [{ type: String }],
     missingKeywords: [{ type: String }],
     resumeFeedback: [{ type: String }],
-    // Full analysis history — one entry per upload
     resumeAnalyses: [resumeAnalysisSchema],
     interviewSimulations: [
       {

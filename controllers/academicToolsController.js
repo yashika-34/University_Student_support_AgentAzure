@@ -1,5 +1,77 @@
+import { AzureOpenAI } from 'openai';
 import { AcademicPrediction, Quiz, StudyPlan } from '../models/index.js';
 import ExamSchedule from '../models/ExamSchedule.js';
+
+/**
+ * Initialize Azure OpenAI Client with fallback handling
+ */
+const getAzureOpenAIClient = () => {
+  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+  const apiKey = process.env.AZURE_OPENAI_API_KEY;
+
+  if (!endpoint || !apiKey || endpoint.includes('mock-')) {
+    return null;
+  }
+
+  return new AzureOpenAI({
+    endpoint,
+    apiKey,
+    apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
+    deployment: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini'
+  });
+};
+
+/**
+ * Subject reference mapping
+ */
+const SUBJECT_DETAILS = {
+  'DNN': 'Deep Neural Networks (Architectures, Backpropagation, CNNs, RNNs, Transformers, Optimization, Activation Functions)',
+  'CNDC': 'Computer Networks and Data Communication (OSI & TCP/IP models, Routing Protocols, IP Addressing, Congestion Control, Transport Layer, Sockets)',
+  'Programming Abstractions': 'Programming Abstractions (Object-Oriented Design, Functional Programming, Memory Management, Polymorphism, Concurrency, Design Patterns)',
+  'System Design': 'System Design (Scalability, Load Balancing, Caching, Sharding, Microservices, CAP Theorem, Database Replication, Message Queues)',
+  'Data Structures & Algorithms': 'Data Structures & Algorithms (Trees, Graphs, Dynamic Programming, Heaps, Hashing, Time & Space Complexity, Greedy Algorithms)'
+};
+
+/**
+ * Validate and sanitize generated MCQs
+ */
+const validateAndFormatQuestions = (rawQuestions) => {
+  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
+    throw new Error('AI response did not contain an array of questions.');
+  }
+
+  return rawQuestions.map((q, idx) => {
+    const questionText = (q.question || q.questionText || '').trim();
+    if (!questionText) {
+      throw new Error(`Question at index ${idx} is missing question text.`);
+    }
+
+    const options = Array.isArray(q.options) ? q.options.map((opt) => String(opt).trim()) : [];
+    if (options.length !== 4 || options.some((opt) => !opt)) {
+      throw new Error(`Question "${questionText.slice(0, 30)}..." must have exactly 4 valid non-empty options.`);
+    }
+
+    let correctIndex = q.correctOptionIndex !== undefined ? q.correctOptionIndex : q.correctIndex;
+    if (typeof correctIndex === 'string') {
+      correctIndex = parseInt(correctIndex, 10);
+    }
+    if (isNaN(correctIndex) || correctIndex < 0 || correctIndex > 3) {
+      correctIndex = 0;
+    }
+
+    const explanation = (q.explanation || 'Review the core concept principles.').trim();
+
+    return {
+      questionId: `q-${idx + 1}-${Date.now().toString(36)}`,
+      questionText,
+      question: questionText,
+      options,
+      correctIndex,
+      correctOptionIndex: correctIndex,
+      explanation
+    };
+  });
+};
 
 /**
  * Predict Attendance & Recovery Trajectory
@@ -45,18 +117,18 @@ export const predictAttendance = async (req, res) => {
  */
 export const predictSGPA = async (req, res) => {
   try {
-    const { courses = [], currentCgpa = 3.82, completedCredits = 74 } = req.body;
+    const { courses = [], currentCgpa = 8.65, completedCredits = 74 } = req.body;
 
     const gradePointsMap = {
-      'A+': 4.0,
-      'A': 4.0,
-      'A-': 3.7,
-      'B+': 3.3,
-      'B': 3.0,
-      'B-': 2.7,
-      'C+': 2.3,
-      'C': 2.0,
-      'D': 1.0,
+      'A+': 10.0,
+      'A': 9.0,
+      'A-': 8.5,
+      'B+': 8.0,
+      'B': 7.0,
+      'B-': 6.5,
+      'C+': 6.0,
+      'C': 5.0,
+      'D': 4.0,
       'F': 0.0
     };
 
@@ -65,14 +137,14 @@ export const predictSGPA = async (req, res) => {
 
     courses.forEach((c) => {
       const credits = Number(c.credits) || 3;
-      const points = gradePointsMap[c.expectedGrade] || 3.0;
+      const points = gradePointsMap[c.expectedGrade] || 8.0;
       semesterPoints += points * credits;
       semesterCredits += credits;
     });
 
     const projectedSgpa = semesterCredits > 0
       ? Number((semesterPoints / semesterCredits).toFixed(2))
-      : 3.5;
+      : 8.5;
 
     const totalCredits = completedCredits + semesterCredits;
     const totalWeightedPoints = (currentCgpa * completedCredits) + semesterPoints;
@@ -89,7 +161,7 @@ export const predictSGPA = async (req, res) => {
         completedCredits,
         semesterCredits,
         totalCredits,
-        honorsEligible: projectedCgpa >= 3.8
+        honorsEligible: projectedCgpa >= 8.5
       }
     });
   } catch (err) {
@@ -98,52 +170,267 @@ export const predictSGPA = async (req, res) => {
 };
 
 /**
- * Generate AI Practice Quiz
+ * Generate AI Practice Quiz using Azure AI Foundry (Azure OpenAI GPT-4.1-mini)
+ * Accepts: topic, difficulty ('Easy', 'Medium', 'Hard'), numberOfQuestions (count)
  */
 export const generateQuiz = async (req, res) => {
   try {
-    const { topic = 'Dynamic Programming & Memoization', difficulty = 'Medium', count = 3 } = req.body;
+    const {
+      topic = 'Data Structures & Algorithms',
+      difficulty = 'Medium',
+      count,
+      numberOfQuestions = 5,
+      courseCode
+    } = req.body;
 
-    const quizQuestions = [
-      {
-        questionId: 'q1',
-        question: 'What is the primary difference between top-down memoization and bottom-up tabulation in Dynamic Programming?',
-        options: [
-          'Memoization is iterative while tabulation uses recursion.',
-          'Memoization uses recursion with cached subproblem results while tabulation solves subproblems iteratively.',
-          'Tabulation requires exponential memory whereas memoization is O(1) space.',
-          'There is no theoretical or operational difference.'
-        ],
-        correctOptionIndex: 1,
-        explanation: 'Top-down memoization maintains recursive call stacks and caches solutions, while bottom-up tabulation builds the solution iteratively from the base cases.'
-      },
-      {
-        questionId: 'q2',
-        question: 'In the 0/1 Knapsack Problem with N items and maximum weight W, what is the optimal dynamic programming time complexity?',
-        options: ['O(N log N)', 'O(N * W)', 'O(2^N)', 'O(N^2)'],
-        correctOptionIndex: 1,
-        explanation: 'The standard dynamic programming solution runs in pseudo-polynomial time O(N * W) using a 2D table or 1D array optimization.'
-      },
-      {
-        questionId: 'q3',
-        question: 'Which of the following shortest path algorithms can handle negative weight edges without negative cycles?',
-        options: ["Dijkstra's Algorithm", 'Bellman-Ford Algorithm', "Prim's MST", "Kruskal's Algorithm"],
-        correctOptionIndex: 1,
-        explanation: 'The Bellman-Ford algorithm relaxes edges V-1 times and correctly determines shortest paths in graphs with negative weight edges, also detecting negative cycles.'
+    const numQuestions = Math.min(Math.max(parseInt(count || numberOfQuestions, 10) || 5, 2), 10);
+    const validDifficulty = ['Easy', 'Medium', 'Hard'].includes(difficulty) ? difficulty : 'Medium';
+    const resolvedSubject = SUBJECT_DETAILS[topic] || topic;
+    const subjectCode = courseCode || (Object.keys(SUBJECT_DETAILS).includes(topic) ? topic : 'CS-AI');
+
+    const client = getAzureOpenAIClient();
+
+    if (!client) {
+      return res.status(503).json({
+        success: false,
+        message: 'Azure OpenAI is not configured in the backend environment.'
+      });
+    }
+
+    const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini';
+
+    const systemPrompt = `You are a distinguished university computer science professor.
+Your role is to generate high-yield, academically rigorous multiple-choice practice questions (MCQs).
+Rules:
+1. Return ONLY a valid JSON array of question objects.
+2. Do NOT include markdown code blocks (\`\`\`json or \`\`\`), backticks, or any conversational preamble.
+3. Every question must have exactly 4 options.
+4. "correctOptionIndex" must be the integer 0, 1, 2, or 3 corresponding to the correct option in "options".
+5. Provide a clear, educational "explanation" for why that option is correct.
+JSON Schema:
+[
+  {
+    "question": "Question text...",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "correctOptionIndex": 0,
+    "explanation": "Detailed explanation..."
+  }
+]`;
+
+    const userPrompt = `Generate ${numQuestions} multiple-choice questions on the topic: "${resolvedSubject}".
+Difficulty Level: ${validDifficulty}.
+Ensure options are distinct and plausible, with no ambiguous answers. Return valid JSON only.`;
+
+    let questions = null;
+    let lastError = null;
+
+    // Retry mechanism: up to 2 attempts
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const completion = await client.chat.completions.create({
+          model: deployment,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: attempt === 1 ? 0.4 : 0.2,
+          max_tokens: 2200
+        });
+
+        let rawContent = completion.choices[0]?.message?.content?.trim() || '';
+
+        // Clean any markdown wrappers
+        if (rawContent.startsWith('```')) {
+          rawContent = rawContent.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+        }
+
+        const parsedJson = JSON.parse(rawContent);
+        questions = validateAndFormatQuestions(parsedJson);
+
+        if (questions && questions.length > 0) {
+          break; // Successfully validated
+        }
+      } catch (err) {
+        lastError = err;
+        console.warn(`[AI Quiz Studio] Generation attempt ${attempt} failed:`, err.message);
       }
-    ];
+    }
+
+    if (!questions || questions.length === 0) {
+      throw new Error(lastError ? `Azure OpenAI generation failed: ${lastError.message}` : 'Failed to generate valid quiz questions.');
+    }
+
+    // Save quiz to MongoDB using Quiz model
+    const studentId = req.user?._id || req.user?.id || null;
+
+    const newQuiz = await Quiz.create({
+      courseCode: subjectCode,
+      topic: topic,
+      difficulty: validDifficulty,
+      numberOfQuestions: questions.length,
+      questions: questions.map((q) => ({
+        questionId: q.questionId,
+        questionText: q.questionText,
+        question: q.question,
+        options: q.options,
+        correctIndex: q.correctIndex,
+        correctOptionIndex: q.correctOptionIndex,
+        explanation: q.explanation
+      })),
+      createdBy: `Azure OpenAI (${deployment})`,
+      student: studentId
+    });
 
     res.status(200).json({
       success: true,
+      message: `Generated ${questions.length} questions using Azure AI (${deployment})`,
       data: {
-        topic,
-        difficulty,
-        totalQuestions: quizQuestions.length,
-        questions: quizQuestions
+        quizId: newQuiz._id,
+        courseCode: newQuiz.courseCode,
+        topic: newQuiz.topic,
+        difficulty: newQuiz.difficulty,
+        totalQuestions: questions.length,
+        questions: questions,
+        createdAt: newQuiz.createdAt
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[generateQuiz Error]:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to generate AI quiz. Please try again.'
+    });
+  }
+};
+
+/**
+ * Submit Quiz Answers and Calculate Score
+ * @route POST /api/v1/academic/quizzes/:id/submit OR /api/v1/academic/submit-quiz
+ */
+export const submitQuiz = async (req, res) => {
+  try {
+    const quizId = req.params.id || req.body.quizId;
+    const { selectedAnswers = {} } = req.body;
+
+    if (!quizId) {
+      return res.status(400).json({ success: false, message: 'Quiz ID is required for submission.' });
+    }
+
+    const quiz = await Quiz.findById(quizId);
+    if (!quiz) {
+      return res.status(404).json({ success: false, message: 'Quiz not found.' });
+    }
+
+    const totalQuestions = quiz.questions.length;
+    let correctCount = 0;
+
+    const evaluatedQuestions = quiz.questions.map((q, idx) => {
+      const selected = selectedAnswers[idx] !== undefined
+        ? Number(selectedAnswers[idx])
+        : selectedAnswers[q.questionId] !== undefined
+          ? Number(selectedAnswers[q.questionId])
+          : -1;
+
+      const isCorrect = selected === q.correctIndex;
+      if (isCorrect) correctCount++;
+
+      return {
+        index: idx,
+        questionId: q.questionId,
+        questionText: q.questionText,
+        options: q.options,
+        selectedOptionIndex: selected,
+        correctOptionIndex: q.correctIndex,
+        isCorrect,
+        explanation: q.explanation
+      };
+    });
+
+    const wrongCount = totalQuestions - correctCount;
+    const percentage = totalQuestions > 0 ? Number(((correctCount / totalQuestions) * 100).toFixed(1)) : 0;
+
+    // Save attempt onto Quiz document
+    quiz.attempt = {
+      score: correctCount,
+      totalQuestions,
+      correctCount,
+      wrongCount,
+      percentage,
+      selectedAnswers,
+      submittedAt: new Date()
+    };
+
+    if (req.user?._id && !quiz.student) {
+      quiz.student = req.user._id;
+    }
+
+    await quiz.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Quiz evaluated and score recorded successfully.',
+      data: {
+        quizId: quiz._id,
+        topic: quiz.topic,
+        difficulty: quiz.difficulty,
+        totalQuestions,
+        totalScore: `${correctCount} / ${totalQuestions}`,
+        score: correctCount,
+        correctAnswers: correctCount,
+        wrongAnswers: wrongCount,
+        percentage,
+        evaluatedQuestions,
+        submittedAt: quiz.attempt.submittedAt
+      }
+    });
+  } catch (err) {
+    console.error('[submitQuiz Error]:', err);
+    res.status(500).json({ success: false, message: err.message || 'Failed to evaluate quiz.' });
+  }
+};
+
+/**
+ * Get Quiz History for Current Student
+ * @route GET /api/v1/academic/quiz-history
+ */
+export const getQuizHistory = async (req, res) => {
+  try {
+    const studentId = req.user?._id || req.user?.id;
+    const filter = studentId ? { student: studentId } : {};
+
+    const quizzes = await Quiz.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .select('topic difficulty courseCode numberOfQuestions attempt createdAt createdBy');
+
+    res.status(200).json({
+      success: true,
+      count: quizzes.length,
+      data: quizzes
+    });
+  } catch (err) {
+    console.error('[getQuizHistory Error]:', err);
+    res.status(500).json({ success: false, message: err.message || 'Failed to retrieve quiz history.' });
+  }
+};
+
+/**
+ * Get Single Quiz by ID
+ * @route GET /api/v1/academic/quizzes/:id
+ */
+export const getQuizById = async (req, res) => {
+  try {
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) {
+      return res.status(404).json({ success: false, message: 'Quiz not found.' });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: quiz
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to load quiz.' });
   }
 };
 
