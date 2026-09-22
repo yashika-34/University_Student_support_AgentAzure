@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../services/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import ModalPortal from '../components/ModalPortal.jsx';
@@ -27,7 +28,12 @@ import {
   DollarSign,
   BarChart3,
   MessageSquare,
-  Loader2
+  Loader2,
+  Bot,
+  History,
+  Plus,
+  Trash2,
+  Check
 } from 'lucide-react';
 
 /* ─── Shared Modal Overlay Style ───────────────────────────────────── */
@@ -81,9 +87,20 @@ const StatCard = ({ icon: Icon, label, value, color, sub }) => (
 /* ═══════════════════════════════════════════════════════════════════════
    CAREER HUB PAGE — Main Component
    ═══════════════════════════════════════════════════════════════════════ */
-const CareerHubPage = () => {
+const CareerHubPage = ({ defaultTab }) => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('placement');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromQuery = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(defaultTab || tabFromQuery || 'placement');
+
+  // Keep activeTab in sync with query param or prop
+  useEffect(() => {
+    if (defaultTab) {
+      setActiveTab(defaultTab);
+    } else if (tabFromQuery && ['placement', 'resume', 'counselor', 'interview'].includes(tabFromQuery)) {
+      setActiveTab(tabFromQuery);
+    }
+  }, [defaultTab, tabFromQuery]);
 
   /* ── Placement State ───────────────────────────────────────────────── */
   const [studentCgpa, setStudentCgpa] = useState('');
@@ -112,30 +129,35 @@ const CareerHubPage = () => {
   const [atsModalOpen, setAtsModalOpen] = useState(false);
   const [resumeError, setResumeError] = useState('');
 
-  /* ── Career Counselor State ────────────────────────────────────────── */
+  /* ── Career Counselor State (Azure AI Foundry GPT-4.1-mini + MongoDB) ── */
   const [counselorInterest, setCounselorInterest] = useState('Cloud & AI Architecture');
   const [counselorSemester, setCounselorSemester] = useState('5');
-  const [counselorData, setCounselorData] = useState(null);
+  const [counselorSkills, setCounselorSkills] = useState('Python, React, Docker, SQL');
+  const [counselorGoals, setCounselorGoals] = useState('Secure an Azure Cloud & AI Architect role in Tier-1 company');
+  const [counselorInput, setCounselorInput] = useState('');
+  const [counselorMessages, setCounselorMessages] = useState([]);
+  const [counselorSessionId, setCounselorSessionId] = useState(() => 'counsel-' + Math.random().toString(36).substring(2, 10));
   const [counselorLoading, setCounselorLoading] = useState(false);
+  const [counselorSessionsList, setCounselorSessionsList] = useState([]);
+  const [counselorShowSessions, setCounselorShowSessions] = useState(false);
+  const [counselorRoadmapLoading, setCounselorRoadmapLoading] = useState(false);
+  const [counselorData, setCounselorData] = useState(null);
   const [counselorModalOpen, setCounselorModalOpen] = useState(false);
+  const counselorChatEndRef = useRef(null);
 
-  /* ── Mock Interview State ──────────────────────────────────────────── */
+  /* ── Mock Interview State (Fully Dynamic — Azure AI) ──────────────── */
   const [interviewRole, setInterviewRole] = useState('Fullstack Engineer');
-  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
+  const [interviewDifficulty, setInterviewDifficulty] = useState('Junior');
+  const [interviewCategory, setInterviewCategory] = useState('Technical Concepts');
+  const [currentQuestion, setCurrentQuestion] = useState(null);  // AI-generated question object
+  const [isGeneratingQuestion, setIsGeneratingQuestion] = useState(false);
+  const [previousQuestions, setPreviousQuestions] = useState([]); // avoid repeats
   const [interviewAnswer, setInterviewAnswer] = useState('');
   const [interviewResult, setInterviewResult] = useState(null);
   const [isEvaluatingInterview, setIsEvaluatingInterview] = useState(false);
   const [interviewModalOpen, setInterviewModalOpen] = useState(false);
   const [interviewHistory, setInterviewHistory] = useState([]);
-
-  const interviewQuestions = [
-    { id: 1, question: 'Explain how the React Virtual DOM diffing algorithm minimizes layout reflows and optimizes real-time state updates in enterprise single-page applications.', category: 'Frontend Engineering' },
-    { id: 2, question: 'How do you structure database indexing in MongoDB to optimize queries with multiple filter keys?', category: 'Backend Architecture' },
-    { id: 3, question: 'Describe a situation where an assignment deliverable had ambiguous requirements. How did you resolve it?', category: 'Behavioral / Teamwork' },
-    { id: 4, question: 'Explain the differences between SQL and NoSQL databases. When would you choose one over the other?', category: 'Database Design' },
-    { id: 5, question: 'What are microservices? Discuss the pros and cons compared to monolithic architecture.', category: 'System Design' },
-    { id: 6, question: 'Describe how you would implement authentication and authorization in a REST API.', category: 'Backend Security' }
-  ];
+  const [interviewStarted, setInterviewStarted] = useState(false);
 
   /* ── Placement Fetch ───────────────────────────────────────────────── */
   const fetchPlacements = useCallback(async () => {
@@ -287,43 +309,221 @@ const CareerHubPage = () => {
     }
   };
 
-  /* ── Career Counselor Fetch ────────────────────────────────────────── */
-  const handleFetchCounseling = async () => {
-    setCounselorLoading(true);
+  /* ── Career Counselor Handlers (Azure AI Foundry + MongoDB) ────────── */
+  const fetchCounselorSessions = useCallback(async () => {
     try {
+      const res = await api.get('/career/counselor/sessions');
+      if (res.data?.data) {
+        setCounselorSessionsList(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to load counselor sessions:', err);
+    }
+  }, []);
+
+  // Initialize counselor chat and load past sessions on tab switch
+  useEffect(() => {
+    if (activeTab === 'counselor') {
+      fetchCounselorSessions();
+      if (counselorMessages.length === 0) {
+        setCounselorMessages([
+          {
+            messageId: 'welcome-advisor',
+            sender: 'assistant',
+            content: `👋 **Welcome to your AI Career Counselor powered by Azure AI Foundry (GPT-4.1-mini)!**\n\nI am your personalized university career strategist, tuned to current corporate recruitment bars, technical skill matrices, and semester milestones.\n\n*Review your skills and goal in the banner above, or choose a prompt below to begin your dynamic guidance session.*`,
+            suggestedNextSteps: [
+              `Review high-priority skills for ${counselorInterest}`,
+              `Explore recommended certifications for Semester ${counselorSemester}`,
+              `Generate a 6-month placement roadmap`
+            ],
+            recommendedRoles: [counselorInterest, 'Cloud Solutions Associate', 'Software Engineer'],
+            timestamp: new Date()
+          }
+        ]);
+      }
+    }
+  }, [activeTab, fetchCounselorSessions, counselorInterest, counselorSemester]);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (activeTab === 'counselor') {
+      counselorChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [counselorMessages, counselorLoading, activeTab]);
+
+  const handleSendCounselorMessage = async (customPrompt) => {
+    const textToSend = typeof customPrompt === 'string' ? customPrompt : counselorInput.trim();
+    if (!textToSend || counselorLoading) return;
+
+    const userMsg = {
+      messageId: 'usr-' + Date.now(),
+      sender: 'user',
+      content: textToSend,
+      timestamp: new Date()
+    };
+    setCounselorMessages(prev => [...prev, userMsg]);
+    setCounselorInput('');
+    setCounselorLoading(true);
+
+    try {
+      const parsedSkills = counselorSkills.split(',').map(s => s.trim()).filter(Boolean);
+      const res = await api.post('/career/counselor/message', {
+        sessionId: counselorSessionId,
+        message: textToSend,
+        interests: [counselorInterest],
+        skills: parsedSkills,
+        careerGoals: counselorGoals,
+        targetDomain: counselorInterest,
+        semester: parseInt(counselorSemester, 10) || 5,
+        cgpa: studentCgpa || ''
+      });
+
+      if (res.data?.data) {
+        const { message: aiMsg, sessionId: returnedSessionId } = res.data.data;
+        if (returnedSessionId) setCounselorSessionId(returnedSessionId);
+        setCounselorMessages(prev => [...prev, aiMsg]);
+        fetchCounselorSessions();
+      }
+    } catch (err) {
+      console.error('Career counselor message failed:', err);
+      setCounselorMessages(prev => [
+        ...prev,
+        {
+          messageId: 'err-' + Date.now(),
+          sender: 'assistant',
+          content: '⚠️ I encountered an error connecting to Azure AI Foundry. Please check your network or try asking again.',
+          timestamp: new Date()
+        }
+      ]);
+    } finally {
+      setCounselorLoading(false);
+    }
+  };
+
+  const handleLoadCounselorSession = async (sessId) => {
+    try {
+      setCounselorLoading(true);
+      const res = await api.get(`/career/counselor/sessions/${sessId}`);
+      if (res.data?.data) {
+        const s = res.data.data;
+        setCounselorSessionId(s.sessionId);
+        if (s.targetDomain) setCounselorInterest(s.targetDomain);
+        if (s.semester) setCounselorSemester(String(s.semester));
+        if (s.skills?.length) setCounselorSkills(s.skills.join(', '));
+        if (s.careerGoals) setCounselorGoals(s.careerGoals);
+        if (s.messages?.length) {
+          setCounselorMessages(s.messages);
+        }
+        setCounselorShowSessions(false);
+      }
+    } catch (err) {
+      console.error('Failed to load session:', err);
+    } finally {
+      setCounselorLoading(false);
+    }
+  };
+
+  const handleStartNewCounselorSession = () => {
+    const newId = 'counsel-' + Math.random().toString(36).substring(2, 10);
+    setCounselorSessionId(newId);
+    setCounselorMessages([
+      {
+        messageId: 'welcome-new',
+        sender: 'assistant',
+        content: `🎯 **New Career Counseling Session Started!**\n\nTargeting **${counselorInterest}** in **Semester ${counselorSemester}** with skills in **${counselorSkills}**.\n\n*What specific guidance, placement questions, or roadmap milestones would you like to explore today?*`,
+        suggestedNextSteps: [
+          'Identify missing technical skills',
+          'Explore Tier-1 placement cutoffs and expectations',
+          'Build an impactful capstone project'
+        ],
+        recommendedRoles: [counselorInterest],
+        timestamp: new Date()
+      }
+    ]);
+    setCounselorShowSessions(false);
+  };
+
+  const handleDeleteCounselorSession = async (sessId, e) => {
+    if (e) e.stopPropagation();
+    try {
+      await api.delete(`/career/counselor/sessions/${sessId}`);
+      setCounselorSessionsList(prev => prev.filter(s => s.sessionId !== sessId));
+      if (counselorSessionId === sessId) {
+        handleStartNewCounselorSession();
+      }
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+    }
+  };
+
+  /* ── Dynamic Roadmap Fetch (Azure AI GPT-4.1-mini) ──────────────────── */
+  const handleFetchCounseling = async () => {
+    setCounselorRoadmapLoading(true);
+    try {
+      const parsedSkills = counselorSkills.split(',').map(s => s.trim()).filter(Boolean);
       const res = await api.post('/career/career-counseling', {
         primaryInterest: counselorInterest,
-        semester: parseInt(counselorSemester, 10) || 5
+        semester: parseInt(counselorSemester, 10) || 5,
+        skills: parsedSkills,
+        careerGoals: counselorGoals
       });
       if (res.data?.data) {
         setCounselorData(res.data.data);
         setCounselorModalOpen(true);
       }
     } catch (err) {
-      console.error('Career counseling failed:', err);
+      console.error('Career counseling roadmap failed:', err);
     } finally {
-      setCounselorLoading(false);
+      setCounselorRoadmapLoading(false);
     }
   };
 
-  /* ── Mock Interview Evaluation ─────────────────────────────────────── */
+  /* ── Mock Interview — Dynamic AI Question Generation ──────────────── */
+  const handleGenerateQuestion = async () => {
+    setIsGeneratingQuestion(true);
+    setCurrentQuestion(null);
+    setInterviewAnswer('');
+    setInterviewResult(null);
+    try {
+      const res = await api.post('/career/interview/generate-question', {
+        role: interviewRole,
+        difficulty: interviewDifficulty,
+        category: interviewCategory,
+        previousQuestions: previousQuestions.slice(-5)
+      });
+      if (res.data?.data) {
+        setCurrentQuestion(res.data.data);
+        setPreviousQuestions(prev => [...prev, res.data.data.question]);
+        setInterviewStarted(true);
+      }
+    } catch (err) {
+      console.error('Failed to generate question:', err);
+    } finally {
+      setIsGeneratingQuestion(false);
+    }
+  };
+
+  /* ── Mock Interview — Dynamic AI Evaluation ──────────────────────── */
   const handleEvaluateInterview = async () => {
-    if (!interviewAnswer.trim()) return;
+    if (!interviewAnswer.trim() || !currentQuestion) return;
     setIsEvaluatingInterview(true);
     try {
-      const currentQ = interviewQuestions[currentQuestionIdx];
       const res = await api.post('/career/simulate-interview', {
         role: interviewRole,
-        questionId: currentQ.id,
+        question: currentQuestion.question,
+        category: currentQuestion.category,
+        difficulty: interviewDifficulty,
         answerText: interviewAnswer
       });
       if (res.data?.data) {
         setInterviewResult(res.data.data);
         setInterviewHistory(prev => [...prev, {
-          question: currentQ.question,
-          category: currentQ.category,
+          question: currentQuestion.question,
+          category: currentQuestion.category,
+          difficulty: interviewDifficulty,
           score: res.data.data.score,
-          answer: interviewAnswer.substring(0, 100) + '...'
+          grade: res.data.data.grade,
+          answer: interviewAnswer.substring(0, 120) + (interviewAnswer.length > 120 ? '...' : '')
         }]);
         setInterviewModalOpen(true);
       }
@@ -335,10 +535,10 @@ const CareerHubPage = () => {
   };
 
   const handleNextQuestion = () => {
-    setCurrentQuestionIdx((prev) => (prev + 1) % interviewQuestions.length);
     setInterviewAnswer('');
     setInterviewResult(null);
     setInterviewModalOpen(false);
+    handleGenerateQuestion();
   };
 
   /* ── Registration Modal & DB-Backed Handlers ───────────────────────── */
@@ -772,71 +972,418 @@ const CareerHubPage = () => {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-         TAB 3 — AI Career Counselor
+         TAB 3 — AI Career Counselor (Azure AI Foundry GPT-4.1-mini)
          ═══════════════════════════════════════════════════════════════ */}
       {activeTab === 'counselor' && (
-        <div className="glass-panel" style={{ padding: '2rem' }}>
-          <h2 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Compass size={20} color="var(--accent-purple)" /> Guided Career Counselor &amp; Roadmap
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-            Get AI-modeled competency paths tailored to your program and career interests.
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Career Interest / Domain</label>
-              <select
-                className="form-input"
-                value={counselorInterest}
-                onChange={(e) => setCounselorInterest(e.target.value)}
-              >
-                <option value="Cloud & AI Architecture">Cloud & AI Architecture</option>
-                <option value="Frontend Engineering">Frontend Engineering</option>
-                <option value="Data Science & Analytics">Data Science & Analytics</option>
-                <option value="Cybersecurity">Cybersecurity</option>
-                <option value="Product Management">Product Management</option>
-                <option value="DevOps & SRE">DevOps & SRE</option>
-              </select>
+        <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          
+          {/* Header Row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-purple)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+                <Sparkles size={14} /> Powered by Azure AI Foundry (gpt-4.1-mini)
+              </div>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: '0 0 0.25rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Compass size={22} color="var(--accent-purple)" /> AI Career Counselor &amp; Roadmap Strategist
+              </h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+                Dynamic 1-on-1 career guidance tailored to your semester, skillset, and corporate placement ambitions.
+              </p>
             </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Current Semester</label>
-              <select
-                className="form-input"
-                value={counselorSemester}
-                onChange={(e) => setCounselorSemester(e.target.value)}
+
+            {/* Session Action Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <button
+                type="button"
+                onClick={handleStartNewCounselorSession}
+                className="btn"
+                style={{
+                  background: 'var(--bg-input)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.82rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.5rem 0.85rem'
+                }}
               >
-                {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
-                  <option key={s} value={s}>Semester {s}</option>
-                ))}
-              </select>
+                <Plus size={14} /> New Session
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCounselorShowSessions(!counselorShowSessions);
+                  fetchCounselorSessions();
+                }}
+                className="btn"
+                style={{
+                  background: counselorShowSessions ? 'var(--primary-gradient)' : 'var(--bg-input)',
+                  border: '1px solid var(--border-subtle)',
+                  color: counselorShowSessions ? '#ffffff' : 'var(--text-primary)',
+                  fontSize: '0.82rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.5rem 0.85rem'
+                }}
+              >
+                <History size={14} /> Saved Sessions ({counselorSessionsList.length})
+              </button>
             </div>
           </div>
 
-          <button
-            onClick={handleFetchCounseling}
-            className="btn btn-primary"
-            disabled={counselorLoading}
-            style={{ width: '100%', padding: '0.85rem' }}
+          {/* Collapsible Past Sessions Drawer */}
+          {counselorShowSessions && (
+            <div style={{ padding: '1.25rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  📁 Previous Counseling Sessions (MongoDB)
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Click any session to restore chat history
+                </span>
+              </div>
+              {counselorSessionsList.length === 0 ? (
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', padding: '0.5rem 0' }}>
+                  No saved counseling sessions yet. Start chatting below to automatically persist your sessions.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
+                  {counselorSessionsList.map((s) => (
+                    <div
+                      key={s.sessionId}
+                      onClick={() => handleLoadCounselorSession(s.sessionId)}
+                      style={{
+                        padding: '0.85rem 1rem',
+                        background: counselorSessionId === s.sessionId ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-card)',
+                        border: counselorSessionId === s.sessionId ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <div style={{ overflow: 'hidden' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {s.title}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                          {s.targetDomain} • {s.messageCount} msg{s.messageCount !== 1 ? 's' : ''} • Sem {s.semester}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteCounselorSession(s.sessionId, e)}
+                        title="Delete session"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          padding: '0.25rem'
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Student Profile Configuration Bar */}
+          <div style={{ padding: '1.25rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Target size={15} /> Your Counseling Profile &amp; Focus Area
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Azure AI customizes all roadmaps and recommendations to these parameters
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.78rem' }}>Target Domain / Field</label>
+                <select
+                  className="form-input"
+                  value={counselorInterest}
+                  onChange={(e) => setCounselorInterest(e.target.value)}
+                  style={{ fontSize: '0.82rem' }}
+                >
+                  <option value="Cloud & AI Architecture">Cloud &amp; AI Architecture</option>
+                  <option value="Fullstack Software Engineering">Fullstack Software Engineering</option>
+                  <option value="Frontend Engineering">Frontend Engineering</option>
+                  <option value="Backend Engineering">Backend Engineering</option>
+                  <option value="Data Science & Machine Learning">Data Science &amp; Machine Learning</option>
+                  <option value="Cybersecurity & Defense">Cybersecurity &amp; Defense</option>
+                  <option value="DevOps & Site Reliability Engineering">DevOps &amp; Site Reliability Engineering</option>
+                  <option value="Product Management">Product Management</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.78rem' }}>Current Semester</label>
+                <select
+                  className="form-input"
+                  value={counselorSemester}
+                  onChange={(e) => setCounselorSemester(e.target.value)}
+                  style={{ fontSize: '0.82rem' }}
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                    <option key={s} value={s}>Semester {s}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.78rem' }}>Current Skills (comma-separated)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={counselorSkills}
+                  onChange={(e) => setCounselorSkills(e.target.value)}
+                  placeholder="e.g. Python, React, Docker, SQL"
+                  style={{ fontSize: '0.82rem' }}
+                />
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.78rem' }}>Career Goal</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={counselorGoals}
+                  onChange={(e) => setCounselorGoals(e.target.value)}
+                  placeholder="e.g. Tier-1 placement as an Azure Cloud Architect"
+                  style={{ fontSize: '0.82rem' }}
+                />
+              </div>
+            </div>
+
+            {/* Quick Roadmap Action */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.25rem', borderTop: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                💡 Tip: Hit roadmap generation to get formal AI salary ranges, electives, and semester milestones.
+              </div>
+              <button
+                type="button"
+                onClick={handleFetchCounseling}
+                className="btn btn-primary"
+                disabled={counselorRoadmapLoading}
+                style={{ padding: '0.5rem 1.1rem', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                {counselorRoadmapLoading ? (
+                  <><RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> Generating AI Roadmap...</>
+                ) : (
+                  <><Compass size={14} /> Generate Full Semester Roadmap Modal</>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Chat Messages Box */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: '380px',
+              maxHeight: '520px',
+              overflowY: 'auto',
+              padding: '1.25rem',
+              background: 'var(--bg-input)',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-subtle)',
+              gap: '1.2rem'
+            }}
           >
-            {counselorLoading ? (
-              <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Generating Career Path...</>
-            ) : (
-              <><Compass size={16} /> Generate Personalized Career Roadmap</>
-            )}
-          </button>
+            {counselorMessages.map((msg, idx) => {
+              const isUser = msg.sender === 'user';
+              return (
+                <div
+                  key={msg.messageId || idx}
+                  style={{
+                    display: 'flex',
+                    flexDirection: isUser ? 'row-reverse' : 'row',
+                    gap: '0.75rem',
+                    alignItems: 'flex-start',
+                    maxWidth: '100%'
+                  }}
+                >
+                  {/* Avatar */}
+                  <div
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      background: isUser ? '#334155' : 'var(--primary-gradient)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      marginTop: 2
+                    }}
+                  >
+                    {isUser ? <Users size={16} /> : <Bot size={16} />}
+                  </div>
 
-          {/* Static Career Overview Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', marginTop: '2rem' }}>
-            <StatCard icon={DollarSign} label="Avg Starting Salary" value="₹18-30 LPA" color="var(--success)" sub="Cloud & AI roles" />
-            <StatCard icon={TrendingUp} label="Market Growth" value="+34%" color="var(--primary)" sub="5-year projected demand" />
-            <StatCard icon={Award} label="Top Skill" value="Kubernetes" color="var(--accent-purple)" sub="Most sought-after skill" />
+                  {/* Message Bubble */}
+                  <div style={{ maxWidth: '82%', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div
+                      style={{
+                        padding: '0.9rem 1.15rem',
+                        borderRadius: isUser ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                        background: isUser ? 'var(--primary-gradient)' : 'var(--bg-card)',
+                        color: isUser ? '#ffffff' : 'var(--text-primary)',
+                        border: isUser ? 'none' : '1px solid var(--border-subtle)',
+                        fontSize: '0.88rem',
+                        lineHeight: 1.6,
+                        whiteSpace: 'pre-wrap',
+                        boxShadow: isUser ? '0 4px 14px rgba(59, 130, 246, 0.25)' : 'var(--shadow-sm)'
+                      }}
+                    >
+                      {msg.content}
+                    </div>
+
+                    {/* Metadata Badges from AI (Recommended Roles & Action Steps) */}
+                    {!isUser && (
+                      <>
+                        {msg.recommendedRoles?.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>Suggested Roles:</span>
+                            {msg.recommendedRoles.map((role, rIdx) => (
+                              <span key={rIdx} className="badge badge-primary" style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem' }}>
+                                <Briefcase size={11} /> {role}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {msg.suggestedNextSteps?.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.15rem' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>Action Checklist:</span>
+                            {msg.suggestedNextSteps.map((step, sIdx) => (
+                              <div
+                                key={sIdx}
+                                style={{
+                                  fontSize: '0.78rem',
+                                  color: 'var(--text-secondary)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.4rem',
+                                  padding: '0.25rem 0.6rem',
+                                  background: 'rgba(59, 130, 246, 0.06)',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(59, 130, 246, 0.15)'
+                                }}
+                              >
+                                <Check size={12} color="var(--success)" /> {step}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textAlign: isUser ? 'right' : 'left' }}>
+                      {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* AI Typing Indicator */}
+            {counselorLoading && (
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--primary-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
+                  <Bot size={16} />
+                </div>
+                <div style={{ padding: '0.65rem 1rem', borderRadius: '14px 14px 14px 2px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Loader2 size={14} className="animate-spin" color="var(--primary)" />
+                  <span>Azure AI Foundry GPT-4.1-mini is analyzing your profile...</span>
+                </div>
+              </div>
+            )}
+
+            <div ref={counselorChatEndRef} />
           </div>
+
+          {/* Quick Prompt Suggestion Pills */}
+          <div style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.3rem' }}>
+            {[
+              `What skills should I prioritize in Semester ${counselorSemester}?`,
+              `Recommend 3 impressive capstone projects for ${counselorInterest}`,
+              `Which certifications are most respected by hiring managers?`,
+              `Evaluate my current skillset and highlight gaps for campus placements`,
+              `How should I prepare for technical interviews in this domain?`
+            ].map((promptText, pIdx) => (
+              <button
+                key={pIdx}
+                type="button"
+                onClick={() => handleSendCounselorMessage(promptText)}
+                disabled={counselorLoading}
+                style={{
+                  background: 'var(--bg-input)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-full)',
+                  padding: '0.35rem 0.8rem',
+                  fontSize: '0.75rem',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s'
+                }}
+              >
+                💡 {promptText}
+              </button>
+            ))}
+          </div>
+
+          {/* Chat Input Bar */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendCounselorMessage();
+            }}
+            style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}
+          >
+            <input
+              type="text"
+              className="form-input"
+              value={counselorInput}
+              onChange={(e) => setCounselorInput(e.target.value)}
+              placeholder={`Ask anything regarding career roadmaps, skill gaps, or campus drive preparation...`}
+              disabled={counselorLoading}
+              style={{ flex: 1, padding: '0.75rem 1rem', fontSize: '0.88rem' }}
+            />
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={counselorLoading || !counselorInput.trim()}
+              style={{ padding: '0.75rem 1.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              {counselorLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+              <span>Send</span>
+            </button>
+          </form>
+
+          {/* Live Market Benchmark Stat Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', marginTop: '0.5rem' }}>
+            <StatCard icon={DollarSign} label="Target Starting Salary" value="₹18-32 LPA" color="var(--success)" sub={`${counselorInterest} Tier-1`} />
+            <StatCard icon={TrendingUp} label="Market Demand Growth" value="+34%" color="var(--primary)" sub="5-year projected trajectory" />
+            <StatCard icon={Award} label="Core High-Impact Skill" value="Cloud & AI" color="var(--accent-purple)" sub="Top requested capability" />
+          </div>
+
         </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-         TAB 4 — AI Mock Interview Simulator
+         TAB 4 — AI Mock Interview Simulator (Fully Dynamic with Azure AI)
          ═══════════════════════════════════════════════════════════════ */}
       {activeTab === 'interview' && (
         <div className="glass-panel" style={{ padding: '2rem' }}>
@@ -844,32 +1391,54 @@ const CareerHubPage = () => {
             <Sparkles size={20} color="var(--primary)" /> Interactive AI Mock Interview Studio
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-            Answer realistic technical and behavioral questions. Receive real-time assessment and feedback.
+            AI-powered interview simulation. Every question is dynamically generated by Azure GPT-4.1-mini based on your chosen role, difficulty, and category.
           </p>
 
-          {/* Interview Role Selection */}
-          <div className="form-group" style={{ margin: '0 0 1.25rem 0' }}>
-            <label className="form-label">Target Role</label>
-            <select
-              className="form-input"
-              value={interviewRole}
-              onChange={(e) => setInterviewRole(e.target.value)}
-            >
-              <option value="Fullstack Engineer">Fullstack Engineer</option>
-              <option value="Frontend Developer">Frontend Developer</option>
-              <option value="Backend Developer">Backend Developer</option>
-              <option value="Cloud Engineer">Cloud Engineer</option>
-              <option value="Data Engineer">Data Engineer</option>
-            </select>
+          {/* ── Interview Configuration ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Target Role</label>
+              <select className="form-input" value={interviewRole} onChange={(e) => setInterviewRole(e.target.value)}>
+                <option value="Fullstack Engineer">Fullstack Engineer</option>
+                <option value="Frontend Developer">Frontend Developer</option>
+                <option value="Backend Developer">Backend Developer</option>
+                <option value="Cloud Engineer">Cloud Engineer</option>
+                <option value="Data Engineer">Data Engineer</option>
+                <option value="DevOps Engineer">DevOps Engineer</option>
+                <option value="ML Engineer">ML Engineer</option>
+                <option value="Mobile Developer">Mobile Developer</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Difficulty</label>
+              <select className="form-input" value={interviewDifficulty} onChange={(e) => setInterviewDifficulty(e.target.value)}>
+                <option value="Junior">Junior (Foundational)</option>
+                <option value="Mid">Mid (Edge Cases & Performance)</option>
+                <option value="Senior">Senior (System Architecture)</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Category</label>
+              <select className="form-input" value={interviewCategory} onChange={(e) => setInterviewCategory(e.target.value)}>
+                <option value="Technical Concepts">Technical Concepts</option>
+                <option value="System Design">System Design</option>
+                <option value="Data Structures & Algorithms">Data Structures & Algorithms</option>
+                <option value="Behavioral / Leadership">Behavioral / Leadership</option>
+                <option value="Problem Solving">Problem Solving</option>
+                <option value="Database Design">Database Design</option>
+                <option value="API Design & Security">API Design & Security</option>
+                <option value="Cloud & DevOps">Cloud & DevOps</option>
+              </select>
+            </div>
           </div>
 
-          {/* Interview History Summary */}
+          {/* ── Session Summary ── */}
           {interviewHistory.length > 0 && (
             <div style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem', background: 'rgba(59,130,246,0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(59,130,246,0.2)' }}>
               <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem' }}>
                 📊 Session Summary — {interviewHistory.length} question{interviewHistory.length > 1 ? 's' : ''} answered
               </div>
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                 <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                   Avg Score: <strong style={{ color: 'var(--success)' }}>
                     {Math.round(interviewHistory.reduce((s, h) => s + h.score, 0) / interviewHistory.length)}
@@ -880,51 +1449,153 @@ const CareerHubPage = () => {
                     {Math.max(...interviewHistory.map(h => h.score))}
                   </strong>/100
                 </span>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  Lowest: <strong style={{ color: 'var(--danger, #ef4444)' }}>
+                    {Math.min(...interviewHistory.map(h => h.score))}
+                  </strong>/100
+                </span>
+              </div>
+              {/* History list */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {interviewHistory.map((h, idx) => (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    <span style={{
+                      width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: h.score >= 80 ? 'rgba(16,185,129,0.15)' : h.score >= 60 ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)',
+                      color: h.score >= 80 ? 'var(--success)' : h.score >= 60 ? 'var(--primary)' : 'var(--danger, #ef4444)',
+                      fontWeight: 700, fontSize: '0.7rem', flexShrink: 0
+                    }}>
+                      {h.score}
+                    </span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {h.question.substring(0, 80)}...
+                    </span>
+                    <span className="badge" style={{
+                      fontSize: '0.65rem', flexShrink: 0,
+                      background: h.score >= 80 ? 'rgba(16,185,129,0.15)' : h.score >= 60 ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)',
+                      color: h.score >= 80 ? 'var(--success)' : h.score >= 60 ? 'var(--primary)' : 'var(--danger, #ef4444)',
+                    }}>
+                      {h.grade || (h.score >= 80 ? 'Strong' : h.score >= 60 ? 'Good' : 'Needs Work')}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Current Question */}
-          <div style={{ padding: '1.5rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <div style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: 600, textTransform: 'uppercase' }}>
-                {interviewQuestions[currentQuestionIdx].category}
+          {/* ── Not Started State / Generate First Question ── */}
+          {!interviewStarted && !currentQuestion && !isGeneratingQuestion && (
+            <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--border-subtle)', marginBottom: '1.5rem' }}>
+              <Sparkles size={48} color="var(--primary)" style={{ marginBottom: '1rem', opacity: 0.7 }} />
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.5rem' }}>Ready to Practice?</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: '1.5rem', maxWidth: '500px', margin: '0 auto 1.5rem' }}>
+                Configure your role, difficulty level, and question category above, then click below to get your first AI-generated interview question.
+              </p>
+              <button onClick={handleGenerateQuestion} className="btn btn-primary" style={{ padding: '0.85rem 2.5rem', fontSize: '0.95rem' }}>
+                <Sparkles size={16} /> Start Interview Session
+              </button>
+            </div>
+          )}
+
+          {/* ── Loading Question ── */}
+          {isGeneratingQuestion && (
+            <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', marginBottom: '1.5rem' }}>
+              <Loader2 size={40} color="var(--primary)" style={{ animation: 'spin 1s linear infinite', marginBottom: '1rem' }} />
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.3rem' }}>Azure AI is crafting your question...</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                Generating a {interviewDifficulty}-level {interviewCategory} question for {interviewRole}
+              </p>
+            </div>
+          )}
+
+          {/* ── Current AI-Generated Question ── */}
+          {currentQuestion && !isGeneratingQuestion && (
+            <>
+              <div style={{ padding: '1.5rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      {currentQuestion.category}
+                    </span>
+                    <span className="badge" style={{
+                      fontSize: '0.65rem',
+                      background: interviewDifficulty === 'Senior' ? 'rgba(239,68,68,0.15)' : interviewDifficulty === 'Mid' ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.15)',
+                      color: interviewDifficulty === 'Senior' ? '#ef4444' : interviewDifficulty === 'Mid' ? '#f59e0b' : 'var(--success)'
+                    }}>
+                      {interviewDifficulty}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Q{interviewHistory.length + 1} • {interviewRole}
+                  </span>
+                </div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, lineHeight: 1.6, marginBottom: '0.75rem' }}>
+                  "{currentQuestion.question}"
+                </div>
+
+                {/* Expected Key Points */}
+                {currentQuestion.expectedKeyPoints && currentQuestion.expectedKeyPoints.length > 0 && (
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Key Areas to Cover:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                      {currentQuestion.expectedKeyPoints.map((kp, i) => (
+                        <span key={i} className="badge" style={{ fontSize: '0.7rem', background: 'rgba(59,130,246,0.1)', color: 'var(--primary)' }}>
+                          {kp}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Tip */}
+                {currentQuestion.tip && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem', padding: '0.6rem 0.8rem', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.15)', marginTop: '0.5rem' }}>
+                    <Zap size={13} color="var(--success)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <span style={{ fontSize: '0.78rem', color: 'var(--success)', lineHeight: 1.5 }}>
+                      <strong>Tip:</strong> {currentQuestion.tip}
+                    </span>
+                  </div>
+                )}
               </div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Question {currentQuestionIdx + 1} of {interviewQuestions.length}
-              </span>
-            </div>
-            <div style={{ fontSize: '1.05rem', fontWeight: 700, lineHeight: 1.5 }}>
-              "{interviewQuestions[currentQuestionIdx].question}"
-            </div>
-          </div>
 
-          <div className="form-group" style={{ margin: '0 0 1rem 0' }}>
-            <label className="form-label">Your Response</label>
-            <textarea
-              rows={6}
-              className="form-textarea"
-              placeholder="State your conceptual answer, architectural heuristics, and practical trade-offs..."
-              value={interviewAnswer}
-              onChange={(e) => setInterviewAnswer(e.target.value)}
-            />
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-              {interviewAnswer.length} characters • Tip: Include specific technical terms for higher scores
-            </div>
-          </div>
+              {/* Answer Textarea */}
+              <div className="form-group" style={{ margin: '0 0 1rem 0' }}>
+                <label className="form-label">Your Response</label>
+                <textarea
+                  rows={7}
+                  className="form-textarea"
+                  placeholder="Structure your answer clearly: state the concept, explain trade-offs, provide examples, and discuss edge cases..."
+                  value={interviewAnswer}
+                  onChange={(e) => setInterviewAnswer(e.target.value)}
+                  style={{ resize: 'vertical', minHeight: '120px' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                  <span>{interviewAnswer.length} characters</span>
+                  <span>
+                    {interviewAnswer.length < 50 ? '⚠️ Too short — aim for 150+ chars' : interviewAnswer.length < 150 ? '📝 Good start — add more detail' : '✅ Good length'}
+                  </span>
+                </div>
+              </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <button onClick={handleEvaluateInterview} className="btn btn-primary" disabled={isEvaluatingInterview || !interviewAnswer.trim()} style={{ flex: 1 }}>
-              {isEvaluatingInterview ? (
-                <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Evaluating...</>
-              ) : (
-                <><Send size={16} /> Submit for AI Critique</>
-              )}
-            </button>
-            <button onClick={handleNextQuestion} className="btn" style={{ flex: '0 0 auto', background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
-              <ChevronRight size={16} /> Skip / Next
-            </button>
-          </div>
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <button onClick={handleEvaluateInterview} className="btn btn-primary" disabled={isEvaluatingInterview || !interviewAnswer.trim()} style={{ flex: 1 }}>
+                  {isEvaluatingInterview ? (
+                    <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Evaluating with Azure AI...</>
+                  ) : (
+                    <><Send size={16} /> Submit for AI Critique</>
+                  )}
+                </button>
+                <button onClick={handleNextQuestion} className="btn" disabled={isGeneratingQuestion} style={{ flex: '0 0 auto', background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
+                  {isGeneratingQuestion ? (
+                    <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Generating...</>
+                  ) : (
+                    <><ChevronRight size={16} /> Skip / New Question</>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1038,7 +1709,7 @@ const CareerHubPage = () => {
                     display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'space-between',
                     padding: '1.5rem', borderRadius: 'var(--radius-sm)',
                     background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(139,92,246,0.08) 100%)',
-                    border: '1px solid rgba(59,130,246,0.2)', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem'
+                    border: '1px solid rgba(59,130,246,0.2)', marginBottom: '1.5rem', flexWrap: 'wrap'
                   }}>
                     <div style={{ textAlign: 'center', flex: '0 0 auto' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ATS Score</div>
@@ -1352,15 +2023,25 @@ const CareerHubPage = () => {
       </ModalPortal>
 
       {/* ═══════════════════════════════════════════════════════════════
-         MODAL — Interview Evaluation Result
+         MODAL — AI Interview Evaluation Result (Dynamic Azure AI)
          ═══════════════════════════════════════════════════════════════ */}
       <ModalPortal isOpen={interviewModalOpen}>
         <div style={overlayStyle} onClick={() => setInterviewModalOpen(false)}>
-          <div style={modalBoxStyle} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...modalBoxStyle, maxWidth: '720px' }} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Star size={18} color="var(--primary)" /> AI Interview Assessment
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Star size={18} color="var(--primary)" />
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>AI Interview Assessment</h3>
+                {interviewResult?.grade && (
+                  <span style={{
+                    fontSize: '0.7rem', padding: '0.2rem 0.55rem', borderRadius: '999px', fontWeight: 600,
+                    background: interviewResult.score >= 80 ? 'rgba(16,185,129,0.15)' : interviewResult.score >= 60 ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)',
+                    color: interviewResult.score >= 80 ? 'var(--success)' : interviewResult.score >= 60 ? 'var(--primary)' : 'var(--danger, #ef4444)'
+                  }}>
+                    {interviewResult.grade}
+                  </span>
+                )}
+              </div>
               <button className="icon-btn" onClick={() => setInterviewModalOpen(false)} style={{ width: 32, height: 32 }}>
                 <X size={16} />
               </button>
@@ -1379,39 +2060,81 @@ const CareerHubPage = () => {
                     </div>
                     <div style={{ marginTop: '0.5rem' }}>
                       <span className={`badge ${interviewResult.score >= 80 ? 'badge-success' : interviewResult.score >= 60 ? 'badge-primary' : 'badge-danger'}`} style={{ fontSize: '0.85rem' }}>
-                        {interviewResult.score >= 90 ? '🏆 Exceptional' : interviewResult.score >= 80 ? '✅ Strong' : interviewResult.score >= 60 ? '📝 Good' : '⚠️ Needs Improvement'}
+                        {interviewResult.score >= 90 ? '🏆 Exceptional' : interviewResult.score >= 80 ? '✅ Strong Pass' : interviewResult.score >= 60 ? '📝 Good' : '⚠️ Needs Improvement'}
                       </span>
                     </div>
                   </div>
 
-                  {/* Feedback */}
+                  {/* Question Context */}
+                  {currentQuestion && (
+                    <div style={{ padding: '0.75rem 1rem', background: 'rgba(139,92,246,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(139,92,246,0.15)', marginBottom: '1.25rem' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--accent-purple)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Question Asked</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>"{currentQuestion.question}"</div>
+                    </div>
+                  )}
+
+                  {/* Assessment Notes */}
                   <div style={{ marginBottom: '1.25rem' }}>
                     <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem' }}>📝 Assessment Notes</h4>
                     <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{interviewResult.notes}</p>
                   </div>
 
-                  {/* Strengths */}
-                  {interviewResult.strengths && (
-                    <div style={{ marginBottom: '1.25rem' }}>
-                      <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--success)' }}>💪 Strengths</h4>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                        {interviewResult.strengths.map((s, i) => (
-                          <span key={i} className="badge badge-success" style={{ fontSize: '0.78rem' }}>{s}</span>
-                        ))}
+                  {/* Strengths & Improvements side by side */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                    {interviewResult.strengths && interviewResult.strengths.length > 0 && (
+                      <div style={{ padding: '1rem', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                        <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                          <CheckCircle2 size={13} /> Strengths
+                        </h4>
+                        <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                          {interviewResult.strengths.map((s, i) => (
+                            <li key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', lineHeight: 1.5 }}>{s}</li>
+                          ))}
+                        </ul>
                       </div>
+                    )}
+                    {interviewResult.improvements && interviewResult.improvements.length > 0 && (
+                      <div style={{ padding: '1rem', background: 'rgba(245,158,11,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                        <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                          <AlertCircle size={13} /> Areas to Improve
+                        </h4>
+                        <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                          {interviewResult.improvements.map((im, i) => (
+                            <li key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', lineHeight: 1.5 }}>{im}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Improvement Tip */}
+                  {interviewResult.improvement && (
+                    <div style={{ padding: '1rem 1.25rem', background: 'rgba(59,130,246,0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(59,130,246,0.2)', marginBottom: '1.25rem' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <Zap size={13} /> Top Improvement Advice
+                      </div>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>{interviewResult.improvement}</p>
                     </div>
                   )}
 
-                  {/* Improvement Tip */}
-                  <div style={{ padding: '1rem 1.25rem', background: 'rgba(59,130,246,0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(59,130,246,0.2)', marginBottom: '1.5rem' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.3rem' }}>💡 Improvement Tip</div>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>{interviewResult.improvement}</p>
-                  </div>
+                  {/* Ideal Answer Outline */}
+                  {interviewResult.idealAnswerOutline && interviewResult.idealAnswerOutline.length > 0 && (
+                    <div style={{ padding: '1rem 1.25rem', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.2)', marginBottom: '1.5rem' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--success)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <Target size={13} /> Ideal Answer Structure
+                      </div>
+                      <ol style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                        {interviewResult.idealAnswerOutline.map((step, i) => (
+                          <li key={i} style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.35rem', lineHeight: 1.55 }}>{step}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: '0.75rem' }}>
                     <button onClick={handleNextQuestion} className="btn btn-primary" style={{ flex: 1 }}>
-                      <ChevronRight size={16} /> Next Question
+                      <Sparkles size={16} /> Next AI Question
                     </button>
                     <button onClick={() => setInterviewModalOpen(false)} className="btn" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
                       Review Answer

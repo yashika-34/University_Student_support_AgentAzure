@@ -25,7 +25,8 @@ import {
   Briefcase,
   Globe,
   Handshake,
-  Award
+  Award,
+  Compass
 } from 'lucide-react';
 
 // ── Navigation configs per role ─────────────────────────────────────────────
@@ -43,6 +44,7 @@ const STUDENT_NAV = [
   ]},
   { section: 'AI Tools', items: [
     { to: '/chat', icon: MessageSquare, label: 'AI Assistant' },
+    { to: '/career-counselor', icon: Compass, label: 'Career Counselor' },
     { to: '/academic-tools', icon: Sparkles, label: 'Study Tools' }
   ]},
   { section: 'Campus', items: [

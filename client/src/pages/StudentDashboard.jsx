@@ -12,7 +12,7 @@ import {
 } from '../services/api.js';
 import {
   Award, Sparkles, BarChart2, AlertTriangle, Clock, BookOpen, HelpCircle,
-  FileText, CalendarCheck, MessageSquare, TrendingUp, Bell, ChevronRight, Loader2, X, MapPin
+  FileText, CalendarCheck, MessageSquare, TrendingUp, Bell, ChevronRight, Loader2, X, MapPin, Compass
 } from 'lucide-react';
 
 const StudentDashboard = () => {
@@ -632,6 +632,13 @@ const StudentDashboard = () => {
 
       {/* Quick Access Shortcuts */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+        <Link to="/career-counselor" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <Compass size={24} color="var(--accent-purple)" />
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>AI Career Counselor</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Azure AI (gpt-4.1-mini)</div>
+          </div>
+        </Link>
         <Link to="/academic-tools?tab=quiz" className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <BookOpen size={24} color="var(--accent-cyan)" />
           <div>

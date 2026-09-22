@@ -86,6 +86,7 @@ function AppLayout() {
               <Route path="/student/dashboard" element={<StudentDashboard />} />
               <Route path="/academic-tools" element={<AcademicToolsPage />} />
               <Route path="/career-hub" element={<CareerHubPage />} />
+              <Route path="/career-counselor" element={<CareerHubPage defaultTab="counselor" />} />
               <Route path="/campus-services" element={<CampusServicesPage />} />
               <Route path="/community" element={<CommunityHubPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />

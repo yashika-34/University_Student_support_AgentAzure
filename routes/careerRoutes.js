@@ -9,6 +9,11 @@ import {
   getResumeHistory,
   generateResumeReport,
   getCareerCounseling,
+  chatWithCareerCounselor,
+  getCounselorSessions,
+  getCounselorSessionById,
+  deleteCounselorSession,
+  generateInterviewQuestion,
   simulateInterview,
   registerForPlacement,
   getMyRegistrations,
@@ -58,6 +63,12 @@ router.get('/resume-report/:analysisId', optionalAuth, generateResumeReport);
 router.post('/analyze-resume', optionalAuth, analyzeResume);
 
 router.post('/career-counseling', optionalAuth, getCareerCounseling);
+router.post('/counselor/message', optionalAuth, chatWithCareerCounselor);
+router.get('/counselor/sessions', optionalAuth, getCounselorSessions);
+router.get('/counselor/sessions/:sessionId', optionalAuth, getCounselorSessionById);
+router.delete('/counselor/sessions/:sessionId', optionalAuth, deleteCounselorSession);
+router.post('/interview/generate-question', optionalAuth, generateInterviewQuestion);
 router.post('/simulate-interview', optionalAuth, simulateInterview);
+
 
 export default router;

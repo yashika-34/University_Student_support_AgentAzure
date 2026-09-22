@@ -14,6 +14,7 @@ import ChatHistory from './ChatHistory.js';
 import AcademicPrediction from './AcademicPrediction.js';
 import Placement from './Placement.js';
 import CareerProfile from './CareerProfile.js';
+import CareerCounselingChat from './CareerCounselingChat.js';
 import Quiz from './Quiz.js';
 import StudyPlan from './StudyPlan.js';
 import Appointment from './Appointment.js';
@@ -40,6 +41,7 @@ export {
   AcademicPrediction,
   Placement,
   CareerProfile,
+  CareerCounselingChat,
   Quiz,
   StudyPlan,
   Appointment,
@@ -67,6 +69,7 @@ export default {
   AcademicPrediction,
   Placement,
   CareerProfile,
+  CareerCounselingChat,
   Quiz,
   StudyPlan,
   Appointment,
@@ -76,3 +79,4 @@ export default {
   ForumPost,
   Badge
 };
+
