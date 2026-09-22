@@ -1133,6 +1133,7 @@ export const getStudentManagementList = async (req, res, next) => {
  * @access  Faculty / Admin
  */
 export const addStudentByFaculty = async (req, res, next) => {
+  let createdUser = null;
   try {
     const {
       firstName,
@@ -1180,10 +1181,10 @@ export const addStudentByFaculty = async (req, res, next) => {
     }
 
     // Create user account
-    const user = await User.create({
-      firstName,
-      lastName,
-      email: email.toLowerCase(),
+    createdUser = await User.create({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.toLowerCase().trim(),
       passwordHash: password,
       role: 'student',
       phoneNumber: phoneNumber || '',
@@ -1191,15 +1192,17 @@ export const addStudentByFaculty = async (req, res, next) => {
     });
 
     // Create student profile
+    const admYear = Number(admissionYear) || new Date().getFullYear();
     const student = await Student.create({
-      userId: user._id,
+      userId: createdUser._id,
       studentId: autoStudentId.toUpperCase(),
-      department: department || 'Computer Science',
-      degreeProgram: degreeProgram || 'Bachelor of Technology',
+      department: (department || 'Computer Science').trim(),
+      degreeProgram: (degreeProgram || 'Bachelor of Technology').trim(),
       currentSemester: Number(currentSemester) || 1,
-      admissionYear: Number(admissionYear) || new Date().getFullYear(),
-      batch: batch || `${new Date().getFullYear()}-${new Date().getFullYear() + 4}`,
-      cgpa: Number(cgpa) || 0,
+      admissionYear: admYear,
+      batch: batch || `${admYear}-${admYear + 4}`,
+      cgpa: Math.min(10, Math.max(0, Number(cgpa) || 0)),
+      completedCredits: 0,
       emergencyContact: emergencyContact || {}
     });
 
@@ -1210,15 +1213,27 @@ export const addStudentByFaculty = async (req, res, next) => {
         _id: student._id,
         studentId: student.studentId,
         name: `${firstName} ${lastName}`,
-        email,
+        email: createdUser.email,
         department: student.department,
-        currentSemester: student.currentSemester
+        degreeProgram: student.degreeProgram,
+        currentSemester: student.currentSemester,
+        isActive: true
       }
     });
   } catch (error) {
+    // Rollback: delete orphaned User if Student creation failed
+    if (createdUser) {
+      try { await User.findByIdAndDelete(createdUser._id); } catch (_) {}
+    }
+    // Return validation errors in a friendly format
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map((e) => e.message).join('; ');
+      return res.status(400).json({ success: false, message: messages });
+    }
     next(error);
   }
 };
+
 
 /**
  * @desc    Edit student profile details

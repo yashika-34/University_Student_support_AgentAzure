@@ -4,8 +4,7 @@ import mongoose from 'mongoose';
 async function testBackend() {
   console.log('Testing Backend API Endpoints against MongoDB...');
   // We can use supertest or fetch if server is running, or import supertest/fetch
-  // Since server.js starts listening on PORT 5000, we can use global fetch
-  const baseUrl = 'http://localhost:5000/api/v1';
+  const baseUrl = process.env.API_BASE_URL || 'http://127.0.0.1:5000/api/v1';
 
   try {
     // 1. Student Login

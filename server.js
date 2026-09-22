@@ -6,8 +6,16 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
 import connectDB from './config/db.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.resolve(__dirname, 'client', 'dist');
 
 // Route Imports
 import authRoutes from './routes/authRoutes.js';
@@ -36,18 +44,19 @@ connectDB();
 
 const app = express();
 
-// Security HTTP Headers
-app.use(helmet());
+// Security HTTP Headers with SPA compatibility
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+  })
+);
 
 // CORS Setup
 const parseOrigins = () => {
   const envOrigins = [process.env.CLIENT_URL, process.env.FRONTEND_URL].filter(Boolean);
-  const defaults = [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:3000',
-    'http://127.0.0.1:5173'
-  ];
+  const defaults = [];
+  // To allow specific origins in development, set CLIENT_URL or FRONTEND_URL env variables.
   const list = [];
   envOrigins.forEach((item) => {
     if (item.includes(',')) {
@@ -144,7 +153,20 @@ app.use('/api/v1/teacher', teacherRoutes);
 app.use('/api/v1/marks', marksRoutes);
 app.use('/api/v1/rag', ragRoutes);
 app.use('/api/v1/voice', voiceRoutes);
+// Serve static assets from the React build if present
+app.use(express.static(distPath));
 
+// Fallback to index.html for client-side SPA routing (excluding API routes)
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  const indexPath = path.resolve(distPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  next();
+});
 // Error Handling Middlewares
 app.use(notFound);
 app.use(errorHandler);

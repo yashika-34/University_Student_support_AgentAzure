@@ -29,7 +29,7 @@ import ForumPost from '../models/ForumPost.js';
 import Ticket from '../models/Ticket.js';
 import Appointment from '../models/Appointment.js';
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/uniassist_db';
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/uniassist_db';
 
 async function seed() {
   try {

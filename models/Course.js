@@ -48,9 +48,9 @@ const courseSchema = new mongoose.Schema(
       trim: true
     },
     department: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Department',
+      type: String,
       required: [true, 'Department is required'],
+      trim: true,
       index: true
     },
     credits: {

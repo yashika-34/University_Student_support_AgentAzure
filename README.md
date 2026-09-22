@@ -28,7 +28,7 @@ npm run seed
 
 # 4. Start Backend Server
 npm run dev
-# Server will run on: http://localhost:5000
+# Server will run on port 5000
 ```
 
 #### Default Test Accounts Seeded:
@@ -49,9 +49,11 @@ cd client
 # 2. Install Frontend Dependencies
 npm install
 
-# 3. Start Vite Development Server
+# 3. Build Client for Production Single-Service Serving
+npm run build
+
+# Or run Vite dev server locally:
 npm run dev
-# Frontend will run on: http://localhost:5173
 ```
 
 ---

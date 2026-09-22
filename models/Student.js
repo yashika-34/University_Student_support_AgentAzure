@@ -55,9 +55,9 @@ const studentSchema = new mongoose.Schema(
       index: true // e.g., "STU-2024-001"
     },
     department: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Department',
+      type: String,
       required: [true, 'Academic department is required'],
+      trim: true,
       index: true
     },
     degreeProgram: {
@@ -104,7 +104,7 @@ const studentSchema = new mongoose.Schema(
   }
 );
 
-// Compound index for quick departmental semester filtering
+// Compound index for quick departmental + semester filtering
 studentSchema.index({ department: 1, currentSemester: 1 });
 
 const Student = mongoose.model('Student', studentSchema);
