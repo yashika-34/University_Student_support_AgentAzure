@@ -218,14 +218,6 @@ const ProfilePage = () => {
           </p>
         </div>
 
-        {/* Role Switcher Demo */}
-        <button
-          onClick={() => switchRole(role === 'faculty' ? 'student' : 'faculty')}
-          className="btn btn-secondary"
-          style={{ fontSize: '0.85rem' }}
-        >
-          <Users size={16} /> Switch to {role === 'faculty' ? 'Student' : 'Faculty'} View
-        </button>
       </div>
 
       {/* ── Success Banner ────────────────────────────────────────────────── */}
