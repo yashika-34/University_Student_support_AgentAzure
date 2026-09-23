@@ -122,16 +122,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
-    // Intercept demo logins before making API call to prevent 405 errors on static hosts
-    const demoAccount = DEMO_ACCOUNTS[email?.trim().toLowerCase()];
-    if (demoAccount && demoAccount.password === password) {
-      const demoToken = 'demo-token-' + Date.now();
-      localStorage.setItem('uniassist_token', demoToken);
-      localStorage.setItem('uniassist_user', JSON.stringify(demoAccount.user));
-      setUser(demoAccount.user);
-      console.info('[UniAssist] Demo mode: Logged in with mock credentials (no backend).');
-      return { success: true, user: demoAccount.user };
-    }
 
     try {
       const res = await authAPI.login({ email, password });
