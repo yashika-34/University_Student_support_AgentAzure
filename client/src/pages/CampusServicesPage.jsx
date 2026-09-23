@@ -161,7 +161,8 @@ const CampusServicesPage = () => {
       priority: newTicketData.priority,
       status: 'Open',
       assignedTo: 'Campus Helpdesk Support',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      messages: [{ senderRole: 'user', senderName: 'You', message: newTicketData.message }]
     };
     try {
       const res = await api.post('/services/tickets', newTicketData);

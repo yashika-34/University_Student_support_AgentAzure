@@ -99,6 +99,7 @@ const extractTextFromBuffer = async (buffer, mimetype, originalname) => {
       const data = await pdfParse(buffer);
       return data.text || '';
     } catch (e) {
+      console.error('[pdfParse error]:', e);
       throw new Error('Failed to parse PDF. Ensure the file is a valid, non-scanned PDF.');
     }
   }
