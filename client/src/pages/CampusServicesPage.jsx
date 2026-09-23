@@ -191,6 +191,13 @@ const CampusServicesPage = () => {
   const handleConfirmGrantSubmit = (e) => {
     e.preventDefault();
     setGrantSuccess(true);
+    
+    setScholarships(scholarships.map(s => 
+      s.id === selectedScholarship.id 
+        ? { ...s, isApplied: true }
+        : s
+    ));
+
     setTimeout(() => {
       setSelectedScholarship(null);
       setGrantSuccess(false);
@@ -928,13 +935,23 @@ const CampusServicesPage = () => {
                 </div>
 
                 <div>
-                  <button
-                    onClick={() => handleOpenGrantModal(sch)}
-                    className="btn btn-primary"
-                    style={{ padding: '0.65rem 1.4rem' }}
-                  >
-                    Apply for Grant
-                  </button>
+                  {sch.isApplied ? (
+                    <button
+                      disabled
+                      className="btn btn-secondary"
+                      style={{ padding: '0.65rem 1.4rem', opacity: 0.7, cursor: 'not-allowed' }}
+                    >
+                      Application Submitted
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleOpenGrantModal(sch)}
+                      className="btn btn-primary"
+                      style={{ padding: '0.65rem 1.4rem' }}
+                    >
+                      Apply for Grant
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
