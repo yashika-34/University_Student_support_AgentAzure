@@ -419,19 +419,28 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius-sm);
   cursor: pointer;
   border: 1px solid transparent;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn:active {
+  transform: scale(0.96);
 }
 
 .btn-primary {
   background: var(--primary-gradient);
+  background-size: 200% 200%;
   color: var(--text-on-primary);
   box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-position 0.5s ease;
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.55);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.6);
+  background-position: right center;
 }
 
 .btn-secondary {
@@ -442,7 +451,9 @@ a { color: inherit; text-decoration: none; }
 
 .btn-secondary:hover {
   background: var(--bg-card-hover);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 .btn-danger {
@@ -454,6 +465,8 @@ a { color: inherit; text-decoration: none; }
 .btn-danger:hover {
   background: var(--danger);
   color: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
 }
 
 .btn-ghost {

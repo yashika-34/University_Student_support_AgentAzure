@@ -100,7 +100,7 @@ const extractTextFromBuffer = async (buffer, mimetype, originalname) => {
       return data.text || '';
     } catch (e) {
       console.error('[pdfParse error]:', e);
-      throw new Error('Failed to parse PDF. Ensure the file is a valid, non-scanned PDF.');
+      throw new Error('PDF extraction failed. The file may be scanned, image-based, or too complex. Please use the "Paste Text" option instead.');
     }
   }
 
@@ -1214,16 +1214,22 @@ Counseling Rules:
         aiReplyText = rawResponse;
       } catch (azureErr) {
         console.error('[Career Counselor Azure OpenAI Error]:', azureErr.message);
+        aiReplyText = `⚠️ **Azure AI Foundry Connection Failed**\n\nI am currently operating in offline mode because my connection to Azure OpenAI failed. Please check your \`.env\` file for valid \`AZURE_OPENAI_API_KEY\` and \`AZURE_OPENAI_ENDPOINT\` variables.\n\nError details: ${azureErr.message}`;
       }
     }
 
     // Fallback if Azure AI unavailable
     if (!aiReplyText) {
-      aiReplyText = `### 🚀 Career Roadmap & Strategic Counsel: ${chatSession.targetDomain}\n\nBased on your current semester (**Semester ${chatSession.semester}**) and your background with **${chatSession.skills.join(', ') || 'core computer science'}**, here is your strategic action plan to achieve **${chatSession.careerGoals || 'Tier-1 tech placement'}**:\n\n1. **Skill Gap Remediation**: Complement your current skills with distributed systems architecture, cloud deployment, and containerization.\n2. **Hands-On Capstone**: Build and deploy an end-to-end cloud-native microservice on Microsoft Azure with CI/CD GitHub Actions.\n3. **Placement Preparation**: Target 3-5 LeetCode medium questions weekly focusing on Trees, Graphs, and Dynamic Programming.\n4. **Industry Certification**: Target Microsoft Certified: Azure Developer Associate (AZ-204) or Azure AI Fundamentals (AI-900).\n\n*What specific company interview or domain challenge would you like to explore next?*`;
+      const fallbacks = [
+        `### 🚀 Strategic Counsel: ${chatSession.targetDomain}\n\nBased on your background with **${chatSession.skills.join(', ') || 'core computer science'}**, you should focus on **${chatSession.careerGoals || 'building scalable systems'}**.\n\n1. **Skill Gap Remediation**: Build and deploy an end-to-end cloud-native microservice.\n2. **Placement Preparation**: Target LeetCode medium questions weekly.`,
+        `### 💡 Career Insight for Semester ${chatSession.semester}\n\nSince you are interested in **${chatSession.targetDomain}**, consider exploring Microsoft Certified: Azure Developer Associate (AZ-204).\n\n*What specific company interview would you like to explore next?*`,
+        `### 🛠️ Action Plan: ${chatSession.careerGoals || 'Tech Placements'}\n\nFocus your energy on hands-on capstone projects using **${chatSession.skills[0] || 'modern tech stacks'}**. I highly recommend building something that demonstrates system architecture and API design.`
+      ];
+      aiReplyText = fallbacks[Math.floor(Math.random() * fallbacks.length)];
       suggestedNextSteps = [
         'Complete end-to-end cloud microservice project',
-        'Solve 5 LeetCode medium questions on graphs/DP',
-        'Enroll in Azure AI Fundamentals certification'
+        'Solve 5 LeetCode medium questions',
+        'Check your Azure AI Foundry configuration'
       ];
       recommendedRoles = [chatSession.targetDomain, 'Cloud Solutions Associate', 'Fullstack Engineer'];
     }
@@ -1504,7 +1510,7 @@ Respond ONLY with valid raw JSON adhering strictly to this schema (no markdown w
       evaluationResult = {
         score,
         grade,
-        notes: `Your response shows practical understanding for ${role}. To reach a senior interview standard, include deeper performance trade-offs, real-world constraints, and edge cases.`,
+        notes: `⚠️ **Offline Mode**: Azure AI evaluation is currently offline. This heuristic score is based on response length. Your response shows practical understanding for ${role}. To reach a senior interview standard, include deeper performance trade-offs.`,
         strengths: ['Relevant conceptual alignment', 'Structured reasoning'],
         improvements: ['Include production trade-offs and scalability limits'],
         improvement: 'Articulate specific architectural patterns or metrics (e.g. latency, throughput) to demonstrate senior mastery.',

@@ -257,7 +257,7 @@ const CareerHubPage = ({ defaultTab }) => {
         }
       } catch (err) {
         console.error('Failed to analyze uploaded resume:', err);
-        setResumeError(err.response?.data?.message || 'Failed to extract and analyze resume. Please ensure it is a text-based PDF or DOCX.');
+        setResumeError(err.response?.data?.message || 'We could not extract text from your PDF (it might be scanned or complex). Please switch to the "Paste Text" tab to continue.');
       } finally {
         setIsAnalyzingResume(false);
       }
