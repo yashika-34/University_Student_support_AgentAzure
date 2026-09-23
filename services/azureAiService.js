@@ -321,6 +321,64 @@ export const executeAgentTool = async (toolName, toolArgs, studentUser, studentP
 };
 
 /**
+ * Returns sanitized and validated Azure OpenAI configuration with alias fallbacks
+ */
+export const getEffectiveAzureConfig = () => {
+  const endpoint = (process.env.AZURE_OPENAI_ENDPOINT || '').trim().replace(/\/+$/, '');
+  const apiKey = (process.env.AZURE_OPENAI_API_KEY || process.env.AZURE_OPENAI_KEY || '').trim();
+  const primaryDeployment = (
+    process.env.AZURE_OPENAI_DEPLOYMENT_NAME ||
+    process.env.AZURE_OPENAI_DEPLOYMENT ||
+    'gpt-4.1-mini'
+  ).trim();
+  const apiVersion = (process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview').trim();
+
+  const isConfigured = Boolean(endpoint && apiKey && !endpoint.includes('mock-'));
+
+  return {
+    endpoint,
+    apiKey,
+    primaryDeployment,
+    apiVersion,
+    isConfigured
+  };
+};
+
+/**
+ * Creates chat completions with automatic fallback for deployment names (e.g. gpt-4.1-mini <-> gpt-4o-mini)
+ */
+export const createAzureChatCompletion = async (clientOptions, completionParams) => {
+  const { endpoint, apiKey, apiVersion, deployment } = clientOptions;
+
+  const executeCall = async (depName) => {
+    const client = new AzureOpenAI({
+      endpoint,
+      apiKey,
+      apiVersion,
+      deployment: depName
+    });
+    const res = await client.chat.completions.create({
+      ...completionParams,
+      model: depName
+    });
+    return { response: res, usedDeployment: depName };
+  };
+
+  try {
+    return await executeCall(deployment);
+  } catch (err) {
+    if (err.code === 'DeploymentNotFound' || err.status === 404) {
+      const alternateDeployment = deployment === 'gpt-4.1-mini' ? 'gpt-4o-mini' : 'gpt-4.1-mini';
+      console.warn(
+        `[Azure OpenAI] Deployment '${deployment}' returned 404 DeploymentNotFound. Automatically retrying with alternate deployment '${alternateDeployment}'...`
+      );
+      return await executeCall(alternateDeployment);
+    }
+    throw err;
+  }
+};
+
+/**
  * Main AI Agent Execution Function
  * Orchestrates Azure OpenAI conversation, tool calls, and grounded synthesis
  */
@@ -345,35 +403,35 @@ export const runStudentSupportAgent = async ({
   ];
 
   // 3. Check if Azure OpenAI credentials are valid
-  const isAzureConfigured =
-    process.env.AZURE_OPENAI_ENDPOINT &&
-    process.env.AZURE_OPENAI_API_KEY &&
-    !process.env.AZURE_OPENAI_ENDPOINT.includes('mock-');
-  console.log("=== AZURE DEBUG ===");
-  console.log("ENDPOINT:", process.env.AZURE_OPENAI_ENDPOINT);
-  console.log("API KEY EXISTS:", !!process.env.AZURE_OPENAI_API_KEY);
-  console.log("DEPLOYMENT:", process.env.AZURE_OPENAI_DEPLOYMENT_NAME);
-  console.log("IS CONFIGURED:", isAzureConfigured);
-  console.log("===================");
+  const azureConfig = getEffectiveAzureConfig();
+  console.log("=== AZURE CONFIG STATUS ===");
+  console.log("ENDPOINT:", azureConfig.endpoint || '(not configured)');
+  console.log("API KEY CONFIGURED:", Boolean(azureConfig.apiKey));
+  console.log("DEPLOYMENT:", azureConfig.primaryDeployment);
+  console.log("IS CONFIGURED:", azureConfig.isConfigured);
+  console.log("===========================");
 
-  if (isAzureConfigured) {
+  if (azureConfig.isConfigured) {
     try {
-      const client = new AzureOpenAI({
-        endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-        apiKey: process.env.AZURE_OPENAI_API_KEY,
-        apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
-        deployment: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4o-mini'
-      });
-
       // Turn 1: Send message with tools
-      const response = await client.chat.completions.create({
-        model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4o-mini',
-        messages: openAiMessages,
-        tools: AI_AGENT_TOOLS,
-        tool_choice: 'auto',
-        temperature: 0.2
-      });
+      let activeDeployment = azureConfig.primaryDeployment;
+      const turn1Result = await createAzureChatCompletion(
+        {
+          endpoint: azureConfig.endpoint,
+          apiKey: azureConfig.apiKey,
+          apiVersion: azureConfig.apiVersion,
+          deployment: activeDeployment
+        },
+        {
+          messages: openAiMessages,
+          tools: AI_AGENT_TOOLS,
+          tool_choice: 'auto',
+          temperature: 0.2
+        }
+      );
 
+      const response = turn1Result.response;
+      activeDeployment = turn1Result.usedDeployment;
       const responseMessage = response.choices[0].message;
 
       // Check if Azure OpenAI requested tool execution
@@ -413,14 +471,21 @@ export const runStudentSupportAgent = async ({
         }
 
         // Turn 2: Synthesize grounded final response with tool outputs
-        const secondResponse = await client.chat.completions.create({
-          model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4o-mini',
-          messages: openAiMessages,
-          temperature: 0.2
-        });
+        const turn2Result = await createAzureChatCompletion(
+          {
+            endpoint: azureConfig.endpoint,
+            apiKey: azureConfig.apiKey,
+            apiVersion: azureConfig.apiVersion,
+            deployment: activeDeployment
+          },
+          {
+            messages: openAiMessages,
+            temperature: 0.2
+          }
+        );
 
         return {
-          content: secondResponse.choices[0].message.content,
+          content: turn2Result.response.choices[0].message.content,
           toolCalls: executedTools,
           groundingSources: retrievedSources
         };
@@ -433,7 +498,14 @@ export const runStudentSupportAgent = async ({
         groundingSources: []
       };
     } catch (azureError) {
-      console.warn('[Azure OpenAI Connection Notice - Using Resilient Local Agent Engine]:', azureError.message);
+      console.error('[Azure OpenAI Live Connection Error]:', {
+        message: azureError.message,
+        status: azureError.status || null,
+        code: azureError.code || null,
+        endpoint: azureConfig.endpoint,
+        deployment: azureConfig.primaryDeployment
+      });
+      console.warn('[Falling back to Resilient Local Agent Engine]');
     }
   }
 

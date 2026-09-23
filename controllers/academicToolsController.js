@@ -6,8 +6,8 @@ import ExamSchedule from '../models/ExamSchedule.js';
  * Initialize Azure OpenAI Client with fallback handling
  */
 const getAzureOpenAIClient = () => {
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-  const apiKey = process.env.AZURE_OPENAI_API_KEY;
+  const endpoint = (process.env.AZURE_OPENAI_ENDPOINT || '').trim().replace(/\/+$/, '');
+  const apiKey = (process.env.AZURE_OPENAI_API_KEY || process.env.AZURE_OPENAI_KEY || '').trim();
 
   if (!endpoint || !apiKey || endpoint.includes('mock-')) {
     return null;
@@ -16,8 +16,8 @@ const getAzureOpenAIClient = () => {
   return new AzureOpenAI({
     endpoint,
     apiKey,
-    apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
-    deployment: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini'
+    apiVersion: (process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview').trim(),
+    deployment: (process.env.AZURE_OPENAI_DEPLOYMENT_NAME || process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4.1-mini').trim()
   });
 };
 

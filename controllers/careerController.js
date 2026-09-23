@@ -7,6 +7,7 @@ import Student from '../models/Student.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import { AzureOpenAI } from 'openai';
+import { getEffectiveAzureConfig } from '../services/azureAiService.js';
 
 
 /**
@@ -268,11 +269,10 @@ const computeAtsScore = (text, role, jobDescription) => {
  * ─── Run Azure OpenAI GPT-4.1-mini ATS Evaluation ────────────────────────────
  */
 const runAzureOpenAiAtsAnalysis = async (resumeText, targetRole, jobDescription = '') => {
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-  const apiKey = process.env.AZURE_OPENAI_API_KEY;
+  const azureConfig = getEffectiveAzureConfig();
 
   // Fallback to rule engine if credentials are not configured or mock
-  if (!endpoint || !apiKey || endpoint.includes('mock-')) {
+  if (!azureConfig.isConfigured) {
     const fallback = computeAtsScore(resumeText, targetRole, jobDescription);
     return {
       atsScore: fallback.atsScore,
@@ -326,10 +326,10 @@ const runAzureOpenAiAtsAnalysis = async (resumeText, targetRole, jobDescription 
   }
 
   const client = new AzureOpenAI({
-    endpoint,
-    apiKey,
-    apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
-    deployment: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini'
+    endpoint: azureConfig.endpoint,
+    apiKey: azureConfig.apiKey,
+    apiVersion: azureConfig.apiVersion,
+    deployment: azureConfig.primaryDeployment
   });
 
   const systemPrompt = `You are a principal technical recruiter and expert ATS (Applicant Tracking System) optimization engine.
@@ -1000,17 +1000,15 @@ export const getCareerCounseling = async (req, res, next) => {
       careerGoals = ''
     } = req.body;
 
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-    const apiKey = process.env.AZURE_OPENAI_API_KEY;
-    const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini';
+    const azureConfig = getEffectiveAzureConfig();
 
-    if (endpoint && apiKey && !endpoint.includes('mock-')) {
+    if (azureConfig.isConfigured) {
       try {
         const client = new AzureOpenAI({
-          endpoint,
-          apiKey,
-          apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
-          deployment
+          endpoint: azureConfig.endpoint,
+          apiKey: azureConfig.apiKey,
+          apiVersion: azureConfig.apiVersion,
+          deployment: azureConfig.primaryDeployment
         });
 
         const prompt = `You are a principal university career strategist. Generate a cutting-edge career profile and semester-by-semester milestone roadmap for an undergraduate student.
@@ -1143,23 +1141,21 @@ export const chatWithCareerCounselor = async (req, res, next) => {
     chatSession.messages.push(userMsgObj);
 
     // Call Azure OpenAI GPT-4.1-mini
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-    const apiKey = process.env.AZURE_OPENAI_API_KEY;
-    const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini';
+    const azureConfig = getEffectiveAzureConfig();
 
     let aiReplyText = '';
     let suggestedNextSteps = [];
     let recommendedRoles = [];
 
-    if (endpoint && apiKey && !endpoint.includes('mock-')) {
+    if (azureConfig.isConfigured) {
       const client = new AzureOpenAI({
-        endpoint,
-        apiKey,
-        apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
-        deployment
+        endpoint: azureConfig.endpoint,
+        apiKey: azureConfig.apiKey,
+        apiVersion: azureConfig.apiVersion,
+        deployment: azureConfig.primaryDeployment
       });
 
-      const systemPrompt = `You are the University's Chief AI Career Counselor & Placement Strategist powered by Azure AI Foundry (${deployment}).
+      const systemPrompt = `You are the University's Chief AI Career Counselor & Placement Strategist powered by Azure AI Foundry (${azureConfig.primaryDeployment}).
 Your objective is to provide students with dynamic, personalized, actionable, and industry-grade career guidance.
 
 Student Profile:
@@ -1342,17 +1338,15 @@ export const generateInterviewQuestion = async (req, res, next) => {
       previousQuestions = []
     } = req.body;
 
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-    const apiKey = process.env.AZURE_OPENAI_API_KEY;
-    const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini';
+    const azureConfig = getEffectiveAzureConfig();
 
-    if (endpoint && apiKey && !endpoint.includes('mock-')) {
+    if (azureConfig.isConfigured) {
       try {
         const client = new AzureOpenAI({
-          endpoint,
-          apiKey,
-          apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
-          deployment
+          endpoint: azureConfig.endpoint,
+          apiKey: azureConfig.apiKey,
+          apiVersion: azureConfig.apiVersion,
+          deployment: azureConfig.primaryDeployment
         });
 
         const prompt = `You are a Principal Technical Interviewer and Bar Raiser at a top tier-1 technology enterprise.
@@ -1440,19 +1434,17 @@ export const simulateInterview = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Candidate response is required.' });
     }
 
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-    const apiKey = process.env.AZURE_OPENAI_API_KEY;
-    const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini';
+    const azureConfig = getEffectiveAzureConfig();
 
     let evaluationResult = null;
 
-    if (endpoint && apiKey && !endpoint.includes('mock-')) {
+    if (azureConfig.isConfigured) {
       try {
         const client = new AzureOpenAI({
-          endpoint,
-          apiKey,
-          apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
-          deployment
+          endpoint: azureConfig.endpoint,
+          apiKey: azureConfig.apiKey,
+          apiVersion: azureConfig.apiVersion,
+          deployment: azureConfig.primaryDeployment
         });
 
         const prompt = `You are a Principal Technical Interviewer and Hiring Bar Raiser evaluating a student candidate's interview response.

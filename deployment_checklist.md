@@ -39,7 +39,7 @@
    - **Branch:** `main`
    - **Root Directory:** Leave empty (root)
    - **Runtime:** `Node`
-   - **Build Command:** `npm install`
+   - **Build Command:** `npm install && npm run build`
    - **Start Command:** `npm start`
    - **Health Check Path:** `/health`
 6. Under **Environment Variables**, add:
@@ -48,16 +48,16 @@
    - `MONGODB_URI` = your Atlas connection string from Step 2
    - `JWT_SECRET` = (Render can auto-generate or use a strong 32+ char secret)
    - `JWT_REFRESH_SECRET` = (Render can auto-generate or use a strong 32+ char secret)
-   - `CLIENT_URL` = `https://<your-vercel-app-name>.vercel.app` (Can be added after frontend deployment or updated)
-   - `AZURE_OPENAI_ENDPOINT` = (Optional / if Azure AI enabled)
-   - `AZURE_OPENAI_API_KEY` = (Optional / if Azure AI enabled)
-   - `AZURE_OPENAI_DEPLOYMENT_NAME` = `gpt-4o-mini`
+   - `AZURE_OPENAI_ENDPOINT` = `https://universitystudentsuppor-resource.services.ai.azure.com`
+   - `AZURE_OPENAI_API_KEY` = your Azure OpenAI API key
+   - `AZURE_OPENAI_DEPLOYMENT_NAME` = `gpt-4.1-mini`
+   - `AZURE_OPENAI_API_VERSION` = `2024-02-15-preview`
 7. Click **Create Web Service**.
 8. Wait for deploy logs to show:
    `[UniAssist AI Backend Running] Mode: production | Port: 10000`
    `[MongoDB Connected] Host: ... | Database: uniassist_db`
-9. Copy your Render Backend URL:
-   `https://uniassist-backend.onrender.com`
+9. Test live Azure status:
+   `curl https://<your-render-url>.onrender.com/api/v1/chat/azure-status`
 
 ---
 

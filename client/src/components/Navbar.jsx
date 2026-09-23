@@ -1,11 +1,182 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { noticeAPI } from '../services/api.js';
 
 import {
-  Menu, Sun, Moon, Bell, LogOut, User, Settings, Lock, ChevronDown,
-  GraduationCap, Briefcase
+  Menu, Sun, Moon, Bell, LogOut, User, Settings, Lock,
+  GraduationCap, Briefcase, CheckCheck, AlertCircle, BookOpen,
+  Calendar, CreditCard, Megaphone, Ticket, X, RefreshCw
 } from 'lucide-react';
+
+// ── Icon map for notification types ─────────────────────────────────────────
+const TYPE_ICON = {
+  attendance_alert: <AlertCircle size={15} />,
+  exam_reminder: <Calendar size={15} />,
+  assignment_deadline: <BookOpen size={15} />,
+  fee_due: <CreditCard size={15} />,
+  system_announcement: <Megaphone size={15} />,
+  ticket_update: <Ticket size={15} />
+};
+
+const PRIORITY_COLOR = {
+  critical: 'var(--danger)',
+  high: '#f97316',
+  medium: 'var(--primary)',
+  low: 'var(--text-muted)'
+};
+
+// ── Relative time helper ─────────────────────────────────────────────────────
+const relativeTime = (dateStr) => {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+};
+
+// ── NotificationPanel ────────────────────────────────────────────────────────
+const NotificationPanel = ({ onClose }) => {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [markingAll, setMarkingAll] = useState(false);
+
+  const fetchNotifications = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await noticeAPI.getMyNotifications();
+      setNotifications(res.data?.data || []);
+    } catch (err) {
+      setError('Could not load notifications.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  const handleMarkOne = async (id) => {
+    try {
+      await noticeAPI.markAsRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
+      );
+    } catch (_) {}
+  };
+
+  const handleMarkAll = async () => {
+    setMarkingAll(true);
+    try {
+      await noticeAPI.markAllAsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch (_) {}
+    setMarkingAll(false);
+  };
+
+  const unread = notifications.filter((n) => !n.isRead).length;
+
+  return (
+    <>
+      <div className="profile-dropdown-backdrop" onClick={onClose} aria-hidden="true" />
+      <div className="notif-panel" role="dialog" aria-label="Notifications">
+        {/* Header */}
+        <div className="notif-panel-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Bell size={16} color="var(--primary)" />
+            <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Notifications</span>
+            {unread > 0 && (
+              <span className="notif-badge-pill">{unread}</span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <button
+              className="notif-header-btn"
+              onClick={fetchNotifications}
+              title="Refresh"
+              disabled={loading}
+            >
+              <RefreshCw size={13} className={loading ? 'spin' : ''} />
+            </button>
+            {unread > 0 && (
+              <button
+                className="notif-header-btn"
+                onClick={handleMarkAll}
+                title="Mark all as read"
+                disabled={markingAll}
+              >
+                <CheckCheck size={13} />
+              </button>
+            )}
+            <button className="notif-header-btn" onClick={onClose} title="Close">
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="notif-panel-body">
+          {loading ? (
+            <div className="notif-empty">
+              <div className="notif-spinner" />
+              <span>Loading…</span>
+            </div>
+          ) : error ? (
+            <div className="notif-empty">
+              <AlertCircle size={28} color="var(--danger)" />
+              <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>{error}</span>
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="notif-empty">
+              <Bell size={32} color="var(--text-muted)" style={{ opacity: 0.4 }} />
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                You're all caught up! 🎉
+              </span>
+            </div>
+          ) : (
+            notifications.map((n) => (
+              <div
+                key={n._id}
+                className={`notif-item${n.isRead ? '' : ' unread'}`}
+                onClick={() => !n.isRead && handleMarkOne(n._id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && !n.isRead && handleMarkOne(n._id)}
+              >
+                <div
+                  className="notif-icon"
+                  style={{ color: PRIORITY_COLOR[n.priority] || 'var(--primary)' }}
+                >
+                  {TYPE_ICON[n.type] || <Bell size={15} />}
+                </div>
+                <div className="notif-content">
+                  <div className="notif-title">{n.title}</div>
+                  <div className="notif-msg">{n.message}</div>
+                  <div className="notif-time">{relativeTime(n.createdAt)}</div>
+                </div>
+                {!n.isRead && <div className="notif-unread-dot" />}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        {notifications.length > 0 && (
+          <div className="notif-panel-footer">
+            <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+              {unread > 0 ? `${unread} unread` : 'All caught up'}
+            </span>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
 
 /**
  * ProfileDropdown — Glassmorphic dropdown with user info, quick links, and logout.
@@ -107,16 +278,30 @@ const Navbar = ({ showSidebar = false, onMenuClick, sidebarCollapsed }) => {
   const { user, role, logout, toggleTheme, theme, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const dropdownRef = useRef(null);
+  const notifRef = useRef(null);
+
+  // Fetch unread count once on mount (for badge)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    noticeAPI.getMyNotifications({ unreadOnly: 'true' })
+      .then((res) => setUnreadCount(res.data?.unreadCount || 0))
+      .catch(() => {});
+  }, [isAuthenticated]);
 
   // Close on Escape key
   useEffect(() => {
     const handleEsc = (e) => {
-      if (e.key === 'Escape') setDropdownOpen(false);
+      if (e.key === 'Escape') {
+        setDropdownOpen(false);
+        setNotifOpen(false);
+      }
     };
-    if (dropdownOpen) document.addEventListener('keydown', handleEsc);
+    if (dropdownOpen || notifOpen) document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [dropdownOpen]);
+  }, [dropdownOpen, notifOpen]);
 
   const handleLogout = () => {
     logout();
@@ -226,14 +411,26 @@ const Navbar = ({ showSidebar = false, onMenuClick, sidebarCollapsed }) => {
         </button>
 
         {/* Notifications */}
-        <button className="icon-btn" title="Notifications" aria-label="Notifications" style={{ position: 'relative' }}>
-          <Bell size={17} />
-          <span style={{
-            position: 'absolute', top: 4, right: 4,
-            width: 7, height: 7, borderRadius: '50%',
-            background: 'var(--danger)', border: '1.5px solid var(--bg-sidebar)'
-          }} />
-        </button>
+        <div className="profile-dropdown-wrapper" ref={notifRef}>
+          <button
+            className="icon-btn"
+            title="Notifications"
+            aria-label="Notifications"
+            aria-expanded={notifOpen}
+            style={{ position: 'relative' }}
+            onClick={() => { setNotifOpen(!notifOpen); setDropdownOpen(false); }}
+          >
+            <Bell size={17} />
+            {unreadCount > 0 && (
+              <span className="notif-bell-badge">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+          {notifOpen && (
+            <NotificationPanel onClose={() => { setNotifOpen(false); setUnreadCount(0); }} />
+          )}
+        </div>
 
         {/* Profile Avatar with Dropdown */}
         <div className="profile-dropdown-wrapper" ref={dropdownRef}>

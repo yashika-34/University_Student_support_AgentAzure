@@ -101,10 +101,13 @@ npm run seed
 
 ### Step 2: Deploy Azure OpenAI Model
 1. In your Foundry Project, navigate to **Deployments > + Deploy Model > Deploy Base Model**.
-2. Select `gpt-4o-mini`.
-3. Set Deployment Name: `gpt-4o-mini`.
+2. Select your model (e.g., `gpt-4.1-mini` or `gpt-4o-mini`).
+3. Set Deployment Name: `gpt-4.1-mini` (must match your Azure AI Foundry deployment).
 4. Leave deployment type as **Standard** and allocate desired TPM (Tokens Per Minute, e.g. 50k TPM).
 5. Click **Deploy**.
+
+> [!IMPORTANT]
+> In Azure Portal -> your AI Resource -> **Networking**, ensure **"Public network access"** is set to **"All Networks"**. If it is set to "Disabled" or "Selected Networks", Render cloud servers will be blocked by Azure's firewall.
 
 ### Step 3: Provision Azure AI Search (Optional for Document RAG)
 1. In the Azure Portal, create an **Azure AI Search** resource (`uniassist-search`).
@@ -114,9 +117,9 @@ npm run seed
 
 ### Step 4: Extract Azure Keys & Endpoints
 Navigate to **Project Settings > Project API Keys** in Azure AI Foundry:
-- **Endpoint:** `https://your-resource-name.openai.azure.com/`
+- **Endpoint:** `https://your-resource-name.services.ai.azure.com`
 - **API Key:** `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
-- **Deployment Name:** `gpt-4o-mini`
+- **Deployment Name:** `gpt-4.1-mini` (or your chosen deployment name)
 - **API Version:** `2024-02-15-preview`
 
 ---
@@ -130,11 +133,12 @@ The repository includes a ready-to-use [`render.yaml`](file:///c:/Users/HP/OneDr
 2. Log in to [Render Dashboard](https://dashboard.render.com).
 3. Click **New > Blueprint**.
 4. Select your connected GitHub repository.
-5. Render detects `render.yaml` automatically and configures the `uniassist-backend` Web Service.
+5. Render detects `render.yaml` automatically and configures the `uniassist` Web Service.
 6. Populate the prompted environment variables:
    - `MONGODB_URI`: Your MongoDB Atlas connection string
-   - `AZURE_OPENAI_ENDPOINT`: Your Azure OpenAI endpoint URL
+   - `AZURE_OPENAI_ENDPOINT`: Your Azure OpenAI endpoint URL (e.g. `https://universitystudentsuppor-resource.services.ai.azure.com`)
    - `AZURE_OPENAI_API_KEY`: Your Azure OpenAI API key
+   - `AZURE_OPENAI_DEPLOYMENT_NAME`: `gpt-4.1-mini`
 7. Click **Apply**.
 
 ### Option B: Manual Web Service Setup on Render
@@ -142,36 +146,47 @@ If setting up manually without Blueprint:
 1. Click **New > Web Service**.
 2. Connect your GitHub repository.
 3. Settings:
-   - **Name:** `uniassist-backend`
+   - **Name:** `uniassist`
    - **Region:** `Oregon (US West)` or closest to your Atlas cluster
    - **Branch:** `main`
    - **Root Directory:** *(leave blank / root)*
    - **Runtime:** `Node`
-   - **Build Command:** `npm install`
+   - **Build Command:** `npm install && npm run build`
    - **Start Command:** `npm start`
    - **Instance Type:** `Free`
 4. In **Environment Variables**, add:
 
-| Key | Value |
-| :--- | :--- |
-| `NODE_ENV` | `production` |
-| `PORT` | `10000` |
-| `CLIENT_URL` | `https://uniassist-client.vercel.app` *(update once Vercel URL is created)* |
-| `MONGODB_URI` | `mongodb+srv://uniassist_admin:<PASS>@.../uniassist_db?retryWrites=true&w=majority` |
-| `JWT_SECRET` | *(Click Generate for a secure 64-char key)* |
-| `JWT_EXPIRES_IN` | `1d` |
-| `JWT_REFRESH_SECRET` | *(Click Generate for a secure 64-char key)* |
-| `JWT_REFRESH_EXPIRES_IN`| `7d` |
-| `AZURE_OPENAI_ENDPOINT`| `https://your-resource.openai.azure.com/` |
-| `AZURE_OPENAI_API_KEY` | `your_azure_api_key_here` |
-| `AZURE_OPENAI_DEPLOYMENT_NAME` | `gpt-4o-mini` |
-| `AZURE_OPENAI_API_VERSION` | `2024-02-15-preview` |
+| Key | Value | Notes |
+| :--- | :--- | :--- |
+| `NODE_ENV` | `production` | Production mode |
+| `PORT` | `10000` | Render default port |
+| `MONGODB_URI` | `mongodb+srv://...` | Whitelist `0.0.0.0/0` in Atlas |
+| `JWT_SECRET` | *(Random 64-char key)* | Secret for auth tokens |
+| `JWT_EXPIRES_IN` | `1d` | Token expiry |
+| `AZURE_OPENAI_ENDPOINT`| `https://universitystudentsuppor-resource.services.ai.azure.com` | Azure AI resource endpoint |
+| `AZURE_OPENAI_API_KEY` | `your_azure_api_key_here` | Azure OpenAI API Key |
+| `AZURE_OPENAI_DEPLOYMENT_NAME` | `gpt-4.1-mini` | Must match Azure deployment |
+| `AZURE_OPENAI_API_VERSION` | `2024-02-15-preview` | Supported API version |
 
 5. Click **Create Web Service**.
-6. Wait for the build to finish. Once live, test the health check endpoint:
+6. Once deployed, test the live healthcheck and Azure AI connection:
+   ```bash
+   # 1. Health check
+   curl https://<your-render-subdomain>.onrender.com/health
+
+   # 2. Live Azure Model Verification Endpoint
+   curl https://<your-render-subdomain>.onrender.com/api/v1/chat/azure-status
    ```
-   curl https://uniassist-backend.onrender.com/health
-   # Expected response: {"status":"healthy","service":"UniAssist AI Backend"}
+   **Expected Response:**
+   ```json
+   {
+     "success": true,
+     "configured": true,
+     "status": "connected",
+     "modelUsed": "gpt-4.1-mini",
+     "sampleResponse": "OK.",
+     "message": "Azure OpenAI model is active and responding successfully!"
+   }
    ```
 
 ---
