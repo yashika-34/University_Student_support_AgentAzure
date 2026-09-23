@@ -30,9 +30,7 @@ const connectDB = async () => {
       console.error('[Atlas Setup]: Check Network Access in MongoDB Atlas. Ensure 0.0.0.0/0 (Allow access from anywhere) is active for Render.');
     }
 
-    if (process.env.NODE_ENV === 'production') {
-      process.exit(1);
-    }
+    console.warn('[MongoDB Notice]: Server continuing in degraded mode. Configure MONGODB_URI in Render dashboard to enable full database persistence.');
   }
 };
 
