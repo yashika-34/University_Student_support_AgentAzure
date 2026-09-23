@@ -1033,7 +1033,7 @@ Respond ONLY with valid JSON matching this schema exactly (no markdown wrapper, 
 }`;
 
         const response = await client.chat.completions.create({
-          model: deployment,
+          model: azureConfig.primaryDeployment,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.3,
           max_tokens: 1200
@@ -1189,7 +1189,7 @@ Counseling Rules:
 
       try {
         const completion = await client.chat.completions.create({
-          model: deployment,
+          model: azureConfig.primaryDeployment,
           messages: openAiMessages,
           temperature: 0.4,
           max_tokens: 1500
@@ -1370,7 +1370,7 @@ Respond ONLY with valid JSON matching this schema exactly (no markdown wrapper, 
 }`;
 
         const response = await client.chat.completions.create({
-          model: deployment,
+          model: azureConfig.primaryDeployment,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.7,
           max_tokens: 600
@@ -1475,7 +1475,7 @@ Respond ONLY with valid raw JSON adhering strictly to this schema (no markdown w
 }`;
 
         const response = await client.chat.completions.create({
-          model: deployment,
+          model: azureConfig.primaryDeployment,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.2,
           max_tokens: 1200
