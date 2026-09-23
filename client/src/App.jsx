@@ -140,7 +140,7 @@ function RoleRedirect() {
 function App() {
   return (
     <AuthProvider>
-      <Router basename="/University_Student_support_AgentAzure" future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AppLayout />
       </Router>
     </AuthProvider>
