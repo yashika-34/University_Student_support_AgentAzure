@@ -941,7 +941,7 @@ const CampusServicesPage = () => {
                       className="btn btn-secondary"
                       style={{ padding: '0.65rem 1.4rem', opacity: 0.7, cursor: 'not-allowed' }}
                     >
-                      Application Submitted
+                      Applied
                     </button>
                   ) : (
                     <button
