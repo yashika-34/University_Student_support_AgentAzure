@@ -228,7 +228,7 @@ Ensure options are distinct and plausible, with no ambiguous answers. Return val
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const completion = await client.chat.completions.create({
-          model: azureConfig.primaryDeployment,
+          model: deployment,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
