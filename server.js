@@ -44,6 +44,9 @@ connectDB();
 
 const app = express();
 
+// Trust Render/Cloudflare proxy (required for express-rate-limit on Render)
+app.set('trust proxy', 1);
+
 // Security HTTP Headers with SPA compatibility
 app.use(
   helmet({
