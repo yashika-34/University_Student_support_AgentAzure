@@ -584,13 +584,10 @@ Topics: ${Array.isArray(topics) ? topics.join(', ') : topics || 'All syllabus to
 Difficulty: ${difficulty} (mix of easy 30%, medium 50%, hard 20%)
 Total Marks: ${totalMarks}
 Duration: ${duration}
-Number of Questions: ${questionCount}
+EXACT NUMBER OF QUESTIONS TO GENERATE: ${questionCount}
 
-Format the question paper as:
-- Header with course details and instructions
-- Section A: Multiple Choice Questions (20 marks, 1 mark each)
-- Section B: Short Answer Questions (30 marks, 5 marks each)
-- Section C: Long Answer / Problems (50 marks, 10-15 marks each)
+Format the question paper logically into sections (e.g., Section A for objective/short, Section B for long answers) but you MUST generate EXACTLY ${questionCount} questions in total across all sections. 
+The sum of marks for all ${questionCount} questions must exactly equal ${totalMarks}.
 
 Include marking scheme and instructions. Generate realistic academic questions.`;
 
