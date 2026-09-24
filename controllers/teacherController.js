@@ -573,9 +573,12 @@ export const generateQuestionPaper = async (req, res, next) => {
       difficulty = 'mixed',
       totalMarks = 100,
       duration = '3 hours',
-      questionCount = 10,
+      mcqCount = 5,
+      subjectiveCount = 5,
       examType = 'Final Examination'
     } = req.body;
+
+    const totalQuestions = Number(mcqCount) + Number(subjectiveCount);
 
     const prompt = `Generate a complete university ${examType} question paper with the following specifications:
 
@@ -584,10 +587,10 @@ Topics: ${Array.isArray(topics) ? topics.join(', ') : topics || 'All syllabus to
 Difficulty: ${difficulty} (mix of easy 30%, medium 50%, hard 20%)
 Total Marks: ${totalMarks}
 Duration: ${duration}
-EXACT NUMBER OF QUESTIONS TO GENERATE: ${questionCount}
+EXACT NUMBER OF QUESTIONS TO GENERATE: ${totalQuestions} (EXACTLY ${mcqCount} MCQs and EXACTLY ${subjectiveCount} Subjective/Long Answer questions).
 
-Format the question paper logically into sections (e.g., Section A for objective/short, Section B for long answers) but you MUST generate EXACTLY ${questionCount} questions in total across all sections. 
-The sum of marks for all ${questionCount} questions must exactly equal ${totalMarks}.
+Format the question paper logically into sections (e.g., Section A for MCQs, Section B for Subjective) but you MUST generate EXACTLY ${mcqCount} MCQs and EXACTLY ${subjectiveCount} subjective questions. 
+The sum of marks for all ${totalQuestions} questions must exactly equal ${totalMarks}.
 
 Include marking scheme and instructions. Generate realistic academic questions.`;
 

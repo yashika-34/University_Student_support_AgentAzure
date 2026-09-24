@@ -25,7 +25,8 @@ const QuestionPaperPage = () => {
     difficulty: 'mixed',
     totalMarks: 100,
     duration: '3 hours',
-    questionCount: 10,
+    mcqCount: 5,
+    subjectiveCount: 5,
     examType: 'Final Examination'
   });
   const [generating, setGenerating] = useState(false);
@@ -217,10 +218,10 @@ const QuestionPaperPage = () => {
             </div>
 
             {/* Marks & Duration */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div className="form-group">
                 <label className="form-label">Total Marks</label>
-                <input className="form-input" type="number" min={20} max={200} value={form.totalMarks} onChange={e => setForm(f => ({...f, totalMarks: parseInt(e.target.value)}))} />
+                <input className="form-input" type="number" min={20} max={200} value={form.totalMarks} onChange={e => setForm(f => ({...f, totalMarks: parseInt(e.target.value) || 0}))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Duration</label>
@@ -228,9 +229,17 @@ const QuestionPaperPage = () => {
                   {['1 hour', '1.5 hours', '2 hours', '3 hours', '4 hours'].map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
+            </div>
+            
+            {/* Question Breakdown */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.75rem' }}>
               <div className="form-group">
-                <label className="form-label">Questions</label>
-                <input className="form-input" type="number" min={5} max={30} value={form.questionCount} onChange={e => setForm(f => ({...f, questionCount: parseInt(e.target.value)}))} />
+                <label className="form-label">MCQ Count</label>
+                <input className="form-input" type="number" min={0} max={50} value={form.mcqCount} onChange={e => setForm(f => ({...f, mcqCount: parseInt(e.target.value) || 0}))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Subjective Qs Count</label>
+                <input className="form-input" type="number" min={0} max={30} value={form.subjectiveCount} onChange={e => setForm(f => ({...f, subjectiveCount: parseInt(e.target.value) || 0}))} />
               </div>
             </div>
 
