@@ -9,7 +9,8 @@ import {
   getStudyPlan,
   getLearningRecommendations,
   getExamSchedules,
-  createExamSchedule
+  createExamSchedule,
+  generateProjectArchitecture
 } from '../controllers/academicToolsController.js';
 import { verifyToken, authorizeRoles, optionalAuth } from '../middleware/authMiddleware.js';
 
@@ -30,5 +31,7 @@ router.post('/quizzes/:id/submit', optionalAuth, submitQuiz);
 router.get('/quiz-history', optionalAuth, getQuizHistory);
 router.get('/quizzes/history', optionalAuth, getQuizHistory);
 router.get('/quizzes/:id', optionalAuth, getQuizById);
+// AI Project Architect
+router.post('/project-architect', optionalAuth, generateProjectArchitecture);
 
 export default router;

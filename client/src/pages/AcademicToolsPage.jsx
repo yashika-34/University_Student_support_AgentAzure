@@ -273,6 +273,41 @@ const AcademicToolsPage = () => {
     setQuizError('');
   };
 
+  /* ── 5. AI Project Architect State ──────────────────────────────── */
+  const [architectInterests, setArchitectInterests] = useState('');
+  const [architectComplexity, setArchitectComplexity] = useState('Advanced');
+  const [architectTech, setArchitectTech] = useState('');
+  const [architectLoading, setArchitectLoading] = useState(false);
+  const [architectResult, setArchitectResult] = useState(null);
+  const [architectError, setArchitectError] = useState('');
+
+  const handleGenerateProject = async () => {
+    if (!architectInterests.trim()) {
+      setArchitectError('Please provide your project interests/domain.');
+      return;
+    }
+    setArchitectLoading(true);
+    setArchitectError('');
+    setArchitectResult(null);
+
+    try {
+      // You can define a new API call in your services/api.js, or just use api.post
+      const res = await api.post('/academic/project-architect', {
+        interests: architectInterests,
+        complexity: architectComplexity,
+        techPreferences: architectTech
+      });
+      if (res.data?.success && res.data?.data) {
+        setArchitectResult(res.data.data.proposal);
+      }
+    } catch (err) {
+      console.error('Project generation failed:', err);
+      setArchitectError('Failed to generate project architecture. Please try again.');
+    } finally {
+      setArchitectLoading(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       
@@ -296,7 +331,8 @@ const AcademicToolsPage = () => {
           { id: 'sgpa', label: 'SGPA & CGPA Predictor', icon: Target },
           { id: 'planner', label: 'Study Planner', icon: Clock },
           { id: 'quiz', label: 'AI Quiz Studio (Azure OpenAI)', icon: BrainCircuit },
-          { id: 'recommendations', label: 'AI Recommendations', icon: Sparkles }
+          { id: 'recommendations', label: 'AI Recommendations', icon: Sparkles },
+          { id: 'architect', label: 'AI Project Architect', icon: Layers }
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1179,6 +1215,95 @@ const AcademicToolsPage = () => {
           </div>
         </div>
       </ModalPortal>
+
+      {/* ── TAB 5: AI Project Architect (Azure OpenAI GPT-4.1-mini) ── */}
+      {activeTab === 'architect' && (
+        <div className="glass-panel animate-fade-in" style={{ padding: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.75rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                <h2 style={{ fontSize: '1.35rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Layers size={22} color="var(--primary)" /> AI Capstone Project Architect
+                </h2>
+                <span className="badge" style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.3)', fontSize: '0.72rem' }}>
+                  Powered by Azure AI Foundry
+                </span>
+              </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                Generate a complete final-year project proposal including Tech Stack, Database Schema, and a week-by-week implementation roadmap based on your interests.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.25rem', marginBottom: '1.5rem', background: 'var(--bg-input)', padding: '1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 600 }}>What are your core interests? (e.g., Healthcare, IoT, EdTech, Blockchain)</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="e.g. AI-based healthcare diagnostic tool using Medical Imaging"
+                value={architectInterests}
+                onChange={(e) => setArchitectInterests(e.target.value)}
+              />
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Project Complexity</label>
+                <select className="form-select" value={architectComplexity} onChange={(e) => setArchitectComplexity(e.target.value)}>
+                  <option value="Beginner">Beginner (Basic CRUD, Simple UI)</option>
+                  <option value="Intermediate">Intermediate (Authentication, API Integrations, Medium Data)</option>
+                  <option value="Advanced">Advanced (Microservices, AI Integration, Real-time, Scalable)</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Preferred Tech Stack (Optional)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. MERN, Python Django, Azure Services"
+                  value={architectTech}
+                  onChange={(e) => setArchitectTech(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {architectError && (
+              <div style={{ padding: '0.75rem', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', fontSize: '0.85rem', borderRadius: 'var(--radius-sm)' }}>
+                {architectError}
+              </div>
+            )}
+
+            <button
+              onClick={handleGenerateProject}
+              className="btn btn-primary"
+              style={{ padding: '0.75rem 1.5rem', fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', width: 'fit-content', marginTop: '0.5rem' }}
+              disabled={architectLoading}
+            >
+              {architectLoading ? (
+                <><Loader2 size={18} className="animate-spin" /> Architecting Project...</>
+              ) : (
+                <><Sparkles size={18} /> Generate Project Blueprint</>
+              )}
+            </button>
+          </div>
+
+          {architectResult && (
+            <div style={{
+              background: 'var(--bg-card)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+              padding: '2rem',
+              color: 'var(--text-primary)',
+              lineHeight: '1.7',
+              fontFamily: 'system-ui, -apple-system, sans-serif'
+            }}>
+              <div dangerouslySetInnerHTML={{ __html: architectResult.replace(/\n/g, '<br/>').replace(/### (.*?)(<br\/>|$)/g, '<h3>$1</h3>').replace(/# (.*?)(<br\/>|$)/g, '<h2>$1</h2>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   );

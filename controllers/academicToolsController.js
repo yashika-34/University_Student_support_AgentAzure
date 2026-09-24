@@ -545,3 +545,68 @@ export const createExamSchedule = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+/**
+ * Generate AI Capstone Project Architecture
+ * @route POST /api/v1/academic/project-architect
+ */
+export const generateProjectArchitecture = async (req, res) => {
+  try {
+    const { interests, complexity = 'Advanced', techPreferences = '' } = req.body;
+    
+    if (!interests) {
+      return res.status(400).json({ success: false, message: 'Please provide project interests/domain.' });
+    }
+
+    const client = getAzureOpenAIClient();
+    if (!client) {
+      return res.status(503).json({ success: false, message: 'Azure OpenAI is not configured.' });
+    }
+
+    const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini';
+    
+    const systemPrompt = `You are a Senior Solutions Architect and Academic Capstone Advisor.
+The student wants to build a final-year project based on their interests.
+You must output a highly structured, realistic, and impressive project proposal in Markdown format.
+Include these EXACT sections (use markdown headers):
+# 🚀 Project Title
+### 💡 Elevator Pitch
+### 🎯 Core Problem Solved
+### 🛠️ Recommended Tech Stack (Frontend, Backend, DB, Cloud/Azure)
+### 🗄️ Core Database Schema (Brief tables/collections)
+### 📅 4-Week Implementation Roadmap (Week 1, Week 2, etc.)
+### ☁️ Azure AI / Cloud Services Integration (Crucial step to make it stand out)
+
+Format it beautifully using markdown icons and bold text. Keep it professional and feasible for a final-year engineering student.`;
+
+    const userPrompt = `Student Interests/Domain: ${interests}
+Complexity: ${complexity}
+Preferred Tech (if any): ${techPreferences}
+
+Generate the complete architecture proposal.`;
+
+    const completion = await client.chat.completions.create({
+      model: deployment,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.6,
+      max_tokens: 1500
+    });
+
+    const proposal = completion.choices[0]?.message?.content?.trim();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        proposal,
+        generatedAt: new Date()
+      }
+    });
+
+  } catch (err) {
+    console.error('[generateProjectArchitecture Error]:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
