@@ -1,5 +1,6 @@
 import express from 'express';
 import { verifyToken, authorizeRoles } from '../middleware/authMiddleware.js';
+import multer from 'multer';
 import {
   getTeacherDashboard,
   getCourseAnalytics,
@@ -20,10 +21,24 @@ import {
   editStudentByFaculty,
   deleteStudentByFaculty,
   approveStudentAccount,
-  getDepartmentStats
+  getDepartmentStats,
+  uploadSyllabusAndGenerate,
+  getTeacherPapers
 } from '../controllers/teacherController.js';
 
 const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are supported.'), false);
+    }
+  }
+});
 
 // All teacher routes require authentication + faculty/teacher/admin role
 router.use(verifyToken);
@@ -50,6 +65,8 @@ router.post('/notices', createTeacherNotice);
 
 // ── AI Question Paper ──────────────────────────────────────────────────────
 router.post('/question-paper', generateQuestionPaper);
+router.post('/question-paper/upload', upload.single('syllabus'), uploadSyllabusAndGenerate);
+router.get('/question-paper/my-papers', getTeacherPapers);
 
 // ── Class Report ──────────────────────────────────────────────────────────
 router.get('/report/:courseId', getClassReport);

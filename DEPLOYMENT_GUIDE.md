@@ -7,6 +7,8 @@ This guide provides step-by-step instructions to deploy the entire **UniAssist A
 - **Database (Replica Set):** [MongoDB Atlas](https://www.mongodb.com/atlas)
 - **AI Reasoning & RAG:** [Azure AI Foundry](https://ai.azure.com)
 
+> 💡 **For a deep-dive into the AI pipelines and agent models, please see the [AI_ARCHITECTURE.md](./AI_ARCHITECTURE.md) document.**
+
 ---
 
 ## 1. Cloud Architecture Mapping
@@ -232,7 +234,9 @@ Once Vercel assigns your production domain (e.g., `https://uniassist-client.verc
 | **5. Attendance Simulator** | Adjust simulator slider on Attendance Page | Recomputes percentage live without lag |
 | **6. AI Chat Tool Calling** | In `/chat`, ask: *"What is my CS-301 attendance?"* | Agent queries MongoDB and outputs **87.5%** with tool badge |
 | **7. Grounded Policy RAG** | In `/chat`, ask: *"What is the attendance debarment rule?"* | Agent cites **Regulation 4.2 (75% minimum threshold)** |
-| **8. Support Escalation** | Click **Escalate Ticket** in `/chat` | Generates `#TICK-XXXXXX` and updates chat status in MongoDB |
+| **8. AI Career Simulator** | Go to `/career-hub` and upload a Resume PDF | Extracts skills, detects gaps, and generates tailored cover letter |
+| **9. AI Paper Generator** | In `/faculty/dashboard`, click AI Paper Generator and upload syllabus PDF | Parses text, follows topics, and returns structured Paper/Answer Key |
+| **10. Support Escalation** | Click **Escalate Ticket** in `/chat` | Generates `#TICK-XXXXXX` and updates chat status in MongoDB |
 
 ---
 

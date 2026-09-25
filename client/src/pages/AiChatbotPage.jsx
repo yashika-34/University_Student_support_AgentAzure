@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import api from '../services/api.js';
+import api, { flashcardAPI } from '../services/api.js';
+import FlashcardModal from '../components/flashcards/FlashcardModal.jsx';
 import {
   Sparkles,
   Send,
@@ -11,7 +12,11 @@ import {
   ExternalLink,
   ShieldCheck,
   LifeBuoy,
-  Check
+  Check,
+  BookOpen,
+  Layers,
+  HelpCircle,
+  Loader2
 } from 'lucide-react';
 
 const AiChatbotPage = () => {
@@ -38,6 +43,42 @@ const AiChatbotPage = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [showEscalateModal, setShowEscalateModal] = useState(false);
   const [escalatedTicket, setEscalatedTicket] = useState(null);
+
+  // Flashcards Integration
+  const [chatFlashcardModalOpen, setChatFlashcardModalOpen] = useState(false);
+  const [chatFlashcards, setChatFlashcards] = useState([]);
+  const [chatFlashcardTitle, setChatFlashcardTitle] = useState('');
+  const [chatFlashcardCategory, setChatFlashcardCategory] = useState('Academic Revision');
+  const [generatingCardMsgId, setGeneratingCardMsgId] = useState(null);
+
+  const handleGenerateChatFlashcards = async (msgContent, type = 'chatbot_quick_revision', title = 'Quick Revision') => {
+    setGeneratingCardMsgId(type);
+    try {
+      const res = await flashcardAPI.generate({
+        sourceModule: 'chatbot',
+        type,
+        title: `${title} Flashcards`,
+        context: msgContent,
+        count: 6,
+        save: true
+      });
+      if (res.data?.data?.cards) {
+        setChatFlashcards(res.data.data.cards);
+        setChatFlashcardTitle(`${title} — Academic Revision Deck`);
+        setChatFlashcardCategory(
+          type === 'chatbot_formula' ? 'Important Formulas' :
+          type === 'chatbot_concept' ? 'Core Concepts' :
+          type === 'chatbot_definition' ? 'Definitions' : 'Quick Revision'
+        );
+        setChatFlashcardModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Failed to generate flashcards from chat:', err);
+      alert('Failed to generate revision flashcards. Please try again.');
+    } finally {
+      setGeneratingCardMsgId(null);
+    }
+  };
 
   // Auto-fill prompt if passed from another page via navigate state
   useEffect(() => {
@@ -362,6 +403,83 @@ const AiChatbotPage = () => {
                     </div>
                   )}
 
+                  {/* ── Smart AI Flashcard Generator Chips (Only on Assistant Replies) ── */}
+                  {!isUser && msg.id !== 'welcome-1' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <Sparkles size={11} color="var(--primary)" /> Smart Flashcards:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateChatFlashcards(msg.content, 'chatbot_quick_revision', 'Quick Revision')}
+                        disabled={Boolean(generatingCardMsgId)}
+                        className="badge"
+                        style={{
+                          background: 'rgba(59, 130, 246, 0.12)',
+                          color: 'var(--primary)',
+                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                          cursor: 'pointer',
+                          fontSize: '0.7rem',
+                          padding: '0.2rem 0.55rem',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        🎴 Quick Revision
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateChatFlashcards(msg.content, 'chatbot_concept', 'Concepts')}
+                        disabled={Boolean(generatingCardMsgId)}
+                        className="badge"
+                        style={{
+                          background: 'rgba(139, 92, 246, 0.12)',
+                          color: 'var(--accent-purple)',
+                          border: '1px solid rgba(139, 92, 246, 0.3)',
+                          cursor: 'pointer',
+                          fontSize: '0.7rem',
+                          padding: '0.2rem 0.55rem',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        💡 Concepts
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateChatFlashcards(msg.content, 'chatbot_formula', 'Important Formulas')}
+                        disabled={Boolean(generatingCardMsgId)}
+                        className="badge"
+                        style={{
+                          background: 'rgba(16, 185, 129, 0.12)',
+                          color: 'var(--success)',
+                          border: '1px solid rgba(16, 185, 129, 0.3)',
+                          cursor: 'pointer',
+                          fontSize: '0.7rem',
+                          padding: '0.2rem 0.55rem',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        📐 Formulas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateChatFlashcards(msg.content, 'chatbot_definition', 'Definitions')}
+                        disabled={Boolean(generatingCardMsgId)}
+                        className="badge"
+                        style={{
+                          background: 'rgba(245, 158, 11, 0.12)',
+                          color: '#f59e0b',
+                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                          cursor: 'pointer',
+                          fontSize: '0.7rem',
+                          padding: '0.2rem 0.55rem',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        📖 Definitions
+                      </button>
+                    </div>
+                  )}
+
                   <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.25rem', textAlign: isUser ? 'right' : 'left' }}>
                     {msg.timestamp}
                   </div>
@@ -512,6 +630,16 @@ const AiChatbotPage = () => {
           </div>
         </div>
       )}
+
+      {/* Smart Chatbot Flashcard Modal */}
+      <FlashcardModal
+        isOpen={chatFlashcardModalOpen}
+        onClose={() => setChatFlashcardModalOpen(false)}
+        title={chatFlashcardTitle}
+        initialCards={chatFlashcards}
+        sourceModule="chatbot"
+        category={chatFlashcardCategory}
+      />
 
       <style>{`
         @media (max-width: 850px) {

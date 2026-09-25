@@ -67,6 +67,7 @@ export const studentAPI = {
 // ── Attendance APIs ───────────────────────────────────────────────────────
 export const attendanceAPI = {
   getMySummary: () => api.get('/attendance/my-summary'),
+  getCatchUpData: () => api.get('/attendance/catch-up'),
   getCourseAttendance: (courseId, studentId) =>
     api.get(`/attendance/course/${courseId}`, { params: { studentId } }),
   markBatch: (batchData) => api.post('/attendance/mark-batch', batchData)
@@ -213,6 +214,20 @@ export const academicAPI = {
   getQuizById: (id) => api.get(`/academic/quizzes/${id}`),
   getStudyPlan: () => api.get('/academic/study-plan'),
   getRecommendations: () => api.get('/academic/recommendations')
+};
+
+// ── Flashcard APIs (Azure AI Powered) ────────────────────────────────────
+export const flashcardAPI = {
+  generate: (data) => api.post('/flashcards/generate', data),
+  saveDeck: (data) => api.post('/flashcards/decks', data),
+  getMyDecks: (params) => api.get('/flashcards/decks', { params }),
+  getDeckById: (id) => api.get(`/flashcards/decks/${id}`),
+  deleteDeck: (id) => api.delete(`/flashcards/decks/${id}`),
+  updateCardStatus: (data) => api.put('/flashcards/card-status', data),
+  getStats: () => api.get('/flashcards/stats'),
+  getRecommended: () => api.get('/flashcards/recommended'),
+  getDueToday: () => api.get('/flashcards/due-today'),
+  exportAnkiUrl: (deckId) => `/api/v1/flashcards/decks/${deckId}/export-anki`
 };
 
 export default api;

@@ -35,6 +35,7 @@ import teacherRoutes from './routes/teacherRoutes.js';
 import marksRoutes from './routes/marksRoutes.js';
 import ragRoutes from './routes/ragRoutes.js';
 import voiceRoutes from './routes/voiceRoutes.js';
+import flashcardRoutes from './routes/flashcardRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -156,6 +157,7 @@ app.use('/api/v1/teacher', teacherRoutes);
 app.use('/api/v1/marks', marksRoutes);
 app.use('/api/v1/rag', ragRoutes);
 app.use('/api/v1/voice', voiceRoutes);
+app.use('/api/v1/flashcards', flashcardRoutes);
 // Serve static assets from the React build if present
 app.use(express.static(distPath));
 

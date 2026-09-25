@@ -2,25 +2,6 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api.js';
 import { Users, Search, ChevronDown, ChevronUp, BarChart2, AlertTriangle, Award, CalendarCheck, ExternalLink } from 'lucide-react';
 
-// Mock student list for demo
-const MOCK_STUDENTS = [
-  { id: '1', studentId: 'STU-2024-8842', name: 'Alex Mercer', email: 'alex.student@university.edu', department: 'CSE', semester: 5, cgpa: 8.65, attendancePercentage: 85, isLowAttendance: false },
-  { id: '2', studentId: 'STU-2024-9102', name: 'Emma Watson', email: 'emma.student@university.edu', department: 'CSE', semester: 5, cgpa: 7.85, attendancePercentage: 72, isLowAttendance: true },
-  { id: '3', studentId: 'STU-2024-7731', name: 'Liam Smith', email: 'liam.student@university.edu', department: 'CSE', semester: 5, cgpa: 6.90, attendancePercentage: 66, isLowAttendance: true },
-  { id: '4', studentId: 'STU-2024-6621', name: 'Priya Patel', email: 'priya.student@university.edu', department: 'CSE', semester: 5, cgpa: 9.40, attendancePercentage: 95, isLowAttendance: false },
-  { id: '5', studentId: 'STU-2024-5510', name: 'Carlos Rivera', email: 'carlos.student@university.edu', department: 'CSE', semester: 5, cgpa: 7.60, attendancePercentage: 83, isLowAttendance: false }
-];
-
-const MOCK_MARKS = [
-  { examType: 'internal_1', examLabel: 'Unit Test 1', marksObtained: 78, maxMarks: 100, percentage: 78, grade: 'B+', course: { courseCode: 'CS-301', courseName: 'Algorithms' } },
-  { examType: 'midterm', examLabel: 'Mid Semester', marksObtained: 85, maxMarks: 100, percentage: 85, grade: 'A+', course: { courseCode: 'CS-301', courseName: 'Algorithms' } }
-];
-
-const MOCK_ATTENDANCE = [
-  { courseCode: 'CS-301', courseName: 'Algorithms & Complexity', attended: 21, total: 24, percentage: 87 },
-  { courseCode: 'CS-305', courseName: 'Cloud Computing', attended: 13, total: 18, percentage: 72 }
-];
-
 const StudentProgressPage = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,8 +15,9 @@ const StudentProgressPage = () => {
       try {
         const res = await api.get('/teacher/students');
         setStudents(res.data.students || []);
-      } catch {
-        setStudents(MOCK_STUDENTS);
+      } catch (err) {
+        console.error('Failed to load students:', err);
+        setStudents([]);
       } finally {
         setLoading(false);
       }
@@ -54,24 +36,23 @@ const StudentProgressPage = () => {
       const res = await api.get(`/teacher/students/${studentId}`);
       setStudentDetail(res.data);
     } catch {
-      // Mock detail
       setStudentDetail({
-        student: MOCK_STUDENTS.find(s => s.id === studentId),
-        attendance: MOCK_ATTENDANCE,
-        marks: MOCK_MARKS
+        student: students.find(s => s.id === studentId),
+        attendance: [],
+        marks: []
       });
     }
   };
 
-  const displayStudents = (students.length > 0 ? students : MOCK_STUDENTS)
+  const displayStudents = students
     .filter(s => {
       const q = searchQuery.toLowerCase();
-      const matchesSearch = !q || s.name.toLowerCase().includes(q) || s.studentId.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
+      const matchesSearch = !q || (s.name || '').toLowerCase().includes(q) || (s.studentId || '').toLowerCase().includes(q) || (s.email || '').toLowerCase().includes(q);
       const matchesFilter = !filterLow || s.isLowAttendance;
       return matchesSearch && matchesFilter;
     });
 
-  const lowCount = (students.length > 0 ? students : MOCK_STUDENTS).filter(s => s.isLowAttendance).length;
+  const lowCount = students.filter(s => s.isLowAttendance).length;
 
   if (loading) {
     return (
@@ -185,25 +166,29 @@ const StudentProgressPage = () => {
                         <CalendarCheck size={16} color="var(--primary)" /> Course Attendance
                       </h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                        {(studentDetail.attendance || MOCK_ATTENDANCE).map((att, idx) => (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <span className="badge badge-primary" style={{ minWidth: 55 }}>{att.courseCode}</span>
-                            <div style={{ flex: 1 }}>
-                              <div className="progress-track">
-                                <div className="progress-fill" style={{
-                                  width: `${att.percentage}%`,
-                                  background: att.percentage >= 75 ? 'var(--success)' : 'var(--danger)'
-                                }} />
+                        {!studentDetail.attendance || studentDetail.attendance.length === 0 ? (
+                          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No attendance records recorded for this student yet.</p>
+                        ) : (
+                          studentDetail.attendance.map((att, idx) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <span className="badge badge-primary" style={{ minWidth: 55 }}>{att.courseCode}</span>
+                              <div style={{ flex: 1 }}>
+                                <div className="progress-track">
+                                  <div className="progress-fill" style={{
+                                    width: `${att.percentage}%`,
+                                    background: att.percentage >= 75 ? 'var(--success)' : 'var(--danger)'
+                                  }} />
+                                </div>
                               </div>
+                              <span style={{
+                                fontWeight: 700, fontSize: '0.85rem', minWidth: 40, textAlign: 'right',
+                                color: att.percentage >= 75 ? 'var(--success)' : 'var(--danger)'
+                              }}>
+                                {att.percentage}%
+                              </span>
                             </div>
-                            <span style={{
-                              fontWeight: 700, fontSize: '0.85rem', minWidth: 40, textAlign: 'right',
-                              color: att.percentage >= 75 ? 'var(--success)' : 'var(--danger)'
-                            }}>
-                              {att.percentage}%
-                            </span>
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                     </div>
 
@@ -213,24 +198,28 @@ const StudentProgressPage = () => {
                         <Award size={16} color="var(--accent-purple)" /> Recent Marks
                       </h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {(studentDetail.marks || MOCK_MARKS).map((m, idx) => (
-                          <div key={idx} style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '0.65rem 0.85rem', background: 'var(--bg-input)',
-                            borderRadius: 'var(--radius-sm)', fontSize: '0.85rem'
-                          }}>
-                            <div>
-                              <span className="badge badge-primary" style={{ marginRight: '0.5rem' }}>{m.course?.courseCode}</span>
-                              <span style={{ color: 'var(--text-secondary)' }}>{m.examLabel}</span>
+                        {!studentDetail.marks || studentDetail.marks.length === 0 ? (
+                          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No examination marks recorded for this student yet.</p>
+                        ) : (
+                          studentDetail.marks.map((m, idx) => (
+                            <div key={idx} style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              padding: '0.65rem 0.85rem', background: 'var(--bg-input)',
+                              borderRadius: 'var(--radius-sm)', fontSize: '0.85rem'
+                            }}>
+                              <div>
+                                <span className="badge badge-primary" style={{ marginRight: '0.5rem' }}>{m.course?.courseCode}</span>
+                                <span style={{ color: 'var(--text-secondary)' }}>{m.examLabel}</span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <span style={{ fontWeight: 600 }}>{m.marksObtained}/{m.maxMarks}</span>
+                                <span className={`badge ${m.percentage >= 75 ? 'badge-success' : m.percentage >= 50 ? 'badge-warning' : 'badge-danger'}`}>
+                                  {m.grade}
+                                </span>
+                              </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                              <span style={{ fontWeight: 600 }}>{m.marksObtained}/{m.maxMarks}</span>
-                              <span className={`badge ${m.percentage >= 75 ? 'badge-success' : m.percentage >= 50 ? 'badge-warning' : 'badge-danger'}`}>
-                                {m.grade}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                     </div>
                   </div>

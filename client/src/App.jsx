@@ -31,7 +31,7 @@ import RagUploadPage from './pages/RagUploadPage.jsx';
 // Faculty-Only Pages
 import FacultyDashboard from './pages/FacultyDashboard.jsx';
 import TeacherAnalyticsPage from './pages/teacher/TeacherAnalyticsPage.jsx';
-import QuestionPaperPage from './pages/teacher/QuestionPaperPage.jsx';
+import AIPaperGenerator from './pages/AIPaperGenerator.jsx';
 import StudentProgressPage from './pages/teacher/StudentProgressPage.jsx';
 
 import StudentManagementPage from "./pages/teacher/StudentManagementPage";
@@ -97,7 +97,7 @@ function AppLayout() {
             <Route element={<ProtectedRoute allowedRoles={['faculty', 'teacher']} />}>
               <Route path="/faculty/dashboard" element={<FacultyDashboard />} />
               <Route path="/teacher/analytics" element={<TeacherAnalyticsPage />} />
-              <Route path="/teacher/question-paper" element={<QuestionPaperPage />} />
+              <Route path="/teacher/question-paper" element={<AIPaperGenerator />} />
               <Route path="/teacher/students" element={<StudentProgressPage />} />
               <Route path="/teacher/students-manage" element={<StudentManagementPage />} />
               <Route path="/teacher/report" element={<TeacherAnalyticsPage />} />

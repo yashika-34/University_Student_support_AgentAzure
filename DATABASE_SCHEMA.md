@@ -62,17 +62,30 @@ This document specifies the complete MongoDB database architecture and data mode
                                                                     ^
                                                                     |
 +------------------------------------+  +---------------------------+--------+
-|                FAQs                |  |            Chat History            |
+|           QuestionPapers           |  |            Chat History            |
 |------------------------------------|  |------------------------------------|
 | _id (PK)                           |  | _id (PK)                           |
-| category ('Academics'|'Fees'|...)  |  | sessionId (UUIDv4) [Unique]        |
-| question, answer, tags             |  | user (FK -> Users._id)             |
-| targetAudience, relatedCourse      |  | userRole ('student'|'faculty')     |
-| viewCount, helpfulCount            |  | sessionTitle, status               |
-| isPublished (Boolean)              |  | messages [{ sender, content,       |
-| azureSearchIndexed (Boolean)       |  |   toolCalls, groundingSources }]   |
-| createdBy (FK -> Users._id)        |  | lastActiveAt                       |
+| title (String)                     |  | sessionId (UUIDv4) [Unique]        |
+| examType, difficulty, totalMarks   |  | user (FK -> Users._id)             |
+| syllabusText (String Snippet)      |  | userRole ('student'|'faculty')     |
+| generatedPaper (Markdown)          |  | sessionTitle, status               |
+| answerKey (Markdown)               |  | messages [{ sender, content,       |
+| createdBy (FK -> Users._id)        |  |   toolCalls, groundingSources }]   |
 +------------------------------------+  +------------------------------------+
+                   |
+                   v
++------------------------------------+
+|                FAQs                |
+|------------------------------------|
+| _id (PK)                           |
+| category ('Academics'|'Fees'|...)  |
+| question, answer, tags             |
+| targetAudience, relatedCourse      |
+| viewCount, helpfulCount            |
+| isPublished (Boolean)              |
+| azureSearchIndexed (Boolean)       |
+| createdBy (FK -> Users._id)        |
++------------------------------------+
 ```
 
 ---
@@ -306,3 +319,25 @@ Persists conversation sessions, multi-turn dialogue, tool-calling execution trac
 **Indexes:**
 - `{ sessionId: 1 }` (Unique)
 - `{ user: 1, lastActiveAt: -1 }`
+
+---
+
+### 2.10 `question_papers` Collection
+Stores examination papers and answer keys generated dynamically by Azure OpenAI via the Teacher Portal.
+
+| Field Name | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `_id` | `ObjectId` | Primary Key, Auto | Document ID |
+| `title` | `String` | Required, Default: `'AI Generated...'` | Title of the examination |
+| `examType` | `String` | Enum: `['Mid-Term', 'End-Term', 'Quiz', 'Assignment', 'Practice Test', 'Final Examination']` | Type of assessment |
+| `difficulty` | `String` | Enum: `['Easy', 'Medium', 'Hard', 'Mixed', 'mixed']` | Complexity level |
+| `totalMarks` | `Number` | Required, Default: `100` | Maximum score possible |
+| `syllabusText` | `String` | Optional | Extracted syllabus text snippet |
+| `generatedPaper` | `String` | Required | Markdown formatted question paper |
+| `answerKey` | `String` | Required | Markdown formatted answer key |
+| `createdBy` | `ObjectId` | Ref: `User`, Required | Faculty member who generated the paper |
+| `createdAt` | `Date` | Default: `Date.now` | Generated timestamp |
+| `updatedAt` | `Date` | Default: `Date.now` | Last update timestamp |
+
+**Indexes:**
+- `{ createdBy: 1, createdAt: -1 }` (Used for rendering the Paper Repository history panel)

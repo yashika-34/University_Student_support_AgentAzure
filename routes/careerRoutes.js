@@ -19,6 +19,7 @@ import {
   getMyRegistrations,
   cancelRegistration
 } from '../controllers/careerController.js';
+import { generateJobMatches, generateSkillGapAndRoadmap, generateCoverLetter, startMockInterview, evaluateInterviewAnswer } from '../controllers/aiJobController.js';
 import { verifyToken, authorizeRoles, optionalAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -70,5 +71,11 @@ router.delete('/counselor/sessions/:sessionId', optionalAuth, deleteCounselorSes
 router.post('/interview/generate-question', optionalAuth, generateInterviewQuestion);
 router.post('/simulate-interview', optionalAuth, simulateInterview);
 
+// AI Job Features
+router.post('/ai-jobs/matches', optionalAuth, generateJobMatches);
+router.post('/ai-jobs/skill-gap', optionalAuth, generateSkillGapAndRoadmap);
+router.post('/ai-jobs/cover-letter', optionalAuth, generateCoverLetter);
+router.post('/ai-jobs/start-mock-interview', optionalAuth, startMockInterview);
+router.post('/ai-jobs/evaluate-mock-interview', optionalAuth, evaluateInterviewAnswer);
 
 export default router;

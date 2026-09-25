@@ -8,28 +8,6 @@ import { BarChart3, Users, CheckSquare, AlertTriangle, TrendingUp, BookOpen } fr
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
-// Mock data for demo
-const MOCK_DASHBOARD = {
-  stats: { totalCourses: 2, totalStudents: 114, pendingGrading: 8, lowAttendanceAlerts: 3 },
-  courses: [
-    { id: '1', courseCode: 'CS-301', courseName: 'Algorithms & Complexity', credits: 4 },
-    { id: '2', courseCode: 'CS-305', courseName: 'Cloud Computing', credits: 3 }
-  ]
-};
-
-const MOCK_ANALYTICS = {
-  attendance: { above90: 42, above75: 55, below75: 17, avgAttendance: 81.4 },
-  gradeDistribution: [
-    { _id: 'O', count: 12 }, { _id: 'A+', count: 28 }, { _id: 'A', count: 35 },
-    { _id: 'B+', count: 22 }, { _id: 'B', count: 10 }, { _id: 'F', count: 7 }
-  ],
-  assignmentSubmissionRates: [
-    { title: 'Problem Set 1', submitted: 95, total: 114, rate: 83 },
-    { title: 'Lab 2: Docker', submitted: 72, total: 114, rate: 63 },
-    { title: 'Mini Project', submitted: 45, total: 114, rate: 39 }
-  ]
-};
-
 const TeacherAnalyticsPage = () => {
   const [dashboard, setDashboard] = useState(null);
   const [analytics, setAnalytics] = useState(null);
@@ -40,17 +18,16 @@ const TeacherAnalyticsPage = () => {
     const fetchData = async () => {
       try {
         const res = await api.get('/teacher/dashboard');
-        setDashboard(res.data.dashboard);
-        if (res.data.dashboard?.courses?.length > 0) {
-          const firstCourse = res.data.dashboard.courses[0];
-          setSelectedCourse(firstCourse.id);
-          const analyticsRes = await api.get(`/teacher/analytics/${firstCourse.id}`);
+        const dash = res.data.dashboard;
+        setDashboard(dash);
+        if (dash?.courses?.length > 0) {
+          const firstCourse = dash.courses[0];
+          setSelectedCourse(firstCourse.id || firstCourse._id);
+          const analyticsRes = await api.get(`/teacher/analytics/${firstCourse.id || firstCourse._id}`);
           setAnalytics(analyticsRes.data.analytics);
         }
-      } catch {
-        setDashboard(MOCK_DASHBOARD);
-        setAnalytics(MOCK_ANALYTICS);
-        setSelectedCourse('mock-1');
+      } catch (err) {
+        console.error('Failed to load teacher analytics:', err);
       } finally {
         setLoading(false);
       }
@@ -63,8 +40,9 @@ const TeacherAnalyticsPage = () => {
     try {
       const res = await api.get(`/teacher/analytics/${courseId}`);
       setAnalytics(res.data.analytics);
-    } catch {
-      setAnalytics(MOCK_ANALYTICS);
+    } catch (err) {
+      console.error('Failed to load course analytics:', err);
+      setAnalytics(null);
     }
   };
 
@@ -76,16 +54,16 @@ const TeacherAnalyticsPage = () => {
     );
   }
 
-  const stats = dashboard?.stats || MOCK_DASHBOARD.stats;
-  const courses = dashboard?.courses || MOCK_DASHBOARD.courses;
-  const att = analytics?.attendance || MOCK_ANALYTICS.attendance;
-  const gradeData = analytics?.gradeDistribution || MOCK_ANALYTICS.gradeDistribution;
-  const submissionData = analytics?.assignmentSubmissionRates || MOCK_ANALYTICS.assignmentSubmissionRates;
+  const stats = dashboard?.stats || { totalCourses: 0, totalStudents: 0, pendingGrading: 0, lowAttendanceAlerts: 0 };
+  const courses = dashboard?.courses || [];
+  const att = analytics?.attendance || { above90: 0, above75: 0, below75: 0, avgAttendance: 0 };
+  const gradeData = analytics?.gradeDistribution || [];
+  const submissionData = analytics?.assignmentSubmissionRates || [];
 
   const attendancePieData = [
-    { name: '≥90%', value: att.above90 },
-    { name: '75–89%', value: att.above75 },
-    { name: '<75%', value: att.below75 }
+    { name: '≥90%', value: att.above90 || 0 },
+    { name: '75–89%', value: att.above75 || 0 },
+    { name: '<75%', value: att.below75 || 0 }
   ];
 
   return (

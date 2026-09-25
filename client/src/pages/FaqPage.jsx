@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { faqAPI } from '../services/api.js';
+import FlashcardViewer from '../components/flashcards/FlashcardViewer.jsx';
 import {
   Search,
   ChevronDown,
@@ -9,7 +10,9 @@ import {
   Sparkles,
   ArrowRight,
   Check,
-  Loader2
+  Loader2,
+  Layers,
+  List
 } from 'lucide-react';
 
 const FaqPage = () => {
@@ -19,6 +22,7 @@ const FaqPage = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [expandedId, setExpandedId] = useState(null);
   const [votedMap, setVotedMap] = useState({});
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'flashcards'
 
   const categories = ['All', 'Academics', 'Fees & Financial Aid', 'Examinations', 'Campus Facilities'];
 
@@ -48,6 +52,17 @@ const FaqPage = () => {
     return matchesCat && matchesQuery;
   });
 
+  const faqFlashcards = useMemo(() => {
+    return filteredFaqs.map((faq) => ({
+      cardId: faq._id,
+      front: faq.question,
+      back: faq.answer,
+      category: faq.category || 'General',
+      difficulty: 'Medium',
+      tags: faq.tags || [faq.category]
+    }));
+  }, [filteredFaqs]);
+
   const toggleExpand = (id) => {
     setExpandedId(expandedId === id ? null : id);
   };
@@ -73,39 +88,98 @@ const FaqPage = () => {
           Find official answers to university regulations, attendance policies, financial schedules, and campus amenities from MongoDB database.
         </p>
 
-        {/* Search Bar */}
-        <div style={{ position: 'relative', marginTop: '1.75rem' }}>
-          <input
-            type="text"
-            className="form-input"
-            placeholder="Search FAQs by keywords (e.g. attendance, tuition, clinic, exams)..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              padding: '0.9rem 1rem 0.9rem 2.8rem',
-              borderRadius: 'var(--radius-full)',
-              fontSize: '0.95rem'
-            }}
-          />
-          <Search size={18} style={{ position: 'absolute', left: '1.1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-        </div>
-      </div>
-
-      {/* Category Pills */}
-      <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '0.6rem' }}>
-        {categories.map((category) => (
+        {/* View Mode Switcher */}
+        <div style={{ display: 'inline-flex', padding: '0.35rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)', marginTop: '1.25rem', gap: '0.35rem' }}>
           <button
-            key={category}
-            className={`btn ${selectedCategory === category ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setSelectedCategory(category)}
-            style={{ borderRadius: 'var(--radius-full)', padding: '0.4rem 1.1rem', fontSize: '0.85rem' }}
+            onClick={() => setViewMode('list')}
+            style={{
+              padding: '0.45rem 1.1rem',
+              borderRadius: 'var(--radius-full)',
+              border: 'none',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              background: viewMode === 'list' ? 'var(--primary-gradient)' : 'transparent',
+              color: viewMode === 'list' ? '#fff' : 'var(--text-secondary)',
+              transition: 'all 0.2s'
+            }}
           >
-            {category}
+            <List size={15} /> Accordion List
           </button>
-        ))}
+          <button
+            onClick={() => setViewMode('flashcards')}
+            style={{
+              padding: '0.45rem 1.1rem',
+              borderRadius: 'var(--radius-full)',
+              border: 'none',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              background: viewMode === 'flashcards' ? 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)' : 'transparent',
+              color: viewMode === 'flashcards' ? '#fff' : 'var(--text-secondary)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Layers size={15} /> 🎴 Flashcard Library ({faqFlashcards.length})
+          </button>
+        </div>
+
+        {/* Search Bar (shown in list mode) */}
+        {viewMode === 'list' && (
+          <div style={{ position: 'relative', marginTop: '1.75rem' }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search FAQs by keywords (e.g. attendance, tuition, clinic, exams)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                padding: '0.9rem 1rem 0.9rem 2.8rem',
+                borderRadius: 'var(--radius-full)',
+                fontSize: '0.95rem'
+              }}
+            />
+            <Search size={18} style={{ position: 'absolute', left: '1.1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          </div>
+        )}
       </div>
 
-      {/* FAQ Accordion List */}
+      {/* Category Pills (List Mode) */}
+      {viewMode === 'list' && (
+        <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '0.6rem' }}>
+          {categories.map((category) => (
+            <button
+              key={category}
+              className={`btn ${selectedCategory === category ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setSelectedCategory(category)}
+              style={{ borderRadius: 'var(--radius-full)', padding: '0.4rem 1.1rem', fontSize: '0.85rem' }}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Mode 1: Interactive Flashcard Library */}
+      {viewMode === 'flashcards' && (
+        <div style={{ maxWidth: '850px', width: '100%', margin: '0 auto' }}>
+          <FlashcardViewer
+            title="University Regulations & Policies FAQ Deck"
+            initialCards={faqFlashcards}
+            sourceModule="faq"
+            category={selectedCategory !== 'All' ? selectedCategory : 'General'}
+          />
+        </div>
+      )}
+
+      {/* Mode 2: FAQ Accordion List */}
+      {viewMode === 'list' && (
       <div style={{ maxWidth: '850px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {loading ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -174,6 +248,7 @@ const FaqPage = () => {
           })
         )}
       </div>
+      )}
 
       {/* AI Assistant Banner */}
       <div className="glass-panel" style={{

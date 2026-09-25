@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import api from '../services/api.js';
+import api, { flashcardAPI } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import ModalPortal from '../components/ModalPortal.jsx';
+import AIJobPortal from '../components/AIJobPortal.jsx';
+import FlashcardModal from '../components/flashcards/FlashcardModal.jsx';
 import {
   Briefcase,
   Compass,
@@ -158,6 +160,143 @@ const CareerHubPage = ({ defaultTab }) => {
   const [interviewModalOpen, setInterviewModalOpen] = useState(false);
   const [interviewHistory, setInterviewHistory] = useState([]);
   const [interviewStarted, setInterviewStarted] = useState(false);
+  
+  // New Enhancements
+  const [timeLeft, setTimeLeft] = useState(180);
+  const [timerActive, setTimerActive] = useState(false);
+  const [isFollowUp, setIsFollowUp] = useState(false);
+  const [sessionCompleted, setSessionCompleted] = useState(false);
+  const maxQuestions = 5;
+
+  useEffect(() => {
+    let interval;
+    if (timerActive && timeLeft > 0) {
+      interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
+    } else if (timeLeft === 0) {
+      setTimerActive(false);
+    }
+    return () => clearInterval(interval);
+  }, [timerActive, timeLeft]);
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  /* ── Smart Flashcards State (Azure AI Powered) ────────────────────────── */
+  const [hubFlashcardModalOpen, setHubFlashcardModalOpen] = useState(false);
+  const [hubFlashcards, setHubFlashcards] = useState([]);
+  const [hubFlashcardTitle, setHubFlashcardTitle] = useState('');
+  const [hubFlashcardModule, setHubFlashcardModule] = useState('mock_interview');
+  const [hubFlashcardCategory, setHubFlashcardCategory] = useState('Interview');
+  const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
+
+  // 1. Generate "Revise Before Next Interview" Flashcards
+  const generateMockInterviewRevisionDeck = async () => {
+    setIsGeneratingFlashcards(true);
+    try {
+      const weakItems = interviewHistory.filter(h => h.score < 80);
+      const res = await flashcardAPI.generate({
+        sourceModule: 'mock_interview',
+        type: 'interview_revise_before_next',
+        title: `Revise Before Next Interview: ${interviewRole}`,
+        context: {
+          role: interviewRole,
+          difficulty: interviewDifficulty,
+          category: interviewCategory,
+          weakAnswers: weakItems.map(w => ({ question: w.question, score: w.score, answer: w.answer })),
+          allQuestions: interviewHistory.map(h => ({ question: h.question, score: h.score })),
+          missedConcepts: [...new Set(weakItems.map(w => w.category))]
+        },
+        count: 8,
+        save: true
+      });
+      if (res.data?.data?.cards) {
+        setHubFlashcards(res.data.data.cards);
+        setHubFlashcardTitle(`Revise Before Next Interview (${interviewRole})`);
+        setHubFlashcardModule('mock_interview');
+        setHubFlashcardCategory('Interview Prep');
+        setHubFlashcardModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Failed to generate interview revision flashcards:', err);
+      alert('Failed to generate interview flashcards. Please try again.');
+    } finally {
+      setIsGeneratingFlashcards(false);
+    }
+  };
+
+  // 2. Generate ATS & Resume Weakness Flashcards
+  const generateResumeFlashcards = async () => {
+    if (!atsAnalysis) return;
+    setIsGeneratingFlashcards(true);
+    try {
+      const res = await flashcardAPI.generate({
+        sourceModule: 'resume_analyzer',
+        type: 'ats_improvement',
+        title: `ATS & Skill-Gap Flashcards: ${targetRole}`,
+        context: {
+          targetRole,
+          atsScore: atsAnalysis.score,
+          weaknesses: atsAnalysis.weaknesses || atsAnalysis.feedback || [],
+          missingKeywords: atsAnalysis.missing || atsAnalysis.missingKeywords || [],
+          matchedKeywords: atsAnalysis.matched || atsAnalysis.matchedKeywords || [],
+          skillGaps: atsAnalysis.jobDescriptionComparison?.missingRequirements || [],
+          sectionFeedback: atsAnalysis.sectionFeedback || {}
+        },
+        count: 10,
+        save: true
+      });
+      if (res.data?.data?.cards) {
+        setHubFlashcards(res.data.data.cards);
+        setHubFlashcardTitle(`ATS Optimization & Skill-Gap Deck (${targetRole})`);
+        setHubFlashcardModule('resume_analyzer');
+        setHubFlashcardCategory('ATS & Career');
+        setHubFlashcardModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Failed to generate resume flashcards:', err);
+      alert('Failed to generate resume flashcards.');
+    } finally {
+      setIsGeneratingFlashcards(false);
+    }
+  };
+
+  // 3. Generate Career Guidance Roadmap Flashcards
+  const generateCareerGuidanceFlashcards = async () => {
+    setIsGeneratingFlashcards(true);
+    try {
+      const res = await flashcardAPI.generate({
+        sourceModule: 'career_guidance',
+        type: 'career_roadmap',
+        title: `${counselorInterest} — Roadmap & Placement Deck`,
+        context: {
+          targetDomain: counselorInterest,
+          semester: counselorSemester,
+          skills: counselorSkills,
+          goals: counselorGoals,
+          competencies: counselorData?.keyCompetencies || [],
+          certifications: counselorData?.certificationsRecommended || [],
+          milestones: counselorData?.milestones || []
+        },
+        count: 10,
+        save: true
+      });
+      if (res.data?.data?.cards) {
+        setHubFlashcards(res.data.data.cards);
+        setHubFlashcardTitle(`${counselorInterest} — Career Roadmap Deck`);
+        setHubFlashcardModule('career_guidance');
+        setHubFlashcardCategory('Roadmap & Placement');
+        setHubFlashcardModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Failed to generate career guidance flashcards:', err);
+      alert('Failed to generate career guidance flashcards.');
+    } finally {
+      setIsGeneratingFlashcards(false);
+    }
+  };
 
   /* ── Placement Fetch ───────────────────────────────────────────────── */
   const fetchPlacements = useCallback(async () => {
@@ -479,22 +618,34 @@ const CareerHubPage = ({ defaultTab }) => {
   };
 
   /* ── Mock Interview — Dynamic AI Question Generation ──────────────── */
-  const handleGenerateQuestion = async () => {
+  const handleGenerateQuestion = async (followUp = false) => {
     setIsGeneratingQuestion(true);
     setCurrentQuestion(null);
     setInterviewAnswer('');
     setInterviewResult(null);
+    setTimerActive(false);
+    setTimeLeft(180);
+    
     try {
-      const res = await api.post('/career/interview/generate-question', {
+      const payload = {
         role: interviewRole,
         difficulty: interviewDifficulty,
         category: interviewCategory,
         previousQuestions: previousQuestions.slice(-5)
-      });
+      };
+
+      if (followUp && interviewHistory.length > 0) {
+        payload.isFollowUp = true;
+        payload.lastAnswer = interviewHistory[interviewHistory.length - 1].answer;
+      }
+
+      const res = await api.post('/career/interview/generate-question', payload);
       if (res.data?.data) {
         setCurrentQuestion(res.data.data);
         setPreviousQuestions(prev => [...prev, res.data.data.question]);
         setInterviewStarted(true);
+        setTimerActive(true);
+        setIsFollowUp(followUp);
       }
     } catch (err) {
       console.error('Failed to generate question:', err);
@@ -507,6 +658,7 @@ const CareerHubPage = ({ defaultTab }) => {
   const handleEvaluateInterview = async () => {
     if (!interviewAnswer.trim() || !currentQuestion) return;
     setIsEvaluatingInterview(true);
+    setTimerActive(false);
     try {
       const res = await api.post('/career/simulate-interview', {
         role: interviewRole,
@@ -517,15 +669,23 @@ const CareerHubPage = ({ defaultTab }) => {
       });
       if (res.data?.data) {
         setInterviewResult(res.data.data);
-        setInterviewHistory(prev => [...prev, {
+        const newHistory = [...interviewHistory, {
           question: currentQuestion.question,
           category: currentQuestion.category,
           difficulty: interviewDifficulty,
           score: res.data.data.score,
+          communicationScore: res.data.data.communicationScore,
+          technicalScore: res.data.data.technicalScore,
+          problemSolvingScore: res.data.data.problemSolvingScore,
           grade: res.data.data.grade,
-          answer: interviewAnswer.substring(0, 120) + (interviewAnswer.length > 120 ? '...' : '')
-        }]);
+          answer: interviewAnswer
+        }];
+        setInterviewHistory(newHistory);
         setInterviewModalOpen(true);
+        
+        if (newHistory.length >= maxQuestions) {
+          setSessionCompleted(true);
+        }
       }
     } catch (err) {
       console.error('Failed to evaluate interview:', err);
@@ -534,11 +694,23 @@ const CareerHubPage = ({ defaultTab }) => {
     }
   };
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = (followUp = false) => {
     setInterviewAnswer('');
     setInterviewResult(null);
     setInterviewModalOpen(false);
-    handleGenerateQuestion();
+    if (sessionCompleted && !followUp) return;
+    handleGenerateQuestion(followUp);
+  };
+  
+  const handleEndSession = () => {
+    setSessionCompleted(true);
+    setCurrentQuestion(null);
+    setTimerActive(false);
+  };
+
+  const getAvgScore = (key = 'score') => {
+    if (interviewHistory.length === 0) return 0;
+    return Math.round(interviewHistory.reduce((s, h) => s + (h[key] || h.score), 0) / interviewHistory.length);
   };
 
   /* ── Registration Modal & DB-Backed Handlers ───────────────────────── */
@@ -584,7 +756,8 @@ const CareerHubPage = ({ defaultTab }) => {
     { id: 'placement', label: 'Placement Eligibility', icon: Briefcase },
     { id: 'resume', label: 'ATS Resume Analyzer', icon: Upload },
     { id: 'counselor', label: 'AI Career Counselor', icon: Compass },
-    { id: 'interview', label: 'Mock Interview', icon: Sparkles }
+    { id: 'interview', label: 'Mock Interview', icon: Sparkles },
+    { id: 'jobs', label: 'AI Job Matches', icon: Briefcase }
   ];
 
   return (
@@ -1432,114 +1605,188 @@ const CareerHubPage = ({ defaultTab }) => {
             </div>
           </div>
 
-          {/* ── Session Summary ── */}
-          {interviewHistory.length > 0 && (
-            <div style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem', background: 'rgba(59,130,246,0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(59,130,246,0.2)' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem' }}>
-                📊 Session Summary — {interviewHistory.length} question{interviewHistory.length > 1 ? 's' : ''} answered
-              </div>
-              <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                  Avg Score: <strong style={{ color: 'var(--success)' }}>
-                    {Math.round(interviewHistory.reduce((s, h) => s + h.score, 0) / interviewHistory.length)}
-                  </strong>/100
-                </span>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                  Best: <strong style={{ color: 'var(--primary)' }}>
-                    {Math.max(...interviewHistory.map(h => h.score))}
-                  </strong>/100
-                </span>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                  Lowest: <strong style={{ color: 'var(--danger, #ef4444)' }}>
-                    {Math.min(...interviewHistory.map(h => h.score))}
-                  </strong>/100
-                </span>
-              </div>
-              {/* History list */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                {interviewHistory.map((h, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                    <span style={{
-                      width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: h.score >= 80 ? 'rgba(16,185,129,0.15)' : h.score >= 60 ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)',
-                      color: h.score >= 80 ? 'var(--success)' : h.score >= 60 ? 'var(--primary)' : 'var(--danger, #ef4444)',
-                      fontWeight: 700, fontSize: '0.7rem', flexShrink: 0
-                    }}>
-                      {h.score}
-                    </span>
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {h.question.substring(0, 80)}...
-                    </span>
-                    <span className="badge" style={{
-                      fontSize: '0.65rem', flexShrink: 0,
-                      background: h.score >= 80 ? 'rgba(16,185,129,0.15)' : h.score >= 60 ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)',
-                      color: h.score >= 80 ? 'var(--success)' : h.score >= 60 ? 'var(--primary)' : 'var(--danger, #ef4444)',
-                    }}>
-                      {h.grade || (h.score >= 80 ? 'Strong' : h.score >= 60 ? 'Good' : 'Needs Work')}
-                    </span>
+          {/* ── Progress Tracker & Session Overview ── */}
+          {(interviewStarted || sessionCompleted) && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', background: 'rgba(59,130,246,0.05)', padding: '1rem', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(59,130,246,0.15)' }}>
+              <div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>Interview Progress</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ width: '150px', height: '6px', background: 'var(--border-subtle)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ width: `${(interviewHistory.length / maxQuestions) * 100}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.5s ease' }} />
                   </div>
-                ))}
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)' }}>{interviewHistory.length} / {maxQuestions}</span>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Role Context</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                  <span className="badge" style={{ background: 'var(--bg-input)' }}>{interviewRole}</span>
+                  <span className="badge" style={{ background: 'rgba(139,92,246,0.15)', color: 'var(--accent-purple)' }}>{interviewCategory}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Session Completed Summary ── */}
+          {sessionCompleted && (
+            <div className="animate-fade-in" style={{ padding: '2rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)', border: '1px solid var(--primary)', marginBottom: '1.5rem', textAlign: 'center', boxShadow: '0 10px 30px rgba(59,130,246,0.1)' }}>
+              <Award size={48} color="var(--primary)" style={{ margin: '0 auto 1rem' }} />
+              <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Interview Complete!</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '2rem' }}>You've successfully answered {interviewHistory.length} questions. Here is your AI performance analysis.</p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                <StatCard icon={Target} label="Overall Score" value={`${getAvgScore('score')}/100`} color="var(--primary)" />
+                <StatCard icon={MessageSquare} label="Communication" value={`${getAvgScore('communicationScore')}/100`} color="var(--accent-purple)" />
+                <StatCard icon={TrendingUp} label="Technical" value={`${getAvgScore('technicalScore')}/100`} color="var(--success)" />
+                <StatCard icon={Zap} label="Problem Solving" value={`${getAvgScore('problemSolvingScore')}/100`} color="#f59e0b" />
+              </div>
+
+              {/* History list inside Summary */}
+              <div style={{ textAlign: 'left', background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: 'var(--radius-sm)', marginBottom: '1.5rem', border: '1px solid var(--border-subtle)' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>Question Breakdown</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {interviewHistory.map((h, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem' }}>
+                      <span style={{
+                        width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: h.score >= 80 ? 'rgba(16,185,129,0.15)' : h.score >= 60 ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)',
+                        color: h.score >= 80 ? 'var(--success)' : h.score >= 60 ? 'var(--primary)' : 'var(--danger, #ef4444)',
+                        fontWeight: 700, fontSize: '0.85rem', flexShrink: 0
+                      }}>
+                        {h.score}
+                      </span>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden', fontWeight: 600 }}>{h.question}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{h.category} • {h.difficulty}</div>
+                      </div>
+                      <span className="badge" style={{
+                        background: h.score >= 80 ? 'rgba(16,185,129,0.15)' : h.score >= 60 ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)',
+                        color: h.score >= 80 ? 'var(--success)' : h.score >= 60 ? 'var(--primary)' : 'var(--danger, #ef4444)',
+                      }}>
+                        {h.grade || (h.score >= 80 ? 'Strong' : h.score >= 60 ? 'Good' : 'Needs Work')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Personalized Action Plan */}
+              <div style={{ textAlign: 'left', background: 'rgba(59,130,246,0.05)', padding: '1.25rem', borderRadius: 'var(--radius-sm)', marginBottom: '2rem', border: '1px solid rgba(59,130,246,0.15)' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <TrendingUp size={18} /> Personalized Preparation Plan
+                </h4>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Top Topics to Revise</div>
+                    <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                      {[...new Set(interviewHistory.filter(h => h.score < 80).map(h => h.category))].slice(0, 5).map((topic, i) => (
+                        <li key={i} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>{topic}</li>
+                      ))}
+                      {interviewHistory.filter(h => h.score < 80).length === 0 && (
+                        <li style={{ fontSize: '0.85rem', color: 'var(--success)', marginBottom: '0.3rem' }}>Great job! Focus on advanced System Design.</li>
+                      )}
+                    </ul>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Next Steps</div>
+                    <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                      <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>Practice answering within 3 minutes.</li>
+                      <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>Use the STAR method for behavioral questions.</li>
+                      <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>Focus on explaining edge cases dynamically.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button
+                  onClick={generateMockInterviewRevisionDeck}
+                  disabled={isGeneratingFlashcards}
+                  className="btn"
+                  style={{
+                    padding: '0.85rem 1.8rem',
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    boxShadow: '0 4px 15px rgba(245, 158, 11, 0.4)',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  {isGeneratingFlashcards ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                  {isGeneratingFlashcards ? 'Generating Deck...' : '🎴 Revise Before Next Interview (Smart Flashcards)'}
+                </button>
+                <button onClick={() => { setSessionCompleted(false); setInterviewHistory([]); setInterviewStarted(false); }} className="btn btn-primary" style={{ padding: '0.85rem 1.8rem' }}>
+                  <RefreshCw size={16} /> Start New Session
+                </button>
               </div>
             </div>
           )}
 
           {/* ── Not Started State / Generate First Question ── */}
-          {!interviewStarted && !currentQuestion && !isGeneratingQuestion && (
-            <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--border-subtle)', marginBottom: '1.5rem' }}>
-              <Sparkles size={48} color="var(--primary)" style={{ marginBottom: '1rem', opacity: 0.7 }} />
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.5rem' }}>Ready to Practice?</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: '1.5rem', maxWidth: '500px', margin: '0 auto 1.5rem' }}>
-                Configure your role, difficulty level, and question category above, then click below to get your first AI-generated interview question.
+          {!interviewStarted && !currentQuestion && !isGeneratingQuestion && !sessionCompleted && (
+            <div className="animate-fade-in" style={{ textAlign: 'center', padding: '4rem 2rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-subtle)', marginBottom: '1.5rem', boxShadow: 'inset 0 0 20px rgba(0,0,0,0.1)' }}>
+              <div style={{ width: '80px', height: '80px', background: 'rgba(59,130,246,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                <Sparkles size={40} color="var(--primary)" />
+              </div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.5rem' }}>Ready to Practice?</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '2rem', maxWidth: '500px', margin: '0 auto 2rem' }}>
+                Configure your target role, difficulty, and focus area. You will face {maxQuestions} AI-generated questions mirroring real-world placement scenarios.
               </p>
-              <button onClick={handleGenerateQuestion} className="btn btn-primary" style={{ padding: '0.85rem 2.5rem', fontSize: '0.95rem' }}>
-                <Sparkles size={16} /> Start Interview Session
+              <button onClick={() => handleGenerateQuestion(false)} className="btn btn-primary" style={{ padding: '1rem 3rem', fontSize: '1.05rem', fontWeight: 600 }}>
+                <Target size={18} /> Start {maxQuestions}-Question Interview Session
               </button>
             </div>
           )}
 
           {/* ── Loading Question ── */}
-          {isGeneratingQuestion && (
-            <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', marginBottom: '1.5rem' }}>
-              <Loader2 size={40} color="var(--primary)" style={{ animation: 'spin 1s linear infinite', marginBottom: '1rem' }} />
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.3rem' }}>Azure AI is crafting your question...</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                Generating a {interviewDifficulty}-level {interviewCategory} question for {interviewRole}
+          {isGeneratingQuestion && !sessionCompleted && (
+            <div className="animate-fade-in" style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', marginBottom: '1.5rem' }}>
+              <Loader2 size={40} color="var(--primary)" style={{ animation: 'spin 1s linear infinite', margin: '0 auto 1rem' }} />
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>Azure AI is crafting your {isFollowUp ? 'follow-up' : 'next'} question...</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                Tailoring to your {interviewDifficulty}-level {interviewCategory} profile for {interviewRole}
               </p>
             </div>
           )}
 
           {/* ── Current AI-Generated Question ── */}
-          {currentQuestion && !isGeneratingQuestion && (
-            <>
-              <div style={{ padding: '1.5rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      {currentQuestion.category}
+          {currentQuestion && !isGeneratingQuestion && !sessionCompleted && (
+            <div className="animate-fade-in">
+              <div style={{ padding: '2rem', background: 'var(--bg-card)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', marginBottom: '1.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem', background: 'rgba(59,130,246,0.1)', color: 'var(--primary)', fontWeight: 700, borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Question {interviewHistory.length + 1}
                     </span>
-                    <span className="badge" style={{
-                      fontSize: '0.65rem',
-                      background: interviewDifficulty === 'Senior' ? 'rgba(239,68,68,0.15)' : interviewDifficulty === 'Mid' ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.15)',
-                      color: interviewDifficulty === 'Senior' ? '#ef4444' : interviewDifficulty === 'Mid' ? '#f59e0b' : 'var(--success)'
-                    }}>
-                      {interviewDifficulty}
-                    </span>
+                    {isFollowUp && (
+                      <span style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem', background: 'rgba(139,92,246,0.1)', color: 'var(--accent-purple)', fontWeight: 700, borderRadius: '4px', textTransform: 'uppercase' }}>
+                        Follow-Up
+                      </span>
+                    )}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Q{interviewHistory.length + 1} • {interviewRole}
-                  </span>
+                  
+                  {/* Timer Display */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem', borderRadius: 'var(--radius-full)', background: timeLeft <= 30 ? 'rgba(239,68,68,0.1)' : 'rgba(59,130,246,0.05)', color: timeLeft <= 30 ? 'var(--danger)' : 'var(--text-primary)', border: `1px solid ${timeLeft <= 30 ? 'rgba(239,68,68,0.3)' : 'var(--border-subtle)'}`, transition: 'all 0.3s ease' }}>
+                    <Clock size={14} className={timeLeft <= 30 ? "animate-pulse" : ""} />
+                    <span style={{ fontWeight: 700, fontSize: '0.9rem', fontVariantNumeric: 'tabular-nums' }}>{formatTime(timeLeft)}</span>
+                  </div>
                 </div>
-                <div style={{ fontSize: '1.05rem', fontWeight: 700, lineHeight: 1.6, marginBottom: '0.75rem' }}>
+
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, lineHeight: 1.6, marginBottom: '1.25rem', color: 'var(--text-primary)' }}>
                   "{currentQuestion.question}"
                 </div>
 
                 {/* Expected Key Points */}
                 {currentQuestion.expectedKeyPoints && currentQuestion.expectedKeyPoints.length > 0 && (
-                  <div style={{ marginBottom: '0.5rem' }}>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Key Areas to Cover:</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                  <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px dashed var(--border-subtle)' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Keywords to Include:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                       {currentQuestion.expectedKeyPoints.map((kp, i) => (
-                        <span key={i} className="badge" style={{ fontSize: '0.7rem', background: 'rgba(59,130,246,0.1)', color: 'var(--primary)' }}>
+                        <span key={i} style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', borderRadius: '4px', background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
                           {kp}
                         </span>
                       ))}
@@ -1547,54 +1794,63 @@ const CareerHubPage = ({ defaultTab }) => {
                   </div>
                 )}
 
-                {/* AI Tip */}
+                {/* AI Tip / STAR Hint */}
                 {currentQuestion.tip && (
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem', padding: '0.6rem 0.8rem', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.15)', marginTop: '0.5rem' }}>
-                    <Zap size={13} color="var(--success)" style={{ flexShrink: 0, marginTop: '2px' }} />
-                    <span style={{ fontSize: '0.78rem', color: 'var(--success)', lineHeight: 1.5 }}>
-                      <strong>Tip:</strong> {currentQuestion.tip}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', padding: '0.8rem 1rem', background: 'rgba(16,185,129,0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                    <Zap size={16} color="var(--success)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <span style={{ fontSize: '0.85rem', color: 'var(--success)', lineHeight: 1.5 }}>
+                      <strong>Pro Tip:</strong> {currentQuestion.tip}
+                      {currentQuestion.category.includes('Behavioral') && " Remember to use the STAR method: Situation, Task, Action, Result."}
                     </span>
                   </div>
                 )}
               </div>
 
               {/* Answer Textarea */}
-              <div className="form-group" style={{ margin: '0 0 1rem 0' }}>
-                <label className="form-label">Your Response</label>
+              <div className="form-group" style={{ margin: '0 0 1.5rem 0' }}>
+                <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Your Response</span>
+                  {interviewAnswer.length > 50 && (
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--primary)' }}>Analyzing confidence...</span>
+                  )}
+                </label>
                 <textarea
-                  rows={7}
+                  rows={8}
                   className="form-textarea"
-                  placeholder="Structure your answer clearly: state the concept, explain trade-offs, provide examples, and discuss edge cases..."
+                  placeholder="Structure your answer clearly. Discuss trade-offs, provide real-world examples, and handle edge cases..."
                   value={interviewAnswer}
                   onChange={(e) => setInterviewAnswer(e.target.value)}
-                  style={{ resize: 'vertical', minHeight: '120px' }}
+                  style={{ resize: 'vertical', minHeight: '160px', fontSize: '0.95rem', lineHeight: 1.6, padding: '1rem', background: 'var(--bg-card)' }}
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
                   <span>{interviewAnswer.length} characters</span>
-                  <span>
-                    {interviewAnswer.length < 50 ? '⚠️ Too short — aim for 150+ chars' : interviewAnswer.length < 150 ? '📝 Good start — add more detail' : '✅ Good length'}
+                  <span style={{ fontWeight: 600, color: interviewAnswer.length < 50 ? 'var(--danger)' : interviewAnswer.length < 150 ? 'var(--primary)' : 'var(--success)' }}>
+                    {interviewAnswer.length < 50 ? '⚠️ Too short (aim for 150+ chars)' : interviewAnswer.length < 150 ? '📝 Good start (keep adding details)' : '✅ Excellent detail depth'}
                   </span>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <button onClick={handleEvaluateInterview} className="btn btn-primary" disabled={isEvaluatingInterview || !interviewAnswer.trim()} style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <button onClick={handleEvaluateInterview} className="btn btn-primary" disabled={isEvaluatingInterview || !interviewAnswer.trim() || timeLeft === 0} style={{ flex: 2, padding: '1rem', fontSize: '1rem' }}>
                   {isEvaluatingInterview ? (
-                    <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Evaluating with Azure AI...</>
+                    <><RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} /> Evaluating with Azure AI...</>
                   ) : (
-                    <><Send size={16} /> Submit for AI Critique</>
+                    <><Send size={18} /> Submit for AI Critique</>
                   )}
                 </button>
-                <button onClick={handleNextQuestion} className="btn" disabled={isGeneratingQuestion} style={{ flex: '0 0 auto', background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
+                <button onClick={() => handleNextQuestion(false)} className="btn" disabled={isGeneratingQuestion} style={{ flex: 1, background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', padding: '1rem' }}>
                   {isGeneratingQuestion ? (
-                    <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Generating...</>
+                    <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading...</>
                   ) : (
-                    <><ChevronRight size={16} /> Skip / New Question</>
+                    <><ChevronRight size={16} /> Skip Question</>
                   )}
+                </button>
+                <button onClick={handleEndSession} className="btn" style={{ flex: '0 0 auto', padding: '1rem', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', border: 'none' }}>
+                  End Session
                 </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       )}
@@ -1906,6 +2162,40 @@ const CareerHubPage = ({ defaultTab }) => {
                       )}
                     </div>
                   )}
+
+                  {/* ── ATS Smart Flashcards Generator ── */}
+                  <div style={{ marginTop: '1.5rem', padding: '1.25rem', background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(234, 88, 12, 0.08) 100%)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Sparkles size={16} /> Convert Resume Weaknesses &amp; Missing Keywords into Flashcards
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                        Practice ATS optimization, keyword retention, and skill-gap formulas through interactive 3D flashcards.
+                      </div>
+                    </div>
+                    <button
+                      onClick={generateResumeFlashcards}
+                      disabled={isGeneratingFlashcards}
+                      className="btn"
+                      style={{
+                        background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        padding: '0.65rem 1.25rem',
+                        borderRadius: 'var(--radius-sm)',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 14px rgba(245, 158, 11, 0.3)'
+                      }}
+                    >
+                      {isGeneratingFlashcards ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                      {isGeneratingFlashcards ? 'Generating...' : '🎴 Launch ATS Flashcards'}
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -2015,6 +2305,40 @@ const CareerHubPage = ({ defaultTab }) => {
                       ))}
                     </div>
                   )}
+
+                  {/* ── Career Guidance Flashcard Deck Trigger ── */}
+                  <div style={{ marginTop: '1.5rem', padding: '1.25rem', background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(139, 92, 246, 0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-purple)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Sparkles size={16} /> Roadmap, Certifications &amp; Placement Flashcards
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                        Convert required tech stack competencies, certifications, and placement targets into an interactive revision deck.
+                      </div>
+                    </div>
+                    <button
+                      onClick={generateCareerGuidanceFlashcards}
+                      disabled={isGeneratingFlashcards}
+                      className="btn"
+                      style={{
+                        background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        padding: '0.65rem 1.25rem',
+                        borderRadius: 'var(--radius-sm)',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 14px rgba(139, 92, 246, 0.3)'
+                      }}
+                    >
+                      {isGeneratingFlashcards ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                      {isGeneratingFlashcards ? 'Generating...' : '🎴 Launch Roadmap Flashcards'}
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -2027,14 +2351,14 @@ const CareerHubPage = ({ defaultTab }) => {
          ═══════════════════════════════════════════════════════════════ */}
       <ModalPortal isOpen={interviewModalOpen}>
         <div style={overlayStyle} onClick={() => setInterviewModalOpen(false)}>
-          <div style={{ ...modalBoxStyle, maxWidth: '720px' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...modalBoxStyle, maxWidth: '780px' }} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Star size={18} color="var(--primary)" />
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>AI Interview Assessment</h3>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>AI Feedback & Analysis</h3>
                 {interviewResult?.grade && (
                   <span style={{
-                    fontSize: '0.7rem', padding: '0.2rem 0.55rem', borderRadius: '999px', fontWeight: 600,
+                    fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '999px', fontWeight: 700,
                     background: interviewResult.score >= 80 ? 'rgba(16,185,129,0.15)' : interviewResult.score >= 60 ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)',
                     color: interviewResult.score >= 80 ? 'var(--success)' : interviewResult.score >= 60 ? 'var(--primary)' : 'var(--danger, #ef4444)'
                   }}>
@@ -2049,58 +2373,75 @@ const CareerHubPage = ({ defaultTab }) => {
             <div style={modalBodyStyle}>
               {interviewResult && (
                 <>
-                  {/* Score Display */}
-                  <div style={{ textAlign: 'center', padding: '1.5rem 0', borderBottom: '1px solid var(--border-subtle)', marginBottom: '1.5rem' }}>
-                    <div style={{
-                      fontSize: '4rem', fontWeight: 800, lineHeight: 1,
-                      background: interviewResult.score >= 80 ? 'linear-gradient(135deg, #10b981, #34d399)' : interviewResult.score >= 60 ? 'linear-gradient(135deg, #3b82f6, #60a5fa)' : 'linear-gradient(135deg, #f59e0b, #fbbf24)',
-                      WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
-                    }}>
-                      {interviewResult.score}/100
-                    </div>
-                    <div style={{ marginTop: '0.5rem' }}>
-                      <span className={`badge ${interviewResult.score >= 80 ? 'badge-success' : interviewResult.score >= 60 ? 'badge-primary' : 'badge-danger'}`} style={{ fontSize: '0.85rem' }}>
-                        {interviewResult.score >= 90 ? '🏆 Exceptional' : interviewResult.score >= 80 ? '✅ Strong Pass' : interviewResult.score >= 60 ? '📝 Good' : '⚠️ Needs Improvement'}
-                      </span>
+                  {/* Score & Confidence Display */}
+                  <div style={{ textAlign: 'center', padding: '1.5rem 0', borderBottom: '1px solid var(--border-subtle)', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Performance Score</div>
+                        <div style={{
+                          fontSize: '4rem', fontWeight: 800, lineHeight: 1,
+                          background: interviewResult.score >= 80 ? 'linear-gradient(135deg, #10b981, #34d399)' : interviewResult.score >= 60 ? 'linear-gradient(135deg, #3b82f6, #60a5fa)' : 'linear-gradient(135deg, #f59e0b, #fbbf24)',
+                          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
+                        }}>
+                          {interviewResult.score}
+                        </div>
+                      </div>
+                      <div style={{ height: '50px', width: '1px', background: 'var(--border-subtle)' }} />
+                      <div style={{ textAlign: 'left' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Confidence Level</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
+                          <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: interviewResult.score >= 80 ? 'var(--success)' : interviewResult.score >= 60 ? 'var(--primary)' : 'var(--danger)' }} />
+                          <span style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {interviewResult.score >= 85 ? 'High' : interviewResult.score >= 65 ? 'Moderate' : 'Low'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                          Based on depth and clarity
+                        </div>
+                      </div>
                     </div>
                   </div>
 
                   {/* Question Context */}
                   {currentQuestion && (
-                    <div style={{ padding: '0.75rem 1rem', background: 'rgba(139,92,246,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(139,92,246,0.15)', marginBottom: '1.25rem' }}>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--accent-purple)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Question Asked</div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>"{currentQuestion.question}"</div>
+                    <div style={{ padding: '1rem', background: 'rgba(139,92,246,0.05)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(139,92,246,0.15)', marginBottom: '1.5rem' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--accent-purple)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.4rem', letterSpacing: '0.05em' }}>Question Analysed</div>
+                      <div style={{ fontSize: '0.95rem', color: 'var(--text-primary)', lineHeight: 1.5, fontWeight: 500 }}>"{currentQuestion.question}"</div>
                     </div>
                   )}
 
                   {/* Assessment Notes */}
-                  <div style={{ marginBottom: '1.25rem' }}>
-                    <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem' }}>📝 Assessment Notes</h4>
-                    <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{interviewResult.notes}</p>
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <BookOpen size={16} color="var(--primary)" /> Recruiter Notes
+                    </h4>
+                    <div style={{ padding: '1rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                      <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>{interviewResult.notes}</p>
+                    </div>
                   </div>
 
                   {/* Strengths & Improvements side by side */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                     {interviewResult.strengths && interviewResult.strengths.length > 0 && (
-                      <div style={{ padding: '1rem', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.2)' }}>
-                        <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                          <CheckCircle2 size={13} /> Strengths
+                      <div style={{ padding: '1.25rem', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                        <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <CheckCircle2 size={16} /> Key Strengths
                         </h4>
-                        <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                        <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
                           {interviewResult.strengths.map((s, i) => (
-                            <li key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', lineHeight: 1.5 }}>{s}</li>
+                            <li key={i} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem', lineHeight: 1.5 }}>{s}</li>
                           ))}
                         </ul>
                       </div>
                     )}
                     {interviewResult.improvements && interviewResult.improvements.length > 0 && (
-                      <div style={{ padding: '1rem', background: 'rgba(245,158,11,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                        <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                          <AlertCircle size={13} /> Areas to Improve
+                      <div style={{ padding: '1.25rem', background: 'rgba(245,158,11,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                        <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <AlertCircle size={16} /> Areas to Improve
                         </h4>
-                        <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                        <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
                           {interviewResult.improvements.map((im, i) => (
-                            <li key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', lineHeight: 1.5 }}>{im}</li>
+                            <li key={i} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem', lineHeight: 1.5 }}>{im}</li>
                           ))}
                         </ul>
                       </div>
@@ -2109,35 +2450,69 @@ const CareerHubPage = ({ defaultTab }) => {
 
                   {/* Improvement Tip */}
                   {interviewResult.improvement && (
-                    <div style={{ padding: '1rem 1.25rem', background: 'rgba(59,130,246,0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(59,130,246,0.2)', marginBottom: '1.25rem' }}>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <Zap size={13} /> Top Improvement Advice
+                    <div style={{ padding: '1.25rem', background: 'linear-gradient(to right, rgba(59,130,246,0.1), rgba(139,92,246,0.1))', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(59,130,246,0.2)', marginBottom: '1.5rem' }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Zap size={16} /> Tips for a Better Answer
                       </div>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>{interviewResult.improvement}</p>
+                      <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>{interviewResult.improvement}</p>
                     </div>
                   )}
 
                   {/* Ideal Answer Outline */}
                   {interviewResult.idealAnswerOutline && interviewResult.idealAnswerOutline.length > 0 && (
-                    <div style={{ padding: '1rem 1.25rem', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.2)', marginBottom: '1.5rem' }}>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--success)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <Target size={13} /> Ideal Answer Structure
+                    <div style={{ padding: '1.25rem', background: 'rgba(16,185,129,0.04)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.15)', marginBottom: '2rem' }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--success)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Target size={16} /> Recommended Answer Structure
                       </div>
-                      <ol style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                      <ol style={{ paddingLeft: '1.5rem', margin: 0 }}>
                         {interviewResult.idealAnswerOutline.map((step, i) => (
-                          <li key={i} style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.35rem', lineHeight: 1.55 }}>{step}</li>
+                          <li key={i} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', lineHeight: 1.55 }}>{step}</li>
                         ))}
                       </ol>
                     </div>
                   )}
 
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button onClick={handleNextQuestion} className="btn btn-primary" style={{ flex: 1 }}>
-                      <Sparkles size={16} /> Next AI Question
+                    {/* Actions */}
+                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                    {!sessionCompleted && (
+                      <>
+                        <button onClick={() => handleNextQuestion(false)} className="btn btn-primary" style={{ flex: 1, padding: '1rem', fontSize: '0.95rem' }}>
+                          <ChevronRight size={18} /> New Question
+                        </button>
+                        <button onClick={() => handleNextQuestion(true)} className="btn" style={{ flex: 1, background: 'rgba(139,92,246,0.1)', color: 'var(--accent-purple)', border: '1px solid rgba(139,92,246,0.3)', padding: '1rem', fontSize: '0.95rem' }}>
+                          <MessageSquare size={18} /> Generate Follow-Up
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (!currentQuestion || !interviewResult) return;
+                        const singleCard = [{
+                          cardId: 'q-' + Date.now(),
+                          front: `[${interviewCategory} - ${interviewRole}]\n${currentQuestion.question}`,
+                          back: `Ideal Answer Outline:\n${interviewResult.idealAnswerOutline?.join('\n') || interviewResult.notes}\n\nKey Improvement Tip:\n${interviewResult.improvement || 'Ensure structured STAR delivery with measurable metrics.'}`,
+                          category: interviewCategory || 'Interview',
+                          difficulty: interviewDifficulty || 'Medium',
+                          tags: [interviewRole, interviewCategory, 'Mock Interview']
+                        }];
+                        setHubFlashcards(singleCard);
+                        setHubFlashcardTitle(`Revision: ${currentQuestion.question.slice(0, 40)}...`);
+                        setHubFlashcardModule('mock_interview');
+                        setHubFlashcardCategory(interviewCategory);
+                        setHubFlashcardModalOpen(true);
+                      }}
+                      className="btn btn-secondary"
+                      style={{ flex: 1, padding: '1rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.4)' }}
+                    >
+                      <Sparkles size={16} /> Save to Revision Flashcard
                     </button>
-                    <button onClick={() => setInterviewModalOpen(false)} className="btn" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
-                      Review Answer
+                    {sessionCompleted && (
+                       <button onClick={() => setInterviewModalOpen(false)} className="btn btn-primary" style={{ flex: 1, padding: '1rem', fontSize: '0.95rem' }}>
+                         <Award size={18} /> View Performance Summary
+                       </button>
+                    )}
+                    <button onClick={() => setInterviewModalOpen(false)} className="btn" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', padding: '1rem', fontSize: '0.95rem' }}>
+                      Close & Review
                     </button>
                   </div>
                 </>
@@ -2146,6 +2521,24 @@ const CareerHubPage = ({ defaultTab }) => {
           </div>
         </div>
       </ModalPortal>
+
+      {/* ── TAB 5 — AI Job Portal ────────────────────────────────────── */}
+      {activeTab === 'jobs' && (
+        <AIJobPortal onMockInterview={(role) => {
+          setInterviewRole(role);
+          setActiveTab('interview');
+        }} />
+      )}
+
+      {/* Smart Hub Flashcard Modal */}
+      <FlashcardModal
+        isOpen={hubFlashcardModalOpen}
+        onClose={() => setHubFlashcardModalOpen(false)}
+        title={hubFlashcardTitle}
+        initialCards={hubFlashcards}
+        sourceModule={hubFlashcardModule}
+        category={hubFlashcardCategory}
+      />
 
     </div>
   );

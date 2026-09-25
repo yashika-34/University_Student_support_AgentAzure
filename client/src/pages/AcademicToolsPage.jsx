@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import api, { academicAPI } from '../services/api.js';
+import api, { academicAPI, flashcardAPI } from '../services/api.js';
 import ModalPortal from '../components/ModalPortal.jsx';
+import FlashcardModal from '../components/flashcards/FlashcardModal.jsx';
+import FlashcardViewer from '../components/flashcards/FlashcardViewer.jsx';
 import {
   Calculator,
   Target,
@@ -23,8 +25,54 @@ import {
   RefreshCw,
   Layers,
   BrainCircuit,
-  BarChart3
+  BarChart3,
+  Sliders,
+  Tag,
+  Maximize2
 } from 'lucide-react';
+
+const COURSE_SYLLABI = {
+  'CS-301': {
+    name: 'Algorithms & Complexity',
+    units: [
+      'Unit 1: Asymptotic Analysis, Recurrences & Divide-and-Conquer',
+      'Unit 2: Sorting Bounds, Heaps & Balanced BSTs',
+      'Unit 3: Greedy Algorithms & Dynamic Programming (Knapsack, LCS)',
+      'Unit 4: Graph Algorithms (Dijkstra, Bellman-Ford, Prim & Kruskal)',
+      'Unit 5: NP-Completeness, P vs NP & Approximation Algorithms'
+    ]
+  },
+  'CS-309': {
+    name: 'Artificial Intelligence & Neural Networks',
+    units: [
+      'Unit 1: Intelligent Agents & State Space Search (A*, Minimax)',
+      'Unit 2: First-Order Logic, Inference & Ontological Engineering',
+      'Unit 3: Supervised Learning (Linear Models, SVMs, Decision Trees)',
+      'Unit 4: Deep Neural Networks, Backprop, CNNs & Sequence Models',
+      'Unit 5: Transformer Architecture, Attention Mechanisms & LLMs'
+    ]
+  },
+  'CS-305': {
+    name: 'Cloud Computing & Distributed Systems',
+    units: [
+      'Unit 1: Cloud Service Models (IaaS, PaaS, SaaS) & Hypervisors',
+      'Unit 2: Distributed Systems, MapReduce & HDFS Storage',
+      'Unit 3: Containerization (Docker, Kubernetes) & Service Meshes',
+      'Unit 4: Cloud Security, IAM Policies, OAuth2 & Encryption',
+      'Unit 5: Serverless FaaS, Microservices Architecture & Edge Deployments'
+    ]
+  },
+  'CS-302': {
+    name: 'Database Management Systems',
+    units: [
+      'Unit 1: Relational Data Model, ER Diagrams & Integrity Constraints',
+      'Unit 2: Relational Algebra, Calculus & Complex SQL Queries',
+      'Unit 3: Normalization (1NF to BCNF) & Dependency Preservation',
+      'Unit 4: Transaction Processing, ACID Properties & Concurrency Control',
+      'Unit 5: Indexing (B+ Trees, Hashing) & Query Execution Plans'
+    ]
+  }
+};
 
 const QUIZ_SUBJECTS = [
   { id: 'DNN', label: 'DNN (Deep Neural Networks)', desc: 'Backprop, CNNs, RNNs, Transformers, Optimizers' },
@@ -43,10 +91,23 @@ const AcademicToolsPage = () => {
   // Sync tab if query param changes
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab');
-    if (tabFromUrl && ['attendance', 'sgpa', 'planner', 'quiz', 'recommendations'].includes(tabFromUrl)) {
+    if (tabFromUrl && ['attendance', 'sgpa', 'planner', 'quiz', 'recommendations', 'architect', 'flashcards'].includes(tabFromUrl)) {
       setActiveTab(tabFromUrl);
     }
   }, [searchParams]);
+
+  /* ── 0. AI Syllabus & Chapter Flashcard Studio State ────────────── */
+  const [syllabusCourse, setSyllabusCourse] = useState('CS-301');
+  const [syllabusChapter, setSyllabusChapter] = useState('All Units');
+  const [syllabusCustomTopic, setSyllabusCustomTopic] = useState('');
+  const [syllabusMode, setSyllabusMode] = useState('chapter_wise');
+  const [syllabusCardCount, setSyllabusCardCount] = useState(8);
+  const [syllabusDifficulty, setSyllabusDifficulty] = useState('Mixed');
+  const [syllabusCards, setSyllabusCards] = useState([]);
+  const [isGeneratingSyllabusCards, setIsGeneratingSyllabusCards] = useState(false);
+  const [syllabusDeckTitle, setSyllabusDeckTitle] = useState('');
+  const [showSyllabusConfig, setShowSyllabusConfig] = useState(true);
+  const [syllabusModalOpen, setSyllabusModalOpen] = useState(false);
 
   /* ── 1. Attendance Predictor State ──────────────────────────────── */
   const [courses, setCourses] = useState([
@@ -273,6 +334,81 @@ const AcademicToolsPage = () => {
     setQuizError('');
   };
 
+  /* ── Smart Academic Flashcards State ───────────────────────────── */
+  const [academicFlashcardModalOpen, setAcademicFlashcardModalOpen] = useState(false);
+  const [academicFlashcards, setAcademicFlashcards] = useState([]);
+  const [academicFlashcardTitle, setAcademicFlashcardTitle] = useState('');
+  const [academicFlashcardModule, setAcademicFlashcardModule] = useState('quiz');
+  const [academicFlashcardCategory, setAcademicFlashcardCategory] = useState('Quiz Remedial');
+  const [isGeneratingAcademicFlashcards, setIsGeneratingAcademicFlashcards] = useState(false);
+
+  // Generate Remedial Flashcards for Weak Quiz Topics
+  const handleGenerateQuizFlashcards = async () => {
+    if (!quizResult) return;
+    setIsGeneratingAcademicFlashcards(true);
+    try {
+      const wrongQuestions = (quizResult.evaluatedQuestions || []).filter((q) => !q.isCorrect);
+      const res = await flashcardAPI.generate({
+        sourceModule: 'quiz',
+        type: 'quiz_remedial',
+        title: `${currentQuiz?.topic || 'Quiz'} — Remedial Practice Deck`,
+        context: {
+          topic: currentQuiz?.topic,
+          score: quizResult.percentage,
+          wrongQuestions: wrongQuestions.map((w) => ({ question: w.questionText, explanation: w.explanation }))
+        },
+        count: 6,
+        save: true
+      });
+      if (res.data?.data?.cards) {
+        setAcademicFlashcards(res.data.data.cards);
+        setAcademicFlashcardTitle(`${currentQuiz?.topic || 'Quiz'} — Weak Topics Remedial Deck`);
+        setAcademicFlashcardModule('quiz');
+        setAcademicFlashcardCategory('Remedial Learning');
+        setAcademicFlashcardModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Quiz flashcard generation error:', err);
+      alert('Failed to generate remedial flashcards. Please try again.');
+    } finally {
+      setIsGeneratingAcademicFlashcards(false);
+    }
+  };
+
+  // Generate Milestone Flashcards (Learning, Revision, Interview)
+  const handleGenerateMilestoneFlashcards = async (slot, type = 'learning') => {
+    setIsGeneratingAcademicFlashcards(true);
+    const typeLabel = type === 'interview' ? 'Interview Prep' : type === 'revision' ? 'Revision' : 'Learning';
+    try {
+      const res = await flashcardAPI.generate({
+        sourceModule: 'roadmap',
+        type: type === 'interview' ? 'role_interview' : type === 'revision' ? 'exam_revision' : 'roadmap_milestone',
+        title: `${slot.courseCode}: ${slot.topic} (${typeLabel})`,
+        context: {
+          milestoneTopic: slot.topic,
+          courseCode: slot.courseCode,
+          day: slot.day,
+          time: slot.time,
+          type
+        },
+        count: 6,
+        save: true
+      });
+      if (res.data?.data?.cards) {
+        setAcademicFlashcards(res.data.data.cards);
+        setAcademicFlashcardTitle(`${slot.topic} — ${typeLabel} Flashcards`);
+        setAcademicFlashcardModule('roadmap');
+        setAcademicFlashcardCategory(typeLabel);
+        setAcademicFlashcardModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Milestone flashcard generation error:', err);
+      alert('Failed to generate milestone flashcards.');
+    } finally {
+      setIsGeneratingAcademicFlashcards(false);
+    }
+  };
+
   /* ── 5. AI Project Architect State ──────────────────────────────── */
   const [architectInterests, setArchitectInterests] = useState('');
   const [architectComplexity, setArchitectComplexity] = useState('Advanced');
@@ -280,6 +416,83 @@ const AcademicToolsPage = () => {
   const [architectLoading, setArchitectLoading] = useState(false);
   const [architectResult, setArchitectResult] = useState(null);
   const [architectError, setArchitectError] = useState('');
+
+  const handleGenerateStudentFlashcards = async () => {
+    setIsGeneratingSyllabusCards(true);
+    const selectedCourseData = COURSE_SYLLABI[syllabusCourse] || { name: syllabusCourse, units: [] };
+    const courseTitle = `${syllabusCourse}: ${selectedCourseData.name}`;
+
+    const modeLabels = {
+      chapter_wise: 'Chapter Core Concepts',
+      exam_revision: 'High-Yield Exam Revision',
+      important_topics: 'Key Formulas & Theorems',
+      viva_prep: 'Viva & Interview Prep'
+    };
+
+    const chapterFocus = syllabusChapter === 'custom' ? syllabusCustomTopic : syllabusChapter;
+    const finalChapter = chapterFocus && chapterFocus !== 'All Units' ? chapterFocus : 'Complete Course Syllabus';
+    const deckTitle = `${courseTitle} — ${finalChapter} (${modeLabels[syllabusMode] || 'Flashcards'})`;
+
+    try {
+      const res = await flashcardAPI.generate({
+        sourceModule: 'student_syllabus',
+        type: syllabusMode === 'viva_prep' ? 'role_interview' : syllabusMode,
+        title: deckTitle,
+        context: {
+          courseCode: syllabusCourse,
+          courseName: selectedCourseData.name,
+          chapterFocus: finalChapter,
+          mode: syllabusMode,
+          difficulty: syllabusDifficulty,
+          syllabusUnits: selectedCourseData.units
+        },
+        count: syllabusCardCount,
+        save: true
+      });
+
+      const cards = res.data?.data?.cards || [];
+      if (cards.length > 0) {
+        setSyllabusCards(cards);
+        setSyllabusDeckTitle(deckTitle);
+        setShowSyllabusConfig(false);
+      } else {
+        console.warn('No cards returned from API');
+      }
+    } catch (err) {
+      console.error('Failed to generate syllabus flashcards (with save):', err);
+      // Fallback: retry without saving to DB (avoids any save-related validation errors)
+      try {
+        const fallbackRes = await flashcardAPI.generate({
+          sourceModule: 'student_syllabus',
+          type: syllabusMode === 'viva_prep' ? 'role_interview' : syllabusMode,
+          title: deckTitle,
+          context: {
+            courseCode: syllabusCourse,
+            courseName: selectedCourseData.name,
+            chapterFocus: finalChapter,
+            mode: syllabusMode,
+            difficulty: syllabusDifficulty,
+            syllabusUnits: selectedCourseData.units
+          },
+          count: syllabusCardCount,
+          save: false
+        });
+        const fallbackCards = fallbackRes.data?.data?.cards || [];
+        if (fallbackCards.length > 0) {
+          setSyllabusCards(fallbackCards);
+          setSyllabusDeckTitle(deckTitle);
+          setShowSyllabusConfig(false);
+        } else {
+          alert('Failed to generate flashcards. Please try again.');
+        }
+      } catch (fallbackErr) {
+        console.error('Flashcard fallback also failed:', fallbackErr);
+        alert('Unable to reach AI service. Please check your connection and try again.');
+      }
+    } finally {
+      setIsGeneratingSyllabusCards(false);
+    }
+  };
 
   const handleGenerateProject = async () => {
     if (!architectInterests.trim()) {
@@ -291,7 +504,6 @@ const AcademicToolsPage = () => {
     setArchitectResult(null);
 
     try {
-      // You can define a new API call in your services/api.js, or just use api.post
       const res = await api.post('/academic/project-architect', {
         interests: architectInterests,
         complexity: architectComplexity,
@@ -330,6 +542,7 @@ const AcademicToolsPage = () => {
           { id: 'attendance', label: 'Attendance Predictor', icon: Calculator },
           { id: 'sgpa', label: 'SGPA & CGPA Predictor', icon: Target },
           { id: 'planner', label: 'Study Planner', icon: Clock },
+          { id: 'flashcards', label: '🎴 Syllabus Flashcard Studio', icon: BookOpen },
           { id: 'quiz', label: 'AI Quiz Studio (Azure OpenAI)', icon: BrainCircuit },
           { id: 'recommendations', label: 'AI Recommendations', icon: Sparkles },
           { id: 'architect', label: 'AI Project Architect', icon: Layers }
@@ -559,10 +772,12 @@ const AcademicToolsPage = () => {
                   background: slot.isCompleted ? 'rgba(16, 185, 129, 0.08)' : 'var(--bg-input)',
                   border: slot.isCompleted ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-subtle)',
                   cursor: 'pointer',
-                  transition: 'all 0.15s'
+                  transition: 'all 0.15s',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flex: 1, minWidth: '260px' }}>
                   <input
                     type="checkbox"
                     checked={slot.isCompleted}
@@ -573,14 +788,48 @@ const AcademicToolsPage = () => {
                     <div style={{ fontWeight: 600, fontSize: '0.92rem', textDecoration: slot.isCompleted ? 'line-through' : 'none', color: slot.isCompleted ? 'var(--text-muted)' : 'var(--text-primary)' }}>
                       {slot.topic}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '0.75rem', marginTop: '0.2rem' }}>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '0.75rem', marginTop: '0.2rem', alignItems: 'center', flexWrap: 'wrap' }}>
                       <span>{slot.day}</span>
                       <span>&bull;</span>
                       <span>{slot.time}</span>
+                      <span className="badge badge-primary" style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem' }}>{slot.courseCode}</span>
+                    </div>
+
+                    {/* Milestone AI Flashcard Generators */}
+                    <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleGenerateMilestoneFlashcards(slot, 'learning')}
+                        disabled={isGeneratingAcademicFlashcards}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: '6px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa' }}
+                        title="Generate learning flashcards for this milestone"
+                      >
+                        📚 Learning Cards
+                      </button>
+                      <button
+                        onClick={() => handleGenerateMilestoneFlashcards(slot, 'revision')}
+                        disabled={isGeneratingAcademicFlashcards}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: '6px', background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc' }}
+                        title="Generate revision flashcards for this milestone"
+                      >
+                        🔄 Revision Cards
+                      </button>
+                      <button
+                        onClick={() => handleGenerateMilestoneFlashcards(slot, 'interview')}
+                        disabled={isGeneratingAcademicFlashcards}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: '6px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399' }}
+                        title="Generate interview preparation flashcards for this milestone"
+                      >
+                        💼 Interview Prep
+                      </button>
                     </div>
                   </div>
                 </div>
-                <span className="badge badge-primary">{slot.courseCode}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {slot.isCompleted && <span style={{ fontSize: '0.78rem', color: 'var(--success)', fontWeight: 600 }}>✓ Completed</span>}
+                </div>
               </div>
             ))}
           </div>
@@ -921,15 +1170,69 @@ const AcademicToolsPage = () => {
                 <div style={{ fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <BarChart3 size={18} color="var(--primary)" /> Detailed Answer Explanations
                 </div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button onClick={handleRetakeQuiz} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <RotateCcw size={15} /> Retake This Quiz
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={handleGenerateQuizFlashcards}
+                    disabled={isGeneratingAcademicFlashcards}
+                    className="btn btn-primary"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      background: 'linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)',
+                      border: 'none',
+                      boxShadow: '0 4px 12px rgba(236,72,153,0.3)'
+                    }}
+                  >
+                    {isGeneratingAcademicFlashcards ? (
+                      <><Loader2 size={15} className="animate-spin" /> Generating Cards...</>
+                    ) : (
+                      <><Layers size={15} /> 🎴 Remedial Flashcards</>
+                    )}
                   </button>
-                  <button onClick={handleResetQuiz} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Sparkles size={16} /> Generate New Quiz
+                  <button onClick={handleRetakeQuiz} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <RotateCcw size={15} /> Retake Quiz
+                  </button>
+                  <button onClick={handleResetQuiz} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Sparkles size={16} /> New Quiz
                   </button>
                 </div>
               </div>
+
+              {/* AI Remedial Recommendation Banner */}
+              {quizResult.wrongAnswers > 0 && (
+                <div style={{
+                  padding: '1rem 1.25rem',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'linear-gradient(90deg, rgba(239,68,68,0.12), rgba(139,92,246,0.12))',
+                  border: '1px solid rgba(239,68,68,0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <Layers size={22} color="#f87171" />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fca5a5' }}>
+                        Smart AI Remedial Recommendation
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        You missed {quizResult.wrongAnswers} question{quizResult.wrongAnswers > 1 ? 's' : ''}. Convert these weak areas into interactive revision flashcards to solidify your concepts.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleGenerateQuizFlashcards}
+                    disabled={isGeneratingAcademicFlashcards}
+                    className="btn btn-sm btn-primary"
+                    style={{ fontSize: '0.82rem', padding: '0.4rem 0.9rem', background: '#ec4899', borderColor: '#ec4899' }}
+                  >
+                    Revise Weak Topics Now
+                  </button>
+                </div>
+              )}
 
               {/* Detailed Question Review */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -1304,6 +1607,373 @@ const AcademicToolsPage = () => {
           )}
         </div>
       )}
+
+      {/* ── TAB: AI Syllabus Revision & Flashcard Studio ─────────────── */}
+      {activeTab === 'flashcards' && (
+        <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+          
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1.25rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+                <div style={{ width: 38, height: 38, borderRadius: '10px', background: 'linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BookOpen size={20} color="#fff" />
+                </div>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>
+                  AI Syllabus Revision &amp; Chapter Flashcards
+                </h2>
+                <span className="badge" style={{ background: 'rgba(236,72,153,0.15)', color: '#f472b6', border: '1px solid rgba(236,72,153,0.3)', fontWeight: 700, fontSize: '0.75rem' }}>
+                  ⚡ Azure AI Foundry + SM-2 Spaced Repetition
+                </span>
+              </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
+                Select any enrolled course and specific syllabus chapter to synthesize high-yield memory retention cards for exam revision, formulas, and viva prep.
+              </p>
+            </div>
+
+            {syllabusCards.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.6rem' }}>
+                <button
+                  onClick={() => setShowSyllabusConfig(!showSyllabusConfig)}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.85rem', padding: '0.45rem 0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                >
+                  <Sliders size={14} /> {showSyllabusConfig ? 'Hide Chapter Selector' : 'Change Chapter / Topic'}
+                </button>
+                <button
+                  onClick={() => setSyllabusModalOpen(true)}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.85rem', padding: '0.45rem 0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                >
+                  <Maximize2 size={14} /> Fullscreen Room
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Interactive Chapter & Course Selector Panel */}
+          {(showSyllabusConfig || syllabusCards.length === 0) && (
+            <div style={{
+              background: 'linear-gradient(145deg, rgba(236,72,153,0.03), rgba(59,130,246,0.03))',
+              border: '1px solid rgba(236,72,153,0.25)',
+              borderRadius: 'var(--radius-md)',
+              padding: '1.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1.5rem'
+            }}>
+              
+              {/* Step 1: Select Enrolled Course */}
+              <div>
+                <label style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <Tag size={15} color="#ec4899" /> 1. Select Enrolled Course:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+                  {Object.entries(COURSE_SYLLABI).map(([code, data]) => {
+                    const isSelected = syllabusCourse === code;
+                    return (
+                      <div
+                        key={code}
+                        onClick={() => {
+                          setSyllabusCourse(code);
+                          setSyllabusChapter('All Units');
+                        }}
+                        style={{
+                          padding: '0.9rem 1rem',
+                          borderRadius: 'var(--radius-sm)',
+                          cursor: 'pointer',
+                          border: isSelected ? '2px solid #ec4899' : '1px solid var(--border-subtle)',
+                          background: isSelected ? 'rgba(236,72,153,0.12)' : 'var(--bg-card)',
+                          boxShadow: isSelected ? '0 4px 14px rgba(236,72,153,0.2)' : 'none',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.3rem'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.95rem', color: isSelected ? '#f472b6' : 'var(--primary)' }}>
+                            {code}
+                          </span>
+                          {isSelected && <span style={{ color: '#ec4899', fontSize: '0.75rem', fontWeight: 700 }}>✓ Selected</span>}
+                        </div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                          {data.name}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {data.units.length} Syllabus Units
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Step 2: Target Chapter / Unit Focus */}
+              <div>
+                <label style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <BookOpen size={15} color="var(--primary)" /> 2. Target Chapter / Unit Focus:
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <select
+                    className="form-input"
+                    value={syllabusChapter}
+                    onChange={(e) => setSyllabusChapter(e.target.value)}
+                    style={{ background: 'var(--bg-card)', borderColor: 'rgba(236,72,153,0.3)', padding: '0.65rem 0.9rem', fontSize: '0.9rem' }}
+                  >
+                    <option value="All Units">🌐 Complete Course Syllabus (All Units &amp; Core Topics)</option>
+                    {(COURSE_SYLLABI[syllabusCourse]?.units || []).map((u, uIdx) => (
+                      <option key={uIdx} value={u}>📖 {u}</option>
+                    ))}
+                    <option value="custom">✏️ Custom Specific Topic (Type your own)</option>
+                  </select>
+
+                  {/* Custom Topic Input */}
+                  {syllabusChapter === 'custom' && (
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Dynamic Programming (0/1 Knapsack &amp; LCS), B+ Tree Indexing, Heuristic Search..."
+                      value={syllabusCustomTopic}
+                      onChange={(e) => setSyllabusCustomTopic(e.target.value)}
+                      style={{ background: 'var(--bg-card)', fontSize: '0.88rem' }}
+                    />
+                  )}
+
+                  {/* Quick Clickable Chapter Chips */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginTop: '0.25rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSyllabusChapter('All Units')}
+                      style={{
+                        fontSize: '0.75rem',
+                        padding: '0.25rem 0.65rem',
+                        borderRadius: '100px',
+                        cursor: 'pointer',
+                        border: syllabusChapter === 'All Units' ? '1px solid #ec4899' : '1px solid var(--border-subtle)',
+                        background: syllabusChapter === 'All Units' ? 'rgba(236,72,153,0.2)' : 'var(--bg-input)',
+                        color: syllabusChapter === 'All Units' ? '#f472b6' : 'var(--text-secondary)',
+                        fontWeight: syllabusChapter === 'All Units' ? 700 : 500,
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      🌐 All Units
+                    </button>
+                    {(COURSE_SYLLABI[syllabusCourse]?.units || []).map((u, uIdx) => (
+                      <button
+                        key={uIdx}
+                        type="button"
+                        onClick={() => setSyllabusChapter(u)}
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '0.25rem 0.65rem',
+                          borderRadius: '100px',
+                          cursor: 'pointer',
+                          border: syllabusChapter === u ? '1px solid #ec4899' : '1px solid var(--border-subtle)',
+                          background: syllabusChapter === u ? 'rgba(236,72,153,0.2)' : 'var(--bg-input)',
+                          color: syllabusChapter === u ? '#f472b6' : 'var(--text-secondary)',
+                          fontWeight: syllabusChapter === u ? 700 : 500,
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        📖 {u.length > 36 ? u.slice(0, 34) + '...' : u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3: Revision Mode */}
+              <div>
+                <label style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <Sparkles size={15} color="#8b5cf6" /> 3. Select Study &amp; Revision Mode:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem' }}>
+                  {[
+                    { id: 'chapter_wise', label: '📖 Chapter Core Concepts', desc: 'Active recall on fundamental definitions and proofs' },
+                    { id: 'exam_revision', label: '🎯 High-Yield Exam Prep', desc: 'Past semester exam patterns and tricky questions' },
+                    { id: 'important_topics', label: '⭐ Formulas & Theorems', desc: 'Asymptotic bounds, equations, and standard rules' },
+                    { id: 'viva_prep', label: '💼 Viva & Interview Prep', desc: 'Oral examination prompts and standard answers' }
+                  ].map((m) => {
+                    const isM = syllabusMode === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setSyllabusMode(m.id)}
+                        className={`btn ${isM ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'flex-start',
+                          padding: '0.65rem 0.85rem',
+                          textAlign: 'left',
+                          gap: '0.2rem',
+                          ...(isM ? { background: '#ec4899', borderColor: '#ec4899' } : {})
+                        }}
+                      >
+                        <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>{m.label}</span>
+                        <span style={{ fontSize: '0.72rem', opacity: 0.85, fontWeight: 400 }}>{m.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Step 4: Card Count & Difficulty */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem', display: 'block' }}>
+                    Card Count:
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {[
+                      { count: 5, label: '5 Cards (Quick Blitz)' },
+                      { count: 8, label: '8 Cards (Standard)' },
+                      { count: 12, label: '12 Cards (Mastery)' }
+                    ].map((item) => (
+                      <button
+                        key={item.count}
+                        type="button"
+                        onClick={() => setSyllabusCardCount(item.count)}
+                        className={`btn btn-sm ${syllabusCardCount === item.count ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{
+                          flex: 1,
+                          fontSize: '0.75rem',
+                          padding: '0.4rem 0.5rem',
+                          ...(syllabusCardCount === item.count ? { background: '#ec4899', borderColor: '#ec4899' } : {})
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem', display: 'block' }}>
+                    Difficulty Level:
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {['Mixed', 'Easy', 'Medium', 'Hard'].map((diff) => (
+                      <button
+                        key={diff}
+                        type="button"
+                        onClick={() => setSyllabusDifficulty(diff)}
+                        className={`btn btn-sm ${syllabusDifficulty === diff ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{
+                          flex: 1,
+                          fontSize: '0.75rem',
+                          padding: '0.4rem 0.5rem',
+                          ...(syllabusDifficulty === diff ? { background: '#ec4899', borderColor: '#ec4899' } : {})
+                        }}
+                      >
+                        {diff}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <button
+                type="button"
+                onClick={handleGenerateStudentFlashcards}
+                disabled={isGeneratingSyllabusCards || (syllabusChapter === 'custom' && !syllabusCustomTopic.trim())}
+                className="btn btn-primary"
+                style={{
+                  padding: '0.85rem 1.75rem',
+                  fontSize: '1rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  background: 'linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)',
+                  border: 'none',
+                  boxShadow: '0 4px 16px rgba(236,72,153,0.35)',
+                  marginTop: '0.25rem'
+                }}
+              >
+                {isGeneratingSyllabusCards ? (
+                  <><Loader2 size={18} className="animate-spin" /> Azure AI Foundry is Synthesizing Cards...</>
+                ) : (
+                  <><Sparkles size={18} /> ⚡ Generate Flashcards for {syllabusCourse} ({syllabusChapter === 'All Units' ? 'All Units' : syllabusChapter.split(':')[0]})</>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Loading Animation State */}
+          {isGeneratingSyllabusCards ? (
+            <div style={{ textAlign: 'center', padding: '4.5rem 1rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+              <Loader2 size={42} className="animate-spin" style={{ color: '#ec4899', margin: '0 auto 1.25rem' }} />
+              <div style={{ fontWeight: 800, fontSize: '1.2rem', marginBottom: '0.45rem' }}>
+                Azure AI is Grounding Your Course Syllabus...
+              </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', maxWidth: '520px', margin: '0 auto' }}>
+                Analyzing <strong>{syllabusCourse}</strong> syllabus. Extracting high-yield questions, formulas, and memory retention anchors for <em>{syllabusChapter === 'custom' ? syllabusCustomTopic : syllabusChapter}</em>.
+              </p>
+            </div>
+          ) : syllabusCards.length > 0 ? (
+            /* Ready In-Page 3D Flashcard Viewer */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '0.75rem 1.25rem',
+                background: 'rgba(236,72,153,0.08)',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid rgba(236,72,153,0.25)',
+                fontSize: '0.88rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <CheckCircle2 size={18} color="#34d399" />
+                  <span>
+                    Study Deck Ready: <strong style={{ color: '#f472b6' }}>{syllabusDeckTitle}</strong> ({syllabusCards.length} Flashcards)
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowSyllabusConfig(true)}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.8rem', padding: '0.3rem 0.75rem', border: '1px solid rgba(236,72,153,0.3)', color: '#f472b6' }}
+                >
+                  🔄 Pick Another Chapter
+                </button>
+              </div>
+
+              <FlashcardViewer
+                initialCards={syllabusCards}
+                deckTitle={syllabusDeckTitle}
+                sourceModule="student_syllabus"
+                category={syllabusCourse}
+              />
+            </div>
+          ) : null}
+
+        </div>
+      )}
+
+      {/* Student Syllabus Flashcard Modal */}
+      <FlashcardModal
+        isOpen={syllabusModalOpen}
+        onClose={() => setSyllabusModalOpen(false)}
+        cards={syllabusCards}
+        deckTitle={syllabusDeckTitle}
+        sourceModule="student_syllabus"
+        category={syllabusCourse}
+      />
+
+      {/* Smart Academic Flashcard Modal */}
+      <FlashcardModal
+        isOpen={academicFlashcardModalOpen}
+        onClose={() => setAcademicFlashcardModalOpen(false)}
+        cards={academicFlashcards}
+        deckTitle={academicFlashcardTitle}
+        sourceModule={academicFlashcardModule}
+        category={academicFlashcardCategory}
+      />
 
     </div>
   );

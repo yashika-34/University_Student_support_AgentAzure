@@ -1342,7 +1342,9 @@ export const generateInterviewQuestion = async (req, res, next) => {
       role = 'Fullstack Engineer',
       difficulty = 'Junior',
       category = 'Technical Concepts',
-      previousQuestions = []
+      previousQuestions = [],
+      isFollowUp = false,
+      lastAnswer = ''
     } = req.body;
 
     const azureConfig = getEffectiveAzureConfig();
@@ -1356,7 +1358,7 @@ export const generateInterviewQuestion = async (req, res, next) => {
           deployment: azureConfig.primaryDeployment
         });
 
-        const prompt = `You are a Principal Technical Interviewer and Bar Raiser at a top tier-1 technology enterprise.
+        let prompt = `You are a Principal Technical Interviewer and Bar Raiser at a top tier-1 technology enterprise.
 Generate ONE realistic, rigorous, and relevant interview question for a candidate.
 
 Interview Parameters:
@@ -1364,7 +1366,16 @@ Interview Parameters:
 - Difficulty Level: "${difficulty}" (Junior = foundational & practical implementation; Mid = edge cases & performance; Senior = high-scale system trade-offs & architecture)
 - Category: "${category}"
 ${Array.isArray(previousQuestions) && previousQuestions.length > 0 ? `Do NOT repeat any of these previously asked questions:\n${previousQuestions.slice(-5).map((q, i) => `${i + 1}. ${q}`).join('\n')}` : ''}
+`;
 
+        if (isFollowUp && lastAnswer) {
+          prompt += `
+This is a FOLLOW-UP question based on the candidate's last answer.
+Candidate's Last Answer: "${lastAnswer}"
+Drill down deeper into their answer, challenge a specific point, ask for an edge case, or ask them to optimize their approach.`;
+        }
+
+        prompt += `
 Respond ONLY with valid JSON matching this schema exactly (no markdown wrapper, no backticks, no code fences):
 {
   "id": "${crypto.randomUUID()}",
@@ -1469,6 +1480,9 @@ Evaluate this answer thoroughly, objectively, and constructively.
 Respond ONLY with valid raw JSON adhering strictly to this schema (no markdown wrapper, no backticks, no code fences):
 {
   "score": 85,
+  "communicationScore": 88,
+  "technicalScore": 82,
+  "problemSolvingScore": 85,
   "grade": "Strong Pass",
   "notes": "Detailed critique assessing correctness, technical depth, edge cases, and communication clarity...",
   "strengths": ["Clear understanding of concurrency", "Accurately mentioned cache eviction strategies"],
@@ -1509,6 +1523,9 @@ Respond ONLY with valid raw JSON adhering strictly to this schema (no markdown w
 
       evaluationResult = {
         score,
+        communicationScore: Math.min(100, score + 5),
+        technicalScore: Math.max(0, score - 2),
+        problemSolvingScore: score,
         grade,
         notes: `⚠️ **Offline Mode**: Azure AI evaluation is currently offline. This heuristic score is based on response length. Your response shows practical understanding for ${role}. To reach a senior interview standard, include deeper performance trade-offs.`,
         strengths: ['Relevant conceptual alignment', 'Structured reasoning'],
@@ -1556,6 +1573,9 @@ Respond ONLY with valid raw JSON adhering strictly to this schema (no markdown w
         question,
         evaluatedAnswer: answerText,
         score: evaluationResult.score,
+        communicationScore: evaluationResult.communicationScore || evaluationResult.score,
+        technicalScore: evaluationResult.technicalScore || evaluationResult.score,
+        problemSolvingScore: evaluationResult.problemSolvingScore || evaluationResult.score,
         grade: evaluationResult.grade,
         notes: evaluationResult.notes,
         strengths: evaluationResult.strengths || [],

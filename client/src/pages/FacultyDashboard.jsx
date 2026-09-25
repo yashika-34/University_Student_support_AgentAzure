@@ -376,6 +376,9 @@ const FacultyDashboard = () => {
           <Link to="/assignments" className="btn btn-secondary" style={{ padding: '0.65rem 1.25rem', fontSize: '0.85rem' }}>
             <FileText size={16} /> Post Assignment
           </Link>
+          <Link to="/teacher/question-paper" className="btn btn-primary" style={{ padding: '0.65rem 1.25rem', fontSize: '0.85rem', background: 'var(--primary-gradient)', border: 'none' }}>
+            <Sparkles size={16} /> AI Paper Generator
+          </Link>
         </div>
       </div>
 

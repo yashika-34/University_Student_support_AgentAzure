@@ -23,6 +23,12 @@ import Scholarship from './Scholarship.js';
 import CampusEvent from './CampusEvent.js';
 import ForumPost from './ForumPost.js';
 import Badge from './Badge.js';
+import Resume from './Resume.js';
+import Job from './Job.js';
+import Recommendation from './Recommendation.js';
+import FlashcardDeck from './FlashcardDeck.js';
+import FlashcardProgress from './FlashcardProgress.js';
+import QuestionPaper from './QuestionPaper.js';
 
 export {
   User,
@@ -49,7 +55,13 @@ export {
   Scholarship,
   CampusEvent,
   ForumPost,
-  Badge
+  Badge,
+  Resume,
+  Job,
+  Recommendation,
+  FlashcardDeck,
+  FlashcardProgress,
+  QuestionPaper
 };
 
 export default {
@@ -77,6 +89,12 @@ export default {
   Scholarship,
   CampusEvent,
   ForumPost,
-  Badge
+  Badge,
+  Resume,
+  Job,
+  Recommendation,
+  FlashcardDeck,
+  FlashcardProgress,
+  QuestionPaper
 };
 

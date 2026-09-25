@@ -6,7 +6,10 @@ import Attendance from '../models/Attendance.js';
 import Assignment from '../models/Assignment.js';
 import Marks from '../models/Marks.js';
 import Notice from '../models/Notice.js';
-import { runStudentSupportAgent } from '../services/azureAiService.js';
+import QuestionPaper from '../models/QuestionPaper.js';
+import { runStudentSupportAgent, getEffectiveAzureConfig } from '../services/azureAiService.js';
+import { AzureOpenAI } from 'openai';
+import pdfParse from 'pdf-parse';
 
 /**
  * @desc    Teacher dashboard — aggregated stats for faculty's courses
@@ -1437,5 +1440,99 @@ export const getDepartmentStats = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+export const uploadSyllabusAndGenerate = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload a syllabus PDF file.' });
+    }
+
+    const {
+      title,
+      examType = 'Mid-Term',
+      difficulty = 'Mixed',
+      totalMarks = 100,
+      questionCount = 10,
+      questionTypes = 'MCQs, Short Answer, Long Answer',
+      specificTopics = ''
+    } = req.body;
+
+    let syllabusText = '';
+    try {
+      const parsedPdf = await pdfParse(req.file.buffer);
+      syllabusText = parsedPdf.text;
+    } catch (err) {
+      return res.status(400).json({ success: false, message: 'Failed to extract text from PDF.', error: err.message });
+    }
+    
+    // Fallback if no text extracted
+    if (!syllabusText.trim()) {
+      syllabusText = "General University Syllabus";
+    }
+    
+    const azureConfig = getEffectiveAzureConfig();
+    if (!azureConfig.isConfigured) {
+       return res.status(503).json({ success: false, message: 'Azure AI not configured.' });
+    }
+    const client = new AzureOpenAI({ endpoint: azureConfig.endpoint, apiKey: azureConfig.apiKey, apiVersion: azureConfig.apiVersion, deployment: azureConfig.primaryDeployment });
+
+    const prompt = `You are an expert University Professor. Create an examination paper based strictly on the syllabus content provided.
+    
+    SYLLABUS CONTENT:
+    ${syllabusText.substring(0, 15000)}
+    
+    PARAMETERS:
+    Exam Type: ${examType}
+    Difficulty Level: ${difficulty}
+    Total Marks: ${totalMarks}
+    Total Number of Questions: ${questionCount}
+    Question Types to include: ${questionTypes}
+    ${specificTopics ? `FOCUS SPECIFICALLY ON THESE TOPICS: ${specificTopics}` : ''}
+    
+    Generate the response as a structured JSON object with EXACTLY these two keys:
+    1. "generatedPaper": A beautifully formatted markdown string containing the complete exam paper (include instructions, sections, marks per question).
+    2. "answerKey": A beautifully formatted markdown string containing the detailed model answer key and marking scheme.
+    
+    Do NOT include Markdown code block formatting in your outermost response (do not put \`\`\`json around the object). Return raw JSON.`;
+
+    const response = await client.chat.completions.create({
+      model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini',
+      messages: [{ role: 'system', content: 'You are an AI Question Paper Generator.' }, { role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      max_tokens: 3000
+    });
+
+    const aiOutput = JSON.parse(response.choices[0]?.message?.content?.trim() || '{}');
+    const { generatedPaper, answerKey } = aiOutput;
+
+    if (!generatedPaper || !answerKey) {
+      return res.status(500).json({ success: false, message: 'AI failed to generate a valid paper and answer key.' });
+    }
+
+    const paper = await QuestionPaper.create({
+      title: title || `${examType} Paper`,
+      examType,
+      difficulty,
+      totalMarks,
+      syllabusText: syllabusText.substring(0, 2000), // save a snippet
+      generatedPaper,
+      answerKey,
+      createdBy: req.user._id
+    });
+
+    res.status(201).json({ success: true, data: paper });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getTeacherPapers = async (req, res, next) => {
+  try {
+    const papers = await QuestionPaper.find({ createdBy: req.user._id }).sort({ createdAt: -1 });
+    res.status(200).json({ success: true, data: papers });
+  } catch (err) {
+    next(err);
   }
 };
