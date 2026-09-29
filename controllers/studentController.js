@@ -4,6 +4,7 @@ import Course from '../models/Course.js';
 import Attendance from '../models/Attendance.js';
 import Marks from '../models/Marks.js';
 import Assignment from '../models/Assignment.js';
+import Notice from '../models/Notice.js';
 
 /**
  * @desc    Get current student's full profile
@@ -313,3 +314,98 @@ export const getStudentAnalytics = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * @desc    Unified Student Dashboard: Returns profile, attendance, marks, assignments, notices & courses in one call
+ * @route   GET /api/v1/students/me/dashboard
+ * @access  Private (Student)
+ */
+export const getUnifiedDashboard = async (req, res, next) => {
+  try {
+    const student = await Student.findOne({ userId: req.user._id })
+      .populate('userId', 'firstName lastName email phoneNumber avatarUrl')
+      .populate('academicAdvisor')
+      .populate('enrolledCourses.courseId');
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student profile not found.' });
+    }
+
+    const enrolledCourseIds = student.enrolledCourses
+      .filter((c) => c.status === 'enrolled')
+      .map((c) => c.courseId?._id || c.courseId);
+
+    const [attendanceRecords, publishedMarks, assignments, notices] = await Promise.all([
+      Attendance.find({ student: student._id }).populate('course', 'courseCode courseName credits').lean(),
+      Marks.find({ student: student._id, isPublished: true }).populate('course', 'courseCode courseName credits').sort({ createdAt: -1 }).lean(),
+      Assignment.find({ course: { $in: enrolledCourseIds } }).populate('course', 'courseCode courseName').sort({ dueDate: 1 }).lean(),
+      Notice.find({ isPublished: true }).sort({ isPinned: -1, createdAt: -1 }).limit(5).lean()
+    ]);
+
+    const totalClasses = attendanceRecords.length;
+    const attendedClasses = attendanceRecords.filter((r) => r.status === 'present').length;
+    const excusedClasses = attendanceRecords.filter((r) => r.status === 'excused').length;
+    const overallAttendance = totalClasses > 0 ? Number((((attendedClasses + excusedClasses) / totalClasses) * 100).toFixed(1)) : 85.0;
+
+    const formattedAssignments = assignments.map((asg) => {
+      const sub = asg.submissions?.find((s) => s.student?.toString() === student._id.toString());
+      return {
+        id: asg._id,
+        title: asg.title,
+        courseCode: asg.course?.courseCode || 'GEN',
+        dueDate: asg.dueDate,
+        isSubmitted: !!sub,
+        status: sub ? sub.status : (new Date(asg.dueDate) < new Date() ? 'overdue' : 'pending')
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      dashboard: {
+        profile: {
+          id: student._id,
+          studentId: student.studentId,
+          name: `${student.userId?.firstName || ''} ${student.userId?.lastName || ''}`.trim(),
+          email: student.userId?.email,
+          avatarUrl: student.userId?.avatarUrl,
+          department: student.department,
+          currentSemester: student.currentSemester,
+          degreeProgram: student.degreeProgram,
+          cgpa: student.cgpa
+        },
+        courses: student.enrolledCourses.map((c) => ({
+          courseId: c.courseId?._id,
+          courseCode: c.courseId?.courseCode,
+          courseName: c.courseId?.courseName,
+          credits: c.courseId?.credits,
+          status: c.status
+        })),
+        attendance: {
+          overallPercentage: overallAttendance,
+          totalClasses,
+          attendedClasses,
+          excusedClasses
+        },
+        marks: {
+          totalEntries: publishedMarks.length,
+          recentMarks: publishedMarks.slice(0, 5)
+        },
+        assignments: {
+          total: assignments.length,
+          pending: formattedAssignments.filter((a) => a.status === 'pending' || a.status === 'overdue').length,
+          list: formattedAssignments.slice(0, 6)
+        },
+        notices: notices.map((n) => ({
+          id: n._id,
+          title: n.title,
+          category: n.category,
+          priority: n.priority,
+          date: n.createdAt
+        }))
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

@@ -1,12 +1,16 @@
 import { OpenAI, AzureOpenAI } from 'openai';
 import { SearchClient, AzureKeyCredential } from '@azure/search-documents';
 import { buildSystemPromptWithContext, FEW_SHOT_EXEMPLARS } from './promptEngine.js';
+import { trackAIUsage } from './aiLogger.js';
 
 // Model dependencies for live tool execution
 import Student from '../models/Student.js';
 import Course from '../models/Course.js';
 import Attendance from '../models/Attendance.js';
 import Assignment from '../models/Assignment.js';
+import Marks from '../models/Marks.js';
+import ExamSchedule from '../models/ExamSchedule.js';
+import Notice from '../models/Notice.js';
 import FAQ from '../models/FAQ.js';
 
 /**
@@ -24,6 +28,22 @@ export const AI_AGENT_TOOLS = [
           courseCode: {
             type: 'string',
             description: 'Optional course code like CS-301. If omitted, returns attendance across all enrolled courses.'
+          }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_student_marks',
+      description: 'Retrieve published semester examination marks, test scores, grades, SGPA, CGPA, and subject-wise scorecards for the logged-in student.',
+      parameters: {
+        type: 'object',
+        properties: {
+          courseCode: {
+            type: 'string',
+            description: 'Optional course code filter (e.g. CS-301).'
           }
         }
       }
@@ -66,13 +86,29 @@ export const AI_AGENT_TOOLS = [
     type: 'function',
     function: {
       name: 'get_exam_information',
-      description: 'Retrieve semester examination schedules, start/end times, room allocations, digital hall ticket status, and examination shift guidelines.',
+      description: 'Retrieve semester examination schedules, start/end times, room allocations, digital hall ticket eligibility, and examination shift guidelines from MongoDB.',
       parameters: {
         type: 'object',
         properties: {
-          term: {
+          courseCode: {
             type: 'string',
-            description: 'Examination term such as Fall 2026 or Midterm.'
+            description: 'Optional course code filter (e.g. CS-301).'
+          }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_university_notices',
+      description: 'Fetch official university circulars, academic notices, event announcements, and emergency alerts.',
+      parameters: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            description: 'Optional category: General, Academic, Examination, Event, Holiday'
           }
         }
       }
@@ -161,6 +197,37 @@ export const executeAgentTool = async (toolName, toolArgs, studentUser, studentP
       };
     }
 
+    case 'get_student_marks': {
+      if (!studentProfile) {
+        return { error: 'No student profile associated. User must be logged in as a student.' };
+      }
+
+      const filter = { student: studentProfile._id, isPublished: true };
+      const marks = await Marks.find(filter)
+        .populate('course', 'courseCode courseName credits')
+        .sort({ createdAt: -1 });
+
+      const filteredMarks = toolArgs.courseCode
+        ? marks.filter((m) => (m.course?.courseCode || m.subject || '').toUpperCase().includes(toolArgs.courseCode.toUpperCase()))
+        : marks;
+
+      return {
+        studentId: studentProfile.studentId,
+        cgpa: studentProfile.cgpa || 8.2,
+        totalEntries: filteredMarks.length,
+        marks: filteredMarks.map((m) => ({
+          courseCode: m.course?.courseCode || m.subject,
+          courseName: m.course?.courseName || m.subject,
+          examType: m.examType,
+          marksObtained: m.marksObtained,
+          maxMarks: m.maxMarks,
+          percentage: m.percentage,
+          grade: m.grade,
+          gradePoints: m.gradePoints
+        }))
+      };
+    }
+
     case 'get_course_guidance': {
       const course = await Course.findOne({ courseCode: toolArgs.courseCode?.toUpperCase() })
         .populate({
@@ -208,7 +275,7 @@ export const executeAgentTool = async (toolName, toolArgs, studentUser, studentP
         const sub = a.submissions?.find((s) => s.student?.toString() === studentProfile._id?.toString());
         return {
           id: a._id,
-          courseCode: a.course.courseCode,
+          courseCode: a.course ? a.course.courseCode : 'GEN',
           title: a.title,
           description: a.description,
           dueDate: a.dueDate,
@@ -222,6 +289,44 @@ export const executeAgentTool = async (toolName, toolArgs, studentUser, studentP
     }
 
     case 'get_exam_information': {
+      let query = {};
+      if (studentProfile) {
+        const enrolledIds = studentProfile.enrolledCourses.map((c) => c.courseId);
+        query = {
+          $or: [
+            { course: { $in: enrolledIds } },
+            { semester: studentProfile.currentSemester }
+          ]
+        };
+      }
+
+      if (toolArgs.courseCode) {
+        query.courseCode = toolArgs.courseCode.toUpperCase();
+      }
+
+      const exams = await ExamSchedule.find(query).sort({ date: 1 }).limit(6);
+
+      if (exams.length > 0) {
+        return {
+          examPeriod: 'Official Examination Schedule',
+          upcomingExams: exams.map((e) => ({
+            courseCode: e.courseCode,
+            courseName: e.courseName,
+            date: e.date.toISOString().split('T')[0],
+            startTime: e.startTime,
+            endTime: e.endTime,
+            shift: e.shift,
+            venue: e.venue,
+            hallTicketStatus: e.hallTicketStatus
+          })),
+          guidelines: exams[0]?.guidelines || [
+            'Bring official photo ID and digital hall ticket',
+            'No electronic gadgets allowed in exam hall',
+            'Arrive 20 minutes prior to start'
+          ]
+        };
+      }
+
       return {
         examPeriod: 'Fall Semester Final Examinations 2026',
         commencementDate: 'December 10th, 2026',
@@ -229,17 +334,33 @@ export const executeAgentTool = async (toolName, toolArgs, studentUser, studentP
           { shift: 'Morning', timing: '09:00 AM - 12:00 PM' },
           { shift: 'Afternoon', timing: '02:00 PM - 05:00 PM' }
         ],
-        hallTicketNotice: 'Digital Hall Tickets with room allocations and seat numbers will be available in the portal on December 3rd, 2026.',
-        rules: [
-          'Bring verified University ID card and printed/digital Hall Ticket',
-          'Electronic devices and programmable calculators are strictly prohibited',
-          'Candidate must report 20 minutes prior to exam commencement'
-        ]
+        hallTicketNotice: 'Digital Hall Tickets with room allocations are downloadable from the portal 7 days prior.'
+      };
+    }
+
+    case 'get_university_notices': {
+      const filter = { isPublished: true };
+      if (toolArgs.category && toolArgs.category !== 'all') {
+        filter.category = toolArgs.category;
+      }
+
+      const notices = await Notice.find(filter)
+        .sort({ isPinned: -1, createdAt: -1 })
+        .limit(5);
+
+      return {
+        count: notices.length,
+        notices: notices.map((n) => ({
+          title: n.title,
+          category: n.category,
+          priority: n.priority,
+          date: n.createdAt.toISOString().split('T')[0],
+          content: n.content
+        }))
       };
     }
 
     case 'search_university_policy_rag': {
-      // 1. Try Azure AI Search if endpoint configured
       if (
         process.env.AZURE_SEARCH_ENDPOINT &&
         process.env.AZURE_SEARCH_API_KEY &&
@@ -271,7 +392,6 @@ export const executeAgentTool = async (toolName, toolArgs, studentUser, studentP
         }
       }
 
-      // 2. Fallback: Search MongoDB FAQ collection with text index
       const matchingFaqs = await FAQ.find(
         { $text: { $search: toolArgs.queryText }, isPublished: true },
         { score: { $meta: 'textScore' } }
@@ -285,38 +405,34 @@ export const executeAgentTool = async (toolName, toolArgs, studentUser, studentP
             title: f.question,
             snippet: f.answer,
             category: f.category,
-            score: 0.95
+            source: 'University Verified Knowledge Base'
           }))
         };
       }
 
-      // 3. Fallback General Guidelines
       return {
         retrievedDocuments: [
           {
-            title: 'University General Academic & Financial Regulations',
-            snippet: 'Tuition fees must be settled prior to mid-semester. Attendance minimum threshold is 75%. Student health center is open Monday-Friday 8am-6pm.',
-            category: 'General',
-            score: 0.8
+            title: 'General University Policy Handbook',
+            snippet: 'Students are required to maintain a minimum of 75% attendance in each registered course to be eligible for end-semester examinations. Continuous internal evaluation accounts for 40% of the total course assessment.',
+            category: 'Academics'
           }
         ]
       };
     }
 
     case 'escalate_to_human_ticket': {
-      const ticketNumber = `TICK-${Date.now().toString().slice(-6)}`;
       return {
-        ticketCreated: true,
-        ticketNumber,
-        subject: toolArgs.subject,
-        priority: toolArgs.priority || 'medium',
-        status: 'Assigned to University Academic Advisory Team',
-        estimatedResponseTime: '24-48 business hours'
+        ticketNumber: `TICK-${Math.floor(100000 + Math.random() * 900000)}`,
+        status: 'Open',
+        assignedTo: 'Academic Support Office',
+        estimatedResponseTime: '24-48 hours',
+        message: 'Your query has been escalated to academic staff. A support specialist will follow up.'
       };
     }
 
     default:
-      return { error: `Tool ${toolName} not recognized.` };
+      return { error: `Tool ${toolName} not supported.` };
   }
 };
 
@@ -345,7 +461,7 @@ export const getEffectiveAzureConfig = () => {
 };
 
 /**
- * Creates chat completions with automatic fallback for deployment names (e.g. gpt-4.1-mini <-> gpt-4o-mini)
+ * Creates chat completions with automatic fallback for deployment names
  */
 export const createAzureChatCompletion = async (clientOptions, completionParams) => {
   const { endpoint, apiKey, apiVersion, deployment } = clientOptions;
@@ -370,7 +486,7 @@ export const createAzureChatCompletion = async (clientOptions, completionParams)
     if (err.code === 'DeploymentNotFound' || err.status === 404) {
       const alternateDeployment = deployment === 'gpt-4.1-mini' ? 'gpt-4o-mini' : 'gpt-4.1-mini';
       console.warn(
-        `[Azure OpenAI] Deployment '${deployment}' returned 404 DeploymentNotFound. Automatically retrying with alternate deployment '${alternateDeployment}'...`
+        `[Azure OpenAI] Deployment '${deployment}' returned 404. Automatically retrying with '${alternateDeployment}'...`
       );
       return await executeCall(alternateDeployment);
     }
@@ -380,7 +496,7 @@ export const createAzureChatCompletion = async (clientOptions, completionParams)
 
 /**
  * Main AI Agent Execution Function
- * Orchestrates Azure OpenAI conversation, tool calls, and grounded synthesis
+ * Orchestrates Azure OpenAI conversation, tool calls, and grounded synthesis with automated usage logging.
  */
 export const runStudentSupportAgent = async ({
   userMessage,
@@ -389,10 +505,10 @@ export const runStudentSupportAgent = async ({
   studentProfile = null,
   facultyProfile = null
 }) => {
-  // 1. Build Grounded Persona Prompt
+  const startTime = Date.now();
+
   const systemPrompt = buildSystemPromptWithContext(user, studentProfile, facultyProfile);
 
-  // 2. Prepare message stack
   const openAiMessages = [
     { role: 'system', content: systemPrompt },
     ...conversationHistory.slice(-6).map((msg) => ({
@@ -402,18 +518,10 @@ export const runStudentSupportAgent = async ({
     { role: 'user', content: userMessage }
   ];
 
-  // 3. Check if Azure OpenAI credentials are valid
   const azureConfig = getEffectiveAzureConfig();
-  console.log("=== AZURE CONFIG STATUS ===");
-  console.log("ENDPOINT:", azureConfig.endpoint || '(not configured)');
-  console.log("API KEY CONFIGURED:", Boolean(azureConfig.apiKey));
-  console.log("DEPLOYMENT:", azureConfig.primaryDeployment);
-  console.log("IS CONFIGURED:", azureConfig.isConfigured);
-  console.log("===========================");
 
   if (azureConfig.isConfigured) {
     try {
-      // Turn 1: Send message with tools
       let activeDeployment = azureConfig.primaryDeployment;
       const turn1Result = await createAzureChatCompletion(
         {
@@ -434,9 +542,11 @@ export const runStudentSupportAgent = async ({
       activeDeployment = turn1Result.usedDeployment;
       const responseMessage = response.choices[0].message;
 
-      // Check if Azure OpenAI requested tool execution
+      let totalPromptTokens = response.usage?.prompt_tokens || 0;
+      let totalCompletionTokens = response.usage?.completion_tokens || 0;
+
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-        openAiMessages.push(responseMessage); // Add assistant's tool call request
+        openAiMessages.push(responseMessage);
 
         const executedTools = [];
         const retrievedSources = [];
@@ -462,7 +572,6 @@ export const runStudentSupportAgent = async ({
             result: toolResult
           });
 
-          // Feed tool execution output back to model
           openAiMessages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
@@ -470,7 +579,6 @@ export const runStudentSupportAgent = async ({
           });
         }
 
-        // Turn 2: Synthesize grounded final response with tool outputs
         const turn2Result = await createAzureChatCompletion(
           {
             endpoint: azureConfig.endpoint,
@@ -484,6 +592,23 @@ export const runStudentSupportAgent = async ({
           }
         );
 
+        totalPromptTokens += turn2Result.response.usage?.prompt_tokens || 0;
+        totalCompletionTokens += turn2Result.response.usage?.completion_tokens || 0;
+
+        if (user?._id) {
+          await trackAIUsage({
+            userId: user._id,
+            userRole: user.role || 'student',
+            feature: 'chatbot',
+            model: activeDeployment,
+            promptTokens: totalPromptTokens,
+            completionTokens: totalCompletionTokens,
+            latencyMs: Date.now() - startTime,
+            isSuccess: true,
+            requestMetadata: { toolCalls: executedTools.map((t) => t.tool) }
+          });
+        }
+
         return {
           content: turn2Result.response.choices[0].message.content,
           toolCalls: executedTools,
@@ -491,26 +616,41 @@ export const runStudentSupportAgent = async ({
         };
       }
 
-      // No tool calls needed, direct answer
+      if (user?._id) {
+        await trackAIUsage({
+          userId: user._id,
+          userRole: user.role || 'student',
+          feature: 'chatbot',
+          model: activeDeployment,
+          promptTokens: totalPromptTokens,
+          completionTokens: totalCompletionTokens,
+          latencyMs: Date.now() - startTime,
+          isSuccess: true
+        });
+      }
+
       return {
         content: responseMessage.content,
         toolCalls: [],
         groundingSources: []
       };
     } catch (azureError) {
-      console.error('[Azure OpenAI Live Connection Error]:', {
-        message: azureError.message,
-        status: azureError.status || null,
-        code: azureError.code || null,
-        endpoint: azureConfig.endpoint,
-        deployment: azureConfig.primaryDeployment
-      });
-      console.warn('[Falling back to Resilient Local Agent Engine]');
+      console.error('[Azure OpenAI Connection Error]:', azureError.message);
+      if (user?._id) {
+        await trackAIUsage({
+          userId: user._id,
+          userRole: user.role || 'student',
+          feature: 'chatbot',
+          model: azureConfig.primaryDeployment,
+          latencyMs: Date.now() - startTime,
+          isSuccess: false,
+          errorCode: azureError.code || 'azure_error'
+        });
+      }
     }
   }
 
-  // 4. Resilient Local Tool-Calling Fallback Engine
-  // Evaluates intent, invokes MongoDB tools dynamically, and produces zero-hallucination answers
+  // Resilient Local Tool-Calling Fallback Engine
   const lower = userMessage.toLowerCase();
   let selectedTool = null;
   let toolArgs = {};
@@ -519,6 +659,11 @@ export const runStudentSupportAgent = async ({
     selectedTool = 'get_student_attendance';
     if (lower.includes('cs-301')) toolArgs.courseCode = 'CS-301';
     if (lower.includes('cs-305')) toolArgs.courseCode = 'CS-305';
+  } else if (lower.includes('mark') || lower.includes('grade') || lower.includes('cgpa') || lower.includes('gpa') || lower.includes('score')) {
+    selectedTool = 'get_student_marks';
+    if (lower.includes('cs-301')) toolArgs.courseCode = 'CS-301';
+  } else if (lower.includes('notice') || lower.includes('circular') || lower.includes('announcement')) {
+    selectedTool = 'get_university_notices';
   } else if (lower.includes('assignment') || lower.includes('homework') || lower.includes('due') || lower.includes('deadline')) {
     selectedTool = 'get_assignment_deadlines';
   } else if (lower.includes('course') || lower.includes('prerequisite') || lower.includes('syllabus') || lower.includes('credits')) {
@@ -535,10 +680,8 @@ export const runStudentSupportAgent = async ({
     toolArgs.queryText = userMessage;
   }
 
-  // Execute selected tool against MongoDB
   const toolResult = await executeAgentTool(selectedTool, toolArgs, user, studentProfile);
 
-  // Generate grounded conversational response from tool outputs
   let finalAnswer = '';
 
   if (selectedTool === 'get_student_attendance') {
@@ -554,6 +697,22 @@ export const runStudentSupportAgent = async ({
         finalAnswer += `\n> [!WARNING]\n> ${toolResult.consequenceOfDebarment}. You must attend upcoming consecutive lectures to qualify for final examinations.`;
       }
     }
+  } else if (selectedTool === 'get_student_marks') {
+    if (toolResult.error) {
+      finalAnswer = toolResult.error;
+    } else if (toolResult.marks.length === 0) {
+      finalAnswer = `No published examination marks found for your enrolled subjects yet. Your current cumulative GPA is **${toolResult.cgpa}**.`;
+    } else {
+      finalAnswer = `Here is your latest academic scorecard (Current CGPA: **${toolResult.cgpa}**):\n\n`;
+      toolResult.marks.forEach((m) => {
+        finalAnswer += `- **${m.courseCode}**: **${m.marksObtained}/${m.maxMarks}** (${m.percentage}%) &bull; Grade: **${m.grade}** (${m.examType})\n`;
+      });
+    }
+  } else if (selectedTool === 'get_university_notices') {
+    finalAnswer = `Here are the latest official university circulars:\n\n`;
+    toolResult.notices.forEach((n, idx) => {
+      finalAnswer += `${idx + 1}. **${n.title}** [${n.category} &bull; ${n.priority.toUpperCase()}]\n   *${n.content}* (Posted: ${n.date})\n\n`;
+    });
   } else if (selectedTool === 'get_assignment_deadlines') {
     if (!toolResult.upcomingAssignments || toolResult.upcomingAssignments.length === 0) {
       finalAnswer = `You currently have no pending assignments with upcoming deadlines. You're all caught up!`;
@@ -575,17 +734,23 @@ export const runStudentSupportAgent = async ({
         `- **Curriculum Overview:** ${toolResult.syllabusOverview}`;
     }
   } else if (selectedTool === 'get_exam_information') {
-    finalAnswer = `**${toolResult.examPeriod}**\n\n- Commencement Date: **${toolResult.commencementDate}**\n` +
-      `- Shifts: Morning (09:00 AM - 12:00 PM) & Afternoon (02:00 PM - 05:00 PM)\n` +
-      `- **Hall Ticket Notice:** ${toolResult.hallTicketNotice}\n\n` +
-      `> [!NOTE]\n> Please ensure you carry your physical University ID Card and verified Hall Ticket to each examination.`;
+    if (toolResult.upcomingExams && toolResult.upcomingExams.length > 0) {
+      finalAnswer = `Here is your verified upcoming examination schedule:\n\n`;
+      toolResult.upcomingExams.forEach((e) => {
+        finalAnswer += `- **${e.courseCode}: ${e.courseName}**\n  - Date: **${e.date}** (${e.startTime} - ${e.endTime}, ${e.shift} Shift)\n  - Venue: **${e.venue}**\n  - Hall Ticket: **${e.hallTicketStatus.toUpperCase()}**\n\n`;
+      });
+    } else {
+      finalAnswer = `**${toolResult.examPeriod}**\n\n- Commencement Date: **${toolResult.commencementDate}**\n` +
+        `- Shifts: Morning (09:00 AM - 12:00 PM) & Afternoon (02:00 PM - 05:00 PM)\n` +
+        `- **Hall Ticket Notice:** ${toolResult.hallTicketNotice}\n\n`;
+    }
   } else if (selectedTool === 'escalate_to_human_ticket') {
     finalAnswer = `🎫 **Support Ticket Created: #${toolResult.ticketNumber}**\n\nYour query has been transferred to the Academic Support Team. An advisor will review your request and get in touch within **${toolResult.estimatedResponseTime}**.`;
   } else {
     const doc = toolResult.retrievedDocuments?.[0];
     finalAnswer = doc
       ? `${doc.snippet}\n\n*(Source: Official University Document — ${doc.title})*`
-      : `I am your **UniAssist AI Student Support Agent**. How can I help you today with your courses, attendance, exams, or campus services?`;
+      : `I am your **UniAssist AI Student Support Agent**. How can I help you today with your courses, attendance, exams, marks, or campus services?`;
   }
 
   return {
@@ -593,4 +758,12 @@ export const runStudentSupportAgent = async ({
     toolCalls: [{ tool: selectedTool, args: toolArgs, result: toolResult }],
     groundingSources: toolResult.retrievedDocuments || []
   };
+};
+
+export default {
+  runStudentSupportAgent,
+  executeAgentTool,
+  createAzureChatCompletion,
+  getEffectiveAzureConfig,
+  AI_AGENT_TOOLS
 };

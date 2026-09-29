@@ -2,6 +2,7 @@ import { AzureOpenAI } from 'openai';
 import { Quiz, StudyPlan } from '../models/index.js';
 import ExamSchedule from '../models/ExamSchedule.js';
 import { getEffectiveAzureConfig } from '../services/azureAiService.js';
+import { trackAIUsage } from '../services/aiLogger.js';
 
 /**
  * Initialize Azure OpenAI Client with fallback handling
@@ -254,14 +255,16 @@ export const generateQuiz = async (req, res) => {
     const resolvedSubject = SUBJECT_DETAILS[topic] || topic;
     const subjectCode = courseCode || (Object.keys(SUBJECT_DETAILS).includes(topic) ? topic : 'CS-AI');
 
+    const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini';
+    const startTime = Date.now();
     let questions = null;
     let lastError = null;
+    let promptTokens = 0;
+    let completionTokens = 0;
     
     const client = getAzureOpenAIClient();
 
     if (client) {
-      const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini';
-
       const systemPrompt = `You are a distinguished university computer science professor.
 Your role is to generate high-yield, academically rigorous multiple-choice practice questions (MCQs).
 Rules:
@@ -297,6 +300,9 @@ Ensure options are distinct and plausible, with no ambiguous answers. Return val
             max_tokens: 2200
           });
 
+          promptTokens += completion.usage?.prompt_tokens || 0;
+          completionTokens += completion.usage?.completion_tokens || 0;
+
           let rawContent = completion.choices[0]?.message?.content?.trim() || '';
 
           // Clean any markdown wrappers
@@ -314,6 +320,20 @@ Ensure options are distinct and plausible, with no ambiguous answers. Return val
           lastError = err;
           console.warn(`[AI Quiz Studio] Generation attempt ${attempt} failed:`, err.message);
         }
+      }
+
+      if (req.user?._id) {
+        await trackAIUsage({
+          userId: req.user._id,
+          userRole: req.user.role || 'student',
+          feature: 'quiz_generator',
+          model: deployment,
+          promptTokens,
+          completionTokens,
+          latencyMs: Date.now() - startTime,
+          isSuccess: Boolean(questions && questions.length > 0),
+          requestMetadata: { topic, difficulty: validDifficulty, count: numQuestions }
+        });
       }
     }
 

@@ -5,12 +5,14 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import mongoose from 'mongoose';
 
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 import connectDB from './config/db.js';
+import validateEnv from './config/validateEnv.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -30,15 +32,22 @@ import academicToolsRoutes from './routes/academicToolsRoutes.js';
 import careerRoutes from './routes/careerRoutes.js';
 import servicesRoutes from './routes/servicesRoutes.js';
 import engagementRoutes from './routes/engagementRoutes.js';
-// New specialized route modules
+// Specialized academic modules
 import teacherRoutes from './routes/teacherRoutes.js';
 import marksRoutes from './routes/marksRoutes.js';
 import ragRoutes from './routes/ragRoutes.js';
 import voiceRoutes from './routes/voiceRoutes.js';
 import flashcardRoutes from './routes/flashcardRoutes.js';
+// New Enterprise modules
+import adminRoutes from './routes/adminRoutes.js';
+import examRoutes from './routes/examRoutes.js';
+import searchRoutes from './routes/searchRoutes.js';
 
 // Load environment variables
 dotenv.config();
+
+// Validate critical environment variables
+validateEnv();
 
 // Connect to MongoDB
 connectDB();
@@ -60,7 +69,6 @@ app.use(
 const parseOrigins = () => {
   const envOrigins = [process.env.CLIENT_URL, process.env.FRONTEND_URL].filter(Boolean);
   const defaults = [];
-  // To allow specific origins in development, set CLIENT_URL or FRONTEND_URL env variables.
   const list = [];
   envOrigins.forEach((item) => {
     if (item.includes(',')) {
@@ -77,25 +85,20 @@ const allowedOriginList = parseOrigins();
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server, Render health checks)
       if (!origin) return callback(null, true);
 
-      // Check explicit allowed origins
       if (allowedOriginList.includes(origin)) {
         return callback(null, true);
       }
 
-      // Allow all Vercel deployments (*.vercel.app)
       if (/^https:\/\/([a-zA-Z0-9_-]+\.)*vercel\.app$/.test(origin)) {
         return callback(null, true);
       }
 
-      // Allow all Render deployments (*.onrender.com)
       if (/^https:\/\/([a-zA-Z0-9_-]+\.)*onrender\.com$/.test(origin)) {
         return callback(null, true);
       }
 
-      // Allow development origins
       if (process.env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
@@ -110,8 +113,8 @@ app.use(
 
 // Rate Limiting (Prevents DDoS)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // Limit each IP to 300 requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -135,7 +138,8 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    service: 'UniAssist AI Backend'
+    service: 'UniAssist AI Backend',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
@@ -152,12 +156,19 @@ app.use('/api/v1/academic', academicToolsRoutes);
 app.use('/api/v1/career', careerRoutes);
 app.use('/api/v1/services', servicesRoutes);
 app.use('/api/v1/engagement', engagementRoutes);
+
 // Specialized academic modules
 app.use('/api/v1/teacher', teacherRoutes);
 app.use('/api/v1/marks', marksRoutes);
 app.use('/api/v1/rag', ragRoutes);
 app.use('/api/v1/voice', voiceRoutes);
 app.use('/api/v1/flashcards', flashcardRoutes);
+
+// New Enterprise modules
+app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/exams', examRoutes);
+app.use('/api/v1/search', searchRoutes);
+
 // Serve static assets from the React build if present
 app.use(express.static(distPath));
 
@@ -172,6 +183,7 @@ app.get('*', (req, res, next) => {
   }
   next();
 });
+
 // Error Handling Middlewares
 app.use(notFound);
 app.use(errorHandler);
@@ -180,5 +192,30 @@ const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   console.log(`[UniAssist AI Backend Running] Mode: ${process.env.NODE_ENV || 'development'} | Port: ${PORT}`);
 });
+
+// Production Graceful Shutdown
+const gracefulShutdown = (signal) => {
+  console.log(`\n[Server] Received ${signal}. Initiating graceful shutdown...`);
+  server.close(async () => {
+    console.log('[Server] HTTP connections drained and server closed.');
+    try {
+      await mongoose.connection.close(false);
+      console.log('[MongoDB] Connection closed cleanly.');
+      process.exit(0);
+    } catch (err) {
+      console.error('[MongoDB Error during close]:', err.message);
+      process.exit(1);
+    }
+  });
+
+  // Force kill if graceful close exceeds 10 seconds
+  setTimeout(() => {
+    console.error('[Server] Could not close connections in time. Forcefully terminating.');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;
