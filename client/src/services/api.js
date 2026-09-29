@@ -82,7 +82,9 @@ export const marksAPI = {
   addMarks: (marksData) => api.post('/marks', marksData),
   updateMarks: (id, data) => api.put(`/marks/${id}`, data),
   deleteMarks: (id) => api.delete(`/marks/${id}`),
-  publishMarks: (publishData) => api.post('/marks/publish', publishData)
+  publishMarks: (id) => api.patch(`/marks/${id}/publish`),
+  bulkPreview: (data) => api.post('/marks/bulk/preview', data),
+  bulkImport: (data) => api.post('/marks/bulk/import', data)
 };
 
 // ── Course APIs ───────────────────────────────────────────────────────────
@@ -123,8 +125,12 @@ export const noticeAPI = {
 
 // ── Exam Schedule APIs ────────────────────────────────────────────────────
 export const examAPI = {
-  getSchedules: (params) => api.get('/academic/exam-schedules', { params }),
-  createSchedule: (data) => api.post('/academic/exam-schedules', data)
+  getMySchedule: () => api.get('/exams/my'),
+  getSchedules: (params) => api.get('/exams', { params }),
+  getById: (id) => api.get(`/exams/${id}`),
+  createSchedule: (data) => api.post('/exams', data),
+  updateSchedule: (id, data) => api.put(`/exams/${id}`, data),
+  deleteSchedule: (id) => api.delete(`/exams/${id}`)
 };
 
 // ── RAG Knowledge Documents APIs ──────────────────────────────────────────
@@ -228,6 +234,25 @@ export const flashcardAPI = {
   getRecommended: () => api.get('/flashcards/recommended'),
   getDueToday: () => api.get('/flashcards/due-today'),
   exportAnkiUrl: (deckId) => `/api/v1/flashcards/decks/${deckId}/export-anki`
+};
+
+// ── Admin APIs ────────────────────────────────────────────────────────────
+export const adminAPI = {
+  getSystemStats: () => api.get('/admin/stats'),
+  getAIUsage: () => api.get('/admin/ai-usage'),
+  getAuditLogs: (params) => api.get('/admin/audit-logs', { params }),
+  getAllUsers: (params) => api.get('/admin/users', { params }),
+  getUserById: (id) => api.get(`/admin/users/${id}`),
+  updateUserRole: (id, data) => api.put(`/admin/users/${id}/role`, data),
+  toggleUserStatus: (id, data) => api.put(`/admin/users/${id}/status`, data),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
+  getStudents: (params) => api.get('/admin/students', { params }),
+  getFaculty: (params) => api.get('/admin/teachers', { params })
+};
+
+// ── Search APIs ───────────────────────────────────────────────────────────
+export const searchAPI = {
+  globalSearch: (query, params) => api.get('/search', { params: { q: query, ...params } })
 };
 
 export default api;

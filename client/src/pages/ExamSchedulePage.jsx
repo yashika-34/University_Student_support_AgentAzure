@@ -11,8 +11,8 @@ const ExamSchedulePage = () => {
     const fetchExams = async () => {
       setLoading(true);
       try {
-        const res = await examAPI.getSchedules();
-        setExams(res.data?.data || []);
+        const res = await examAPI.getMySchedule();
+        setExams(res.data?.exams || []);
       } catch (err) {
         console.error('Failed to fetch exam schedules:', err);
       } finally {
