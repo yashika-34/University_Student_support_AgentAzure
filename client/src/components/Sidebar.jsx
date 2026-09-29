@@ -26,7 +26,8 @@ import {
   Globe,
   Handshake,
   Award,
-  Compass
+  Compass,
+  Shield
 } from 'lucide-react';
 
 // ── Navigation configs per role ─────────────────────────────────────────────
@@ -83,13 +84,30 @@ const FACULTY_NAV = [
   ]}
 ];
 
+const ADMIN_NAV = [
+  { section: 'Administration', items: [
+    { to: '/admin/dashboard', icon: Shield, label: 'Admin Panel' },
+    { to: '/profile', icon: User, label: 'My Profile' }
+  ]},
+  { section: 'Management', items: [
+    { to: '/teacher/students-manage', icon: UserCog, label: 'Student Management' },
+    { to: '/teacher/students', icon: Users, label: 'Student Directory' }
+  ]},
+  { section: 'System', items: [
+    { to: '/chat', icon: MessageSquare, label: 'AI Assistant' },
+    { to: '/documents', icon: Upload, label: 'Documents' },
+    { to: '/faqs', icon: HelpCircle, label: 'FAQs' }
+  ]}
+];
+
 // ── Sidebar Component ────────────────────────────────────────────────────────
 const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
 
+  const isAdmin = role === 'admin' || role === 'super_admin';
   const isTeacherOrFaculty = role === 'faculty' || role === 'teacher';
-  const navItems = isTeacherOrFaculty ? FACULTY_NAV : STUDENT_NAV;
+  const navItems = isAdmin ? ADMIN_NAV : isTeacherOrFaculty ? FACULTY_NAV : STUDENT_NAV;
 
   const handleLogout = () => {
     logout();

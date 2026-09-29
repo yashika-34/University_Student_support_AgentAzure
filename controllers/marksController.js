@@ -5,6 +5,14 @@ import Course from '../models/Course.js';
 import Faculty from '../models/Faculty.js';
 import { logAudit } from '../services/auditService.js';
 
+// Compute current academic year dynamically (Aug–Jul cycle)
+const getCurrentAcademicYear = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1; // 1-indexed
+  return month >= 8 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+};
+
 /**
  * @desc    Get logged-in student's own published marks
  * @route   GET /api/v1/marks/my

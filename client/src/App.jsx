@@ -35,6 +35,7 @@ import AIPaperGenerator from './pages/AIPaperGenerator.jsx';
 import StudentProgressPage from './pages/teacher/StudentProgressPage.jsx';
 
 import StudentManagementPage from "./pages/teacher/StudentManagementPage";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
 
 // PUBLIC PATHS that should NOT show sidebar
 const PUBLIC_PATHS = ['/', '/login', '/register', '/faqs', '/forgot-password', '/reset-password'];
@@ -103,6 +104,11 @@ function AppLayout() {
               <Route path="/teacher/report" element={<TeacherAnalyticsPage />} />
             </Route>
 
+            {/* ── Admin Protected Routes ───────────────────────────────────── */}
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin']} />}>
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            </Route>
+
             {/* ── Shared Protected Routes (student + faculty + teacher) ────── */}
             <Route element={<ProtectedRoute allowedRoles={['student', 'faculty', 'teacher']} />}>
               <Route path="/attendance" element={<AttendancePage />} />
@@ -133,6 +139,7 @@ function AppLayout() {
 function RoleRedirect() {
   const { role, isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (role === 'admin' || role === 'super_admin') return <Navigate to="/admin/dashboard" replace />;
   const isTeacherOrFaculty = role === 'faculty' || role === 'teacher';
   return <Navigate to={isTeacherOrFaculty ? '/faculty/dashboard' : '/student/dashboard'} replace />;
 }
