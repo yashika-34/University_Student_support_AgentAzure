@@ -95,7 +95,7 @@ function AppLayout() {
             </Route>
 
             {/* ── Faculty Protected Routes ────────────────────────────────── */}
-            <Route element={<ProtectedRoute allowedRoles={['faculty', 'teacher']} />}>
+            <Route element={<ProtectedRoute allowedRoles={['faculty', 'teacher', 'admin', 'super_admin']} />}>
               <Route path="/faculty/dashboard" element={<FacultyDashboard />} />
               <Route path="/teacher/analytics" element={<TeacherAnalyticsPage />} />
               <Route path="/teacher/question-paper" element={<AIPaperGenerator />} />
@@ -109,8 +109,8 @@ function AppLayout() {
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
             </Route>
 
-            {/* ── Shared Protected Routes (student + faculty + teacher) ────── */}
-            <Route element={<ProtectedRoute allowedRoles={['student', 'faculty', 'teacher']} />}>
+            {/* ── Shared Protected Routes ─────────────────────────────────── */}
+            <Route element={<ProtectedRoute allowedRoles={['student', 'faculty', 'teacher', 'admin', 'super_admin']} />}>
               <Route path="/attendance" element={<AttendancePage />} />
               <Route path="/assignments" element={<AssignmentPage />} />
               <Route path="/marks" element={<MarksPage />} />

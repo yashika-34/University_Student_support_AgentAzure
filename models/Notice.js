@@ -13,7 +13,7 @@ const noticeSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['Academic', 'Examinations', 'Events', 'Administrative', 'Urgent', 'General'],
+      enum: ['Academic', 'Examinations', 'Examination', 'Events', 'Event', 'Administrative', 'Urgent', 'General'],
       default: 'General'
     },
     priority: {

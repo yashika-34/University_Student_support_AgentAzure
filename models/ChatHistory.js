@@ -2,8 +2,10 @@ import mongoose from 'mongoose';
 
 const toolCallSubSchema = new mongoose.Schema(
   {
-    toolName: { type: String, required: true },
+    toolName: { type: String, default: 'general_tool' },
+    tool: { type: String },
     parameters: { type: mongoose.Schema.Types.Mixed },
+    args: { type: mongoose.Schema.Types.Mixed },
     result: { type: mongoose.Schema.Types.Mixed }
   },
   { _id: false }

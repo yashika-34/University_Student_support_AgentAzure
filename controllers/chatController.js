@@ -159,13 +159,20 @@ export const sendMessage = async (req, res, next) => {
       facultyProfile
     });
 
-    // Append AI response
     const aiMessageId = uuidv4();
+    const normalizedToolCalls = (agentResult.toolCalls || []).map((t) => ({
+      toolName: t.toolName || t.tool || 'student_support_tool',
+      tool: t.tool || t.toolName || 'student_support_tool',
+      parameters: t.parameters || t.args || {},
+      args: t.args || t.parameters || {},
+      result: t.result || {}
+    }));
+
     const aiMessageObj = {
       messageId: aiMessageId,
       sender: 'assistant',
       content: agentResult.content,
-      toolCalls: agentResult.toolCalls || [],
+      toolCalls: normalizedToolCalls,
       groundingSources: agentResult.groundingSources || [],
       timestamp: new Date()
     };

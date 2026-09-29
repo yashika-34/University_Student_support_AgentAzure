@@ -11,6 +11,13 @@ import { runStudentSupportAgent, getEffectiveAzureConfig } from '../services/azu
 import { AzureOpenAI } from 'openai';
 import pdfParse from 'pdf-parse';
 
+const getCurrentAcademicYear = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  return month >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+};
+
 /**
  * @desc    Teacher dashboard — aggregated stats for faculty's courses
  * @route   GET /api/v1/teacher/dashboard
@@ -746,7 +753,7 @@ export const addStudentMarks = async (req, res, next) => {
       marksObtained: Number(marksObtained),
       maxMarks: Number(maxMarks) || 100,
       semester: semester || student.currentSemester || 1,
-      academicYear: '2026-2027',
+      academicYear: getCurrentAcademicYear(),
       remarks: remarks || '',
       isPublished: true
     });

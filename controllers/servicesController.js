@@ -247,6 +247,84 @@ export const createTicket = async (req, res, next) => {
 };
 
 /**
+ * @desc    Get faculty list for booking consultations
+ * @route   GET /api/v1/services/faculty
+ * @access  Private
+ */
+export const getAvailableFaculty = async (req, res, next) => {
+  try {
+    const faculty = await Faculty.find()
+      .populate('userId', 'firstName lastName email avatarUrl')
+      .populate('assignedCourses', 'courseCode courseName');
+
+    const formatted = faculty.map((f) => ({
+      id: f._id,
+      name: f.userId ? `Dr. ${f.userId.firstName} ${f.userId.lastName}` : 'Faculty Member',
+      department: f.department || 'Computer Science',
+      designation: f.designation || 'Professor',
+      email: f.userId?.email || '',
+      courses: f.assignedCourses || []
+    }));
+
+    res.status(200).json({ success: true, count: formatted.length, data: formatted });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc    Reschedule an existing appointment
+ * @route   PUT /api/v1/services/appointments/:id/reschedule
+ * @access  Private
+ */
+export const rescheduleAppointment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { appointmentDate, timeSlot } = req.body;
+
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+      return res.status(404).json({ success: false, message: 'Appointment not found.' });
+    }
+
+    if (appointmentDate) appointment.appointmentDate = new Date(appointmentDate);
+    if (timeSlot) appointment.timeSlot = timeSlot;
+    appointment.status = 'confirmed';
+    await appointment.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Appointment rescheduled successfully.',
+      data: appointment
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc    Cancel an appointment
+ * @route   DELETE /api/v1/services/appointments/:id
+ * @access  Private
+ */
+export const cancelAppointment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+      return res.status(404).json({ success: false, message: 'Appointment not found.' });
+    }
+
+    appointment.status = 'rejected';
+    await appointment.save();
+
+    res.status(200).json({ success: true, message: 'Appointment cancelled successfully.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * @desc    Get active scholarships
  * @route   GET /api/v1/services/scholarships
  * @access  Private / Public
@@ -297,7 +375,78 @@ export const getScholarships = async (req, res, next) => {
       ]);
     }
 
-    res.status(200).json({ success: true, count: scholarships.length, data: scholarships });
+    const student = req.user ? await Student.findOne({ userId: req.user._id }) : null;
+    const studentIdentifier = student ? student.studentId : null;
+
+    const formatted = scholarships.map((s) => {
+      const isApplied = studentIdentifier
+        ? s.applicants?.some(
+            (a) => a.studentId === studentIdentifier || (student && a.student?.toString() === student._id.toString())
+          )
+        : false;
+      return {
+        ...s.toObject(),
+        id: s._id,
+        isApplied: Boolean(isApplied)
+      };
+    });
+
+    res.status(200).json({ success: true, count: formatted.length, data: formatted });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc    Apply for scholarship
+ * @route   POST /api/v1/services/scholarships/:id/apply
+ * @access  Private (Student)
+ */
+export const applyScholarship = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { statement } = req.body;
+
+    const scholarship = await Scholarship.findById(id);
+    if (!scholarship) {
+      return res.status(404).json({ success: false, message: 'Scholarship not found.' });
+    }
+
+    const student = await Student.findOne({ userId: req.user._id });
+    const studentId = student ? student.studentId : `STU-${Date.now().toString().slice(-4)}`;
+    const studentName = req.user.fullName || `${req.user.firstName} ${req.user.lastName}`;
+
+    const alreadyApplied = scholarship.applicants?.some(
+      (a) => a.studentId === studentId || (student && a.student?.toString() === student._id.toString())
+    );
+
+    if (alreadyApplied) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already applied for this scholarship.'
+      });
+    }
+
+    if (!scholarship.applicants) {
+      scholarship.applicants = [];
+    }
+
+    scholarship.applicants.push({
+      student: student ? student._id : null,
+      studentId,
+      studentName,
+      statement: statement || 'Standard Grant Application',
+      appliedAt: new Date(),
+      status: 'submitted'
+    });
+
+    await scholarship.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Scholarship application submitted successfully.',
+      data: scholarship
+    });
   } catch (err) {
     next(err);
   }

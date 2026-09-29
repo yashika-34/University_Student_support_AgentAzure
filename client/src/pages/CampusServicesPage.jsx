@@ -23,6 +23,7 @@ const CampusServicesPage = () => {
 
   // Appointments State
   const [appointments, setAppointments] = useState([]);
+  const [facultyList, setFacultyList] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [events, setEvents] = useState([]);
   const [scholarships, setScholarships] = useState([]);
@@ -30,8 +31,9 @@ const CampusServicesPage = () => {
 
   const [showBookModal, setShowBookModal] = useState(false);
   const [newAppointment, setNewAppointment] = useState({
-    facultyName: 'Dr. Alan Turing',
-    courseCode: 'CS-301 (Algorithms)',
+    facultyId: '',
+    facultyName: '',
+    courseCode: 'General Consultation',
     appointmentDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     timeSlot: '14:30 - 15:00',
     purpose: ''
@@ -66,11 +68,12 @@ const CampusServicesPage = () => {
     const fetchServicesData = async () => {
       setLoading(true);
       try {
-        const [aptRes, tktRes, evtRes, schRes] = await Promise.allSettled([
+        const [aptRes, tktRes, evtRes, schRes, facRes] = await Promise.allSettled([
           api.get('/services/appointments'),
           api.get('/services/tickets'),
           api.get('/services/events'),
-          api.get('/services/scholarships')
+          api.get('/services/scholarships'),
+          api.get('/services/faculty')
         ]);
         if (aptRes.status === 'fulfilled') {
           const apt = aptRes.value.data?.data || aptRes.value.data?.appointments || [];
@@ -87,6 +90,18 @@ const CampusServicesPage = () => {
         if (schRes.status === 'fulfilled') {
           const sch = schRes.value.data?.data || schRes.value.data?.scholarships || [];
           setScholarships(Array.isArray(sch) ? sch : []);
+        }
+        if (facRes.status === 'fulfilled') {
+          const fac = facRes.value.data?.data || facRes.value.data?.faculty || [];
+          const list = Array.isArray(fac) ? fac : [];
+          setFacultyList(list);
+          if (list.length > 0) {
+            setNewAppointment(prev => ({
+              ...prev,
+              facultyId: list[0].id,
+              facultyName: list[0].name
+            }));
+          }
         }
       } catch (err) {
         console.error('Failed to load campus services:', err);
@@ -137,9 +152,17 @@ const CampusServicesPage = () => {
     setRescheduleSuccess(false);
   };
 
-  const handleConfirmReschedule = (e) => {
+  const handleConfirmReschedule = async (e) => {
     e.preventDefault();
     if (!rescheduleItem) return;
+    try {
+      await api.put(`/services/appointments/${rescheduleItem.id}/reschedule`, {
+        appointmentDate: rescheduleDate,
+        timeSlot: rescheduleSlot
+      });
+    } catch (err) {
+      console.error('Failed to reschedule appointment on server:', err);
+    }
     setAppointments(appointments.map(a =>
       a.id === rescheduleItem.id
         ? { ...a, appointmentDate: rescheduleDate, timeSlot: rescheduleSlot, status: 'confirmed' }
@@ -166,8 +189,8 @@ const CampusServicesPage = () => {
     };
     try {
       const res = await api.post('/services/tickets', newTicketData);
-      if (res.data?.ticket) {
-        setTickets([res.data.ticket, ...tickets]);
+      if (res.data?.ticket || res.data?.data) {
+        setTickets([res.data.ticket || res.data.data, ...tickets]);
       } else {
         setTickets([createdTicket, ...tickets]);
       }
@@ -188,10 +211,17 @@ const CampusServicesPage = () => {
     setGrantSuccess(false);
   };
 
-  const handleConfirmGrantSubmit = (e) => {
+  const handleConfirmGrantSubmit = async (e) => {
     e.preventDefault();
+    if (!selectedScholarship) return;
+    try {
+      await api.post(`/services/scholarships/${selectedScholarship.id}/apply`, {
+        statement: grantStatement
+      });
+    } catch (err) {
+      console.error('Failed to submit grant application:', err);
+    }
     setGrantSuccess(true);
-    
     setScholarships(scholarships.map(s => 
       s.id === selectedScholarship.id 
         ? { ...s, isApplied: true }
@@ -422,10 +452,27 @@ const CampusServicesPage = () => {
                           <select
                             className="form-select"
                             value={newAppointment.facultyName}
-                            onChange={(e) => setNewAppointment({ ...newAppointment, facultyName: e.target.value })}
+                            onChange={(e) => {
+                              const sel = facultyList.find(f => f.name === e.target.value);
+                              setNewAppointment({
+                                ...newAppointment,
+                                facultyName: e.target.value,
+                                facultyId: sel ? sel.id : ''
+                              });
+                            }}
                           >
-                            <option value="Dr. Alan Turing">Dr. Alan Turing (Algorithms &amp; Complexity)</option>
-                            <option value="Dr. Grace Hopper">Dr. Grace Hopper (Cloud Computing)</option>
+                            {facultyList.length > 0 ? (
+                              facultyList.map(f => (
+                                <option key={f.id} value={f.name}>
+                                  {f.name} ({f.department || 'Academic Department'})
+                                </option>
+                              ))
+                            ) : (
+                              <>
+                                <option value="Dr. Alan Turing">Dr. Alan Turing (Algorithms &amp; Complexity)</option>
+                                <option value="Dr. Grace Hopper">Dr. Grace Hopper (Cloud Computing)</option>
+                              </>
+                            )}
                           </select>
                         </div>
 

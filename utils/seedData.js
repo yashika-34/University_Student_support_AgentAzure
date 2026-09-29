@@ -59,6 +59,29 @@ async function seed() {
     ]);
     console.log('🗑️  Cleared existing collections.');
 
+    // ── 0. Create Admin and Super Admin Users ──────────────────────────────
+    const adminUser = await User.create({
+      email: 'admin@uniassist.edu',
+      passwordHash: 'Admin@1234',
+      firstName: 'System',
+      lastName: 'Administrator',
+      role: 'admin',
+      phoneNumber: '5550199999',
+      isActive: true
+    });
+
+    const superAdminUser = await User.create({
+      email: 'superadmin@uniassist.edu',
+      passwordHash: 'SuperAdmin@1234',
+      firstName: 'Chief',
+      lastName: 'SuperAdmin',
+      role: 'super_admin',
+      phoneNumber: '5550199998',
+      isActive: true
+    });
+
+    console.log('🛡️  Admin and Super Admin accounts created.');
+
     // ── 1. Create Faculty User ──────────────────────────────────────────────
     const facultyUser = await User.create({
       email: 'dr.alan@university.edu',

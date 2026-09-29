@@ -42,7 +42,21 @@ const scholarshipSchema = new mongoose.Schema(
     description: {
       type: String,
       required: true
-    }
+    },
+    applicants: [
+      {
+        student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+        studentId: { type: String },
+        studentName: { type: String },
+        statement: { type: String },
+        appliedAt: { type: Date, default: Date.now },
+        status: {
+          type: String,
+          enum: ['submitted', 'under_review', 'awarded', 'rejected'],
+          default: 'submitted'
+        }
+      }
+    ]
   },
   { timestamps: true }
 );

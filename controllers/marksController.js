@@ -227,7 +227,7 @@ export const addMarks = async (req, res, next) => {
       marksObtained: Number(marksObtained),
       maxMarks: Number(maxMarks) || 100,
       semester: Number(semester) || student.currentSemester || 1,
-      academicYear: academicYear || '2026-2027',
+      academicYear: academicYear || getCurrentAcademicYear(),
       remarks: remarks || '',
       isPublished: true
     });
@@ -515,7 +515,7 @@ export const importBulkMarks = async (req, res, next) => {
           marksObtained: item.marksObtained,
           maxMarks: item.maxMarks || 100,
           semester: item.semester || 1,
-          academicYear: '2026-2027',
+          academicYear: item.academicYear || getCurrentAcademicYear(),
           remarks: item.remarks || 'Imported via Bulk CSV Import',
           isPublished: true
         });

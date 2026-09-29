@@ -12,6 +12,7 @@ const router = express.Router();
 
 router.use(verifyToken);
 
+router.get('/my', authorizeRoles('student'), getMyAttendanceSummary);
 router.get('/my-summary', authorizeRoles('student'), getMyAttendanceSummary);
 router.get('/catch-up', authorizeRoles('student'), getCatchUpAssistant);
 router.get('/course/:courseId', getCourseAttendanceDetails);

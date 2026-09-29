@@ -93,6 +93,7 @@ export const getMyAttendanceSummary = async (req, res, next) => {
       success: true,
       studentId: student.studentId,
       overallSummary: summary,
+      data: summary,
       recentRecords: records.slice(0, 10)
     });
   } catch (error) {
