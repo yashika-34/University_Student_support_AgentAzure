@@ -39,7 +39,8 @@ const userSchema = new mongoose.Schema(
     },
     phoneNumber: {
       type: String,
-      trim: true
+      trim: true,
+      match: [/^\d{10}$/, 'Phone number must be exactly 10 digits']
     },
     avatarUrl: {
       type: String,
@@ -64,6 +65,13 @@ const userSchema = new mongoose.Schema(
     resetPasswordExpire: {
       type: Date,
       select: false
+    },
+    profileCompletionScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0
+      // Recalculated whenever profile fields are updated
     }
   },
   {

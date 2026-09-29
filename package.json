@@ -41,6 +41,7 @@
     "mongoose": "^8.4.1",
     "morgan": "^1.10.0",
     "multer": "^2.4.0",
+    "nodemailer": "^10.0.12",
     "openai": "^4.52.0",
     "pdf-parse": "^1.1.1",
     "uuid": "^9.0.1"

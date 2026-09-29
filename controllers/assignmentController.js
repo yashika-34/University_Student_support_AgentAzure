@@ -1,6 +1,8 @@
 import Assignment from '../models/Assignment.js';
 import Student from '../models/Student.js';
 import Faculty from '../models/Faculty.js';
+import Course from '../models/Course.js';
+import { logAudit } from '../services/auditService.js';
 
 /**
  * @desc    Get all assignments for logged-in student (pending, submitted, graded)
@@ -84,7 +86,6 @@ export const getMyPendingAssignments = async (req, res, next) => {
       .populate('course', 'courseCode courseName')
       .sort({ dueDate: 1 });
 
-    // Attach student submission status
     const formatted = assignments.map((assign) => {
       const submission = assign.submissions?.find(
         (s) => s.student.toString() === student._id.toString()
@@ -140,20 +141,20 @@ export const getAssignmentsByCourse = async (req, res, next) => {
 /**
  * @desc    Create a new course assignment
  * @route   POST /api/v1/assignments
- * @access  Private (Faculty)
+ * @access  Private (Faculty, Admin)
  */
 export const createAssignment = async (req, res, next) => {
   try {
     const { courseId, courseCode, title, description, maxScore, dueDate, attachmentUrl, allowedFileTypes } = req.body;
 
     const faculty = await Faculty.findOne({ userId: req.user._id });
-    if (!faculty && req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Only faculty can post assignments.' });
+    if (!faculty && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({ success: false, message: 'Only faculty or admins can post assignments.' });
     }
 
     let targetCourseId = courseId;
     if (!targetCourseId && courseCode) {
-      const course = await (await import('../models/Course.js')).default.findOne({ courseCode: courseCode.toUpperCase() });
+      const course = await Course.findOne({ courseCode: courseCode.toUpperCase() });
       if (course) targetCourseId = course._id;
     }
 
@@ -170,6 +171,16 @@ export const createAssignment = async (req, res, next) => {
       dueDate: new Date(dueDate),
       attachmentUrl: attachmentUrl || null,
       allowedFileTypes: allowedFileTypes || ['pdf', 'docx', 'zip']
+    });
+
+    await logAudit({
+      action: 'UPDATE_MARKS', // Or general assignment creation
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      resourceType: 'Assignment',
+      resourceId: assignment._id,
+      metadata: { title: assignment.title, courseId: targetCourseId, dueDate: assignment.dueDate },
+      req
     });
 
     res.status(201).json({
@@ -205,7 +216,6 @@ export const submitAssignment = async (req, res, next) => {
     const isLate = new Date() > new Date(assignment.dueDate);
     const submissionContent = fileUrl || fileName || content || (req.file ? req.file.originalname : 'Online Submission');
 
-    // Check existing submission
     const existingIndex = assignment.submissions.findIndex(
       (s) => s.student.toString() === student._id.toString()
     );
@@ -236,9 +246,61 @@ export const submitAssignment = async (req, res, next) => {
 };
 
 /**
+ * @desc    Get all submissions for an assignment (Faculty view)
+ * @route   GET /api/v1/assignments/:id/submissions
+ * @access  Private (Faculty, Admin)
+ */
+export const getAssignmentSubmissions = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const assignment = await Assignment.findById(id)
+      .populate({
+        path: 'submissions.student',
+        select: 'studentId department currentSemester userId',
+        populate: { path: 'userId', select: 'firstName lastName email' }
+      })
+      .populate('course', 'courseCode courseName');
+
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
+
+    const submissions = assignment.submissions.map((s) => ({
+      _id: s._id,
+      studentId: s.student?._id,
+      studentRollNo: s.student?.studentId || 'N/A',
+      studentName: s.student?.userId ? `${s.student.userId.firstName} ${s.student.userId.lastName}` : 'Unknown Student',
+      studentEmail: s.student?.userId?.email || '',
+      submittedAt: s.submittedAt,
+      fileUrl: s.fileUrl,
+      status: s.status,
+      grade: s.grade,
+      feedback: s.feedback,
+      gradedAt: s.gradedAt
+    }));
+
+    res.status(200).json({
+      success: true,
+      assignment: {
+        id: assignment._id,
+        title: assignment.title,
+        courseCode: assignment.course?.courseCode,
+        courseName: assignment.course?.courseName,
+        dueDate: assignment.dueDate,
+        maxScore: assignment.maxScore
+      },
+      count: submissions.length,
+      submissions
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc    Grade a student submission
  * @route   PUT /api/v1/assignments/:id/grade
- * @access  Private (Faculty)
+ * @access  Private (Faculty, Admin)
  */
 export const gradeSubmission = async (req, res, next) => {
   try {
@@ -253,7 +315,7 @@ export const gradeSubmission = async (req, res, next) => {
     }
 
     const submission = assignment.submissions.find(
-      (s) => s.student.toString() === studentId
+      (s) => s.student.toString() === studentId || s._id.toString() === studentId
     );
 
     if (!submission) {
@@ -268,11 +330,51 @@ export const gradeSubmission = async (req, res, next) => {
 
     await assignment.save();
 
+    await logAudit({
+      action: 'UPDATE_MARKS',
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      resourceType: 'Assignment',
+      resourceId: assignment._id,
+      metadata: { action: 'grade_assignment_submission', studentId, grade },
+      req
+    });
+
     res.status(200).json({
       success: true,
       message: 'Submission graded successfully.',
       submission
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Delete assignment
+ * @route   DELETE /api/v1/assignments/:id
+ * @access  Private (Faculty, Admin)
+ */
+export const deleteAssignment = async (req, res, next) => {
+  try {
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
+
+    await Assignment.findByIdAndDelete(req.params.id);
+
+    await logAudit({
+      action: 'DELETE_MARKS', // Or deletion audit
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      resourceType: 'Assignment',
+      resourceId: req.params.id,
+      metadata: { title: assignment.title },
+      req
+    });
+
+    res.status(200).json({ success: true, message: 'Assignment deleted successfully.' });
   } catch (error) {
     next(error);
   }

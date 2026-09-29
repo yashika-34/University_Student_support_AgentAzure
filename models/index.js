@@ -11,8 +11,9 @@ import ExamSchedule from './ExamSchedule.js';
 import Document from './Document.js';
 import FAQ from './FAQ.js';
 import ChatHistory from './ChatHistory.js';
-import AcademicPrediction from './AcademicPrediction.js';
 import Placement from './Placement.js';
+import PlacementRegistration from './PlacementRegistration.js';
+import Enrollment from './Enrollment.js';
 import CareerProfile from './CareerProfile.js';
 import CareerCounselingChat from './CareerCounselingChat.js';
 import Quiz from './Quiz.js';
@@ -22,13 +23,15 @@ import Ticket from './Ticket.js';
 import Scholarship from './Scholarship.js';
 import CampusEvent from './CampusEvent.js';
 import ForumPost from './ForumPost.js';
-import Badge from './Badge.js';
 import Resume from './Resume.js';
-import Job from './Job.js';
-import Recommendation from './Recommendation.js';
 import FlashcardDeck from './FlashcardDeck.js';
 import FlashcardProgress from './FlashcardProgress.js';
 import QuestionPaper from './QuestionPaper.js';
+// ── New production models ──
+import AuditLog from './AuditLog.js';
+import Session from './Session.js';
+import FileUpload from './FileUpload.js';
+import AIUsageLog from './AIUsageLog.js';
 
 export {
   User,
@@ -44,8 +47,9 @@ export {
   Document,
   FAQ,
   ChatHistory,
-  AcademicPrediction,
   Placement,
+  PlacementRegistration,
+  Enrollment,
   CareerProfile,
   CareerCounselingChat,
   Quiz,
@@ -55,13 +59,15 @@ export {
   Scholarship,
   CampusEvent,
   ForumPost,
-  Badge,
   Resume,
-  Job,
-  Recommendation,
   FlashcardDeck,
   FlashcardProgress,
-  QuestionPaper
+  QuestionPaper,
+  // New production models
+  AuditLog,
+  Session,
+  FileUpload,
+  AIUsageLog
 };
 
 export default {
@@ -78,8 +84,9 @@ export default {
   Document,
   FAQ,
   ChatHistory,
-  AcademicPrediction,
   Placement,
+  PlacementRegistration,
+  Enrollment,
   CareerProfile,
   CareerCounselingChat,
   Quiz,
@@ -89,12 +96,14 @@ export default {
   Scholarship,
   CampusEvent,
   ForumPost,
-  Badge,
   Resume,
-  Job,
-  Recommendation,
   FlashcardDeck,
   FlashcardProgress,
-  QuestionPaper
+  QuestionPaper,
+  // New production models
+  AuditLog,
+  Session,
+  FileUpload,
+  AIUsageLog
 };
 

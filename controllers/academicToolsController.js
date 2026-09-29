@@ -1,5 +1,5 @@
 import { AzureOpenAI } from 'openai';
-import { AcademicPrediction, Quiz, StudyPlan } from '../models/index.js';
+import { Quiz, StudyPlan } from '../models/index.js';
 import ExamSchedule from '../models/ExamSchedule.js';
 import { getEffectiveAzureConfig } from '../services/azureAiService.js';
 
@@ -256,6 +256,8 @@ export const generateQuiz = async (req, res) => {
 
     let questions = null;
     let lastError = null;
+    
+    const client = getAzureOpenAIClient();
 
     if (client) {
       const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4.1-mini';

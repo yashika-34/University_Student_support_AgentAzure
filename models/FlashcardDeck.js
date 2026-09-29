@@ -76,7 +76,7 @@ const flashcardDeckSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      default: null,
+      required: [true, 'FlashcardDeck must be owned by a user'],
       index: true
     },
     title: {

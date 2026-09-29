@@ -7,7 +7,9 @@ import {
   updateMarks,
   deleteMarks,
   publishMarks,
-  getMarksSummary
+  getMarksSummary,
+  previewBulkMarks,
+  importBulkMarks
 } from '../controllers/marksController.js';
 
 const router = express.Router();
@@ -26,17 +28,17 @@ router.get('/summary', authorizeRoles('student'), getMarksSummary);
 // GET /api/v1/marks/course/:courseId — Faculty: see all marks for a course
 router.get('/course/:courseId', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), getCourseMarks);
 
-// POST /api/v1/marks & POST /api/v1/marks/upload — Faculty: record marks for a student
+// Bulk CSV Marks Upload Routes
+router.post('/bulk/preview', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), previewBulkMarks);
+router.post('/bulk/import', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), importBulkMarks);
+
+// Single Marks Operations
 router.post('/', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), addMarks);
 router.post('/upload', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), addMarks);
-
-// PUT /api/v1/marks/:id — Faculty: update marks entry
 router.put('/:id', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), updateMarks);
-
-// DELETE /api/v1/marks/:id — Faculty: delete marks entry
 router.delete('/:id', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), deleteMarks);
 
-// PATCH /api/v1/marks/:id/publish & POST /api/v1/marks/publish — Faculty: publish marks (make visible to student)
+// Publish Marks
 router.patch('/:id/publish', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), publishMarks);
 router.post('/publish', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), publishMarks);
 

@@ -1,8 +1,9 @@
 import Notification from '../models/Notification.js';
 import Notice from '../models/Notice.js';
+import { logAudit } from '../services/auditService.js';
 
 /**
- * @desc    Get all notifications for logged-in user
+ * @desc    Get all notifications for logged-in user with unread count
  * @route   GET /api/v1/notifications
  * @access  Private
  */
@@ -29,6 +30,27 @@ export const getMyNotifications = async (req, res, next) => {
       count: notifications.length,
       unreadCount,
       data: notifications
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get unread notification count only
+ * @route   GET /api/v1/notifications/unread-count
+ * @access  Private
+ */
+export const getUnreadCount = async (req, res, next) => {
+  try {
+    const unreadCount = await Notification.countDocuments({
+      recipient: req.user._id,
+      isRead: false
+    });
+
+    res.status(200).json({
+      success: true,
+      unreadCount
     });
   } catch (error) {
     next(error);
@@ -83,9 +105,34 @@ export const markAllAsRead = async (req, res, next) => {
 };
 
 /**
+ * @desc    Delete a notification
+ * @route   DELETE /api/v1/notifications/:id
+ * @access  Private
+ */
+export const deleteNotification = async (req, res, next) => {
+  try {
+    const notification = await Notification.findOneAndDelete({
+      _id: req.params.id,
+      recipient: req.user._id
+    });
+
+    if (!notification) {
+      return res.status(404).json({ success: false, message: 'Notification not found or unauthorized.' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification deleted successfully.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc    Create a notification (Admin / System)
  * @route   POST /api/v1/notifications
- * @access  Private (Admin)
+ * @access  Private (Admin, Super Admin)
  */
 export const createNotification = async (req, res, next) => {
   try {
@@ -162,10 +209,53 @@ export const createNotice = async (req, res, next) => {
       authorName: req.user ? `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() : 'University Administration'
     });
 
+    await logAudit({
+      action: 'PUBLISH_NOTICE',
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      resourceType: 'Notice',
+      resourceId: notice._id,
+      metadata: { title: notice.title, category: notice.category, priority: notice.priority },
+      req
+    });
+
     res.status(201).json({
       success: true,
       message: 'Notice created successfully.',
       data: notice
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Delete a notice
+ * @route   DELETE /api/v1/notifications/notices/:id
+ * @access  Private (Faculty, Admin)
+ */
+export const deleteNotice = async (req, res, next) => {
+  try {
+    const notice = await Notice.findById(req.params.id);
+    if (!notice) {
+      return res.status(404).json({ success: false, message: 'Notice not found.' });
+    }
+
+    await Notice.findByIdAndDelete(req.params.id);
+
+    await logAudit({
+      action: 'DELETE_NOTICE',
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      resourceType: 'Notice',
+      resourceId: notice._id,
+      metadata: { title: notice.title },
+      req
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Notice deleted successfully.'
     });
   } catch (error) {
     next(error);

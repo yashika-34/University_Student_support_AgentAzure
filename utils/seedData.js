@@ -24,7 +24,6 @@ import CampusEvent from '../models/CampusEvent.js';
 import Scholarship from '../models/Scholarship.js';
 import Placement from '../models/Placement.js';
 import StudyPlan from '../models/StudyPlan.js';
-import Badge from '../models/Badge.js';
 import ForumPost from '../models/ForumPost.js';
 import Ticket from '../models/Ticket.js';
 import Appointment from '../models/Appointment.js';
@@ -54,7 +53,6 @@ async function seed() {
       Scholarship.deleteMany({}),
       Placement.deleteMany({}),
       StudyPlan.deleteMany({}),
-      Badge.deleteMany({}),
       ForumPost.deleteMany({}),
       Ticket.deleteMany({}),
       Appointment.deleteMany({})
@@ -68,7 +66,7 @@ async function seed() {
       firstName: 'Alan',
       lastName: 'Turing',
       role: 'faculty',
-      phoneNumber: '+1-555-0100',
+      phoneNumber: '5550100000',
       isActive: true
     });
 
@@ -155,7 +153,7 @@ async function seed() {
         firstName: sd.firstName,
         lastName: sd.lastName,
         role: 'student',
-        phoneNumber: '+1-555-0123',
+        phoneNumber: '5550123000',
         isActive: true
       });
 
@@ -730,25 +728,7 @@ async function seed() {
         deadline: new Date('2026-10-22')
       }
     ]);
-
-    await Badge.insertMany([
-      {
-        badgeCode: 'PERFECT_ATTENDANCE',
-        title: 'Attendance Titan',
-        description: 'Maintained 95%+ attendance across all registered courses for 4 consecutive weeks.',
-        category: 'Attendance',
-        iconName: 'Award',
-        xpPoints: 250
-      },
-      {
-        badgeCode: 'QUIZ_MASTER',
-        title: 'Quiz Champion',
-        description: 'Completed 10 AI generated practice quizzes with an average score above 85%.',
-        category: 'Academic',
-        iconName: 'Sparkles',
-        xpPoints: 300
-      }
-    ]);
+    // Badges are dynamically computed in engagementController
 
     // ── 12. Seed Notifications ──────────────────────────────────────────────
     for (const s of studentProfiles.slice(0, 3)) {

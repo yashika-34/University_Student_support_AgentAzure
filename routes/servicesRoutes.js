@@ -8,8 +8,16 @@ import {
   getCampusEvents,
   rsvpEvent
 } from '../controllers/servicesController.js';
+import { verifyToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// Public / open views for campus information
+router.get('/scholarships', getScholarships);
+router.get('/events', getCampusEvents);
+
+// Authenticated service routes
+router.use(verifyToken);
 
 router.get('/appointments', getAppointments);
 router.post('/appointments', createAppointment);
@@ -17,9 +25,6 @@ router.post('/appointments', createAppointment);
 router.get('/tickets', getTickets);
 router.post('/tickets', createTicket);
 
-router.get('/scholarships', getScholarships);
-
-router.get('/events', getCampusEvents);
 router.post('/events/:id/rsvp', rsvpEvent);
 
 export default router;

@@ -3,6 +3,7 @@ import Marks from '../models/Marks.js';
 import Student from '../models/Student.js';
 import Course from '../models/Course.js';
 import Faculty from '../models/Faculty.js';
+import { logAudit } from '../services/auditService.js';
 
 /**
  * @desc    Get logged-in student's own published marks
@@ -171,7 +172,6 @@ export const addMarks = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Marks obtained is required.' });
     }
 
-    // Auto-resolve / link faculty profile
     let faculty = await Faculty.findOne({ userId: req.user._id });
     if (!faculty && (req.user.role === 'faculty' || req.user.role === 'teacher')) {
       try {
@@ -188,7 +188,6 @@ export const addMarks = async (req, res, next) => {
       }
     }
 
-    // Look up student by MongoDB _id, studentId string, or userId
     let student = null;
     if (mongoose.Types.ObjectId.isValid(studentId)) {
       student = await Student.findById(studentId);
@@ -230,6 +229,19 @@ export const addMarks = async (req, res, next) => {
     }
     await entry.populate({ path: 'student', populate: { path: 'userId', select: 'firstName lastName email' } });
 
+    // Audit Log
+    await logAudit({
+      action: 'UPDATE_MARKS',
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      targetUser: student.userId,
+      resourceType: 'Marks',
+      resourceId: entry._id,
+      changes: { after: { marksObtained: entry.marksObtained, maxMarks: entry.maxMarks, examType: entry.examType } },
+      metadata: { studentId: student.studentId, courseCode: course?.courseCode || subjectName },
+      req
+    });
+
     res.status(201).json({ success: true, message: 'Marks recorded and published successfully.', marks: entry });
   } catch (error) {
     next(error);
@@ -246,6 +258,8 @@ export const updateMarks = async (req, res, next) => {
     const entry = await Marks.findById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: 'Marks entry not found.' });
 
+    const beforeState = { marksObtained: entry.marksObtained, maxMarks: entry.maxMarks };
+
     const { marksObtained, maxMarks, examLabel, remarks, semester } = req.body;
     if (marksObtained !== undefined) entry.marksObtained = marksObtained;
     if (maxMarks !== undefined) entry.maxMarks = maxMarks;
@@ -253,7 +267,17 @@ export const updateMarks = async (req, res, next) => {
     if (remarks !== undefined) entry.remarks = remarks;
     if (semester !== undefined) entry.semester = semester;
 
-    await entry.save(); // pre-save hook recalculates grade/percentage
+    await entry.save();
+
+    await logAudit({
+      action: 'UPDATE_MARKS',
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      resourceType: 'Marks',
+      resourceId: entry._id,
+      changes: { before: beforeState, after: { marksObtained: entry.marksObtained, maxMarks: entry.maxMarks } },
+      req
+    });
 
     res.status(200).json({ success: true, message: 'Marks updated successfully.', marks: entry });
   } catch (error) {
@@ -280,6 +304,16 @@ export const publishMarks = async (req, res, next) => {
     );
     if (!entry) return res.status(404).json({ success: false, message: 'Marks entry not found.' });
 
+    await logAudit({
+      action: 'UPDATE_MARKS',
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      resourceType: 'Marks',
+      resourceId: entry._id,
+      metadata: { action: 'publish_marks' },
+      req
+    });
+
     res.status(200).json({ success: true, message: 'Marks published successfully.', marks: entry });
   } catch (error) {
     next(error);
@@ -293,10 +327,208 @@ export const publishMarks = async (req, res, next) => {
  */
 export const deleteMarks = async (req, res, next) => {
   try {
-    const entry = await Marks.findByIdAndDelete(req.params.id);
+    const entry = await Marks.findById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: 'Marks entry not found.' });
 
+    await Marks.findByIdAndDelete(req.params.id);
+
+    await logAudit({
+      action: 'DELETE_MARKS',
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      resourceType: 'Marks',
+      resourceId: entry._id,
+      changes: { before: { student: entry.student, marksObtained: entry.marksObtained } },
+      req
+    });
+
     res.status(200).json({ success: true, message: 'Marks entry deleted.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Preview CSV / Bulk Marks Data before importing
+ * @route   POST /api/v1/marks/bulk/preview
+ * @access  Faculty, Teacher, Admin
+ */
+export const previewBulkMarks = async (req, res, next) => {
+  try {
+    const { rows = [], csvText = '' } = req.body;
+    let dataRows = rows;
+
+    if (csvText && (!rows || rows.length === 0)) {
+      // Basic CSV parser
+      const lines = csvText.trim().split('\n').filter(Boolean);
+      if (lines.length > 1) {
+        const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
+        dataRows = lines.slice(1).map((line) => {
+          const cols = line.split(',').map((c) => c.trim());
+          const obj = {};
+          headers.forEach((h, i) => {
+            obj[h] = cols[i];
+          });
+          return obj;
+        });
+      }
+    }
+
+    if (!dataRows || dataRows.length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid data rows provided for preview.' });
+    }
+
+    const validatedRows = [];
+    const errors = [];
+
+    for (let index = 0; index < dataRows.length; index++) {
+      const row = dataRows[index];
+      const studentIdentifier = row.studentId || row.studentid || row.rollno;
+      const courseCode = row.courseCode || row.coursecode || row.subject;
+      const marksObtained = Number(row.marksObtained || row.marksobtained || row.marks || row.score);
+      const maxMarks = Number(row.maxMarks || row.maxmarks || 100);
+      const examType = row.examType || row.examtype || 'mid_term';
+      const semester = Number(row.semester) || 1;
+
+      if (!studentIdentifier) {
+        errors.push({ row: index + 1, message: 'Missing student identifier (studentId).' });
+        continue;
+      }
+      if (isNaN(marksObtained) || marksObtained < 0) {
+        errors.push({ row: index + 1, message: `Invalid marks obtained: "${row.marksObtained}".` });
+        continue;
+      }
+
+      // Check student in DB
+      let student = await Student.findOne({ studentId: studentIdentifier }).populate('userId', 'firstName lastName email');
+      if (!student && mongoose.Types.ObjectId.isValid(studentIdentifier)) {
+        student = await Student.findById(studentIdentifier).populate('userId', 'firstName lastName email');
+      }
+
+      if (!student) {
+        errors.push({ row: index + 1, message: `Student '${studentIdentifier}' does not exist in the database.` });
+        continue;
+      }
+
+      // Check course in DB
+      let course = null;
+      if (courseCode) {
+        course = await Course.findOne({ courseCode: new RegExp(`^${courseCode}$`, 'i') });
+      }
+
+      // Check for duplicate marks record
+      const existing = await Marks.findOne({
+        student: student._id,
+        ...(course ? { course: course._id } : { subject: courseCode }),
+        examType,
+        semester
+      });
+
+      const percentage = (marksObtained / maxMarks) * 100;
+      let grade = 'F';
+      let gradePoints = 0;
+      if (percentage >= 90) { grade = 'O'; gradePoints = 10; }
+      else if (percentage >= 80) { grade = 'A+'; gradePoints = 9; }
+      else if (percentage >= 70) { grade = 'A'; gradePoints = 8; }
+      else if (percentage >= 60) { grade = 'B+'; gradePoints = 7; }
+      else if (percentage >= 50) { grade = 'B'; gradePoints = 6; }
+      else if (percentage >= 40) { grade = 'C'; gradePoints = 5; }
+
+      validatedRows.push({
+        row: index + 1,
+        studentDbId: student._id,
+        studentId: student.studentId,
+        studentName: student.userId ? `${student.userId.firstName} ${student.userId.lastName}` : student.studentId,
+        courseDbId: course?._id || null,
+        courseCode: course?.courseCode || courseCode || 'N/A',
+        courseName: course?.courseName || courseCode || 'General Assessment',
+        examType,
+        marksObtained,
+        maxMarks,
+        percentage: Number(percentage.toFixed(1)),
+        grade,
+        gradePoints,
+        semester,
+        isDuplicate: !!existing,
+        existingId: existing?._id || null
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      totalRows: dataRows.length,
+      validCount: validatedRows.length,
+      errorCount: errors.length,
+      duplicateCount: validatedRows.filter((r) => r.isDuplicate).length,
+      preview: validatedRows,
+      errors
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Execute Bulk Marks Import
+ * @route   POST /api/v1/marks/bulk/import
+ * @access  Faculty, Teacher, Admin
+ */
+export const importBulkMarks = async (req, res, next) => {
+  try {
+    const { rows = [], overwriteDuplicates = true } = req.body;
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ success: false, message: 'No rows provided for import.' });
+    }
+
+    let faculty = await Faculty.findOne({ userId: req.user._id });
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    for (const item of rows) {
+      if (!item.studentDbId) continue;
+
+      if (item.isDuplicate && item.existingId && overwriteDuplicates) {
+        await Marks.findByIdAndUpdate(item.existingId, {
+          marksObtained: item.marksObtained,
+          maxMarks: item.maxMarks,
+          isPublished: true,
+          remarks: item.remarks || 'Updated via Bulk CSV Import'
+        });
+        updatedCount++;
+      } else if (!item.isDuplicate || overwriteDuplicates) {
+        await Marks.create({
+          student: item.studentDbId,
+          course: item.courseDbId || null,
+          subject: item.courseName || item.courseCode || 'Assessment',
+          faculty: faculty?._id || null,
+          examType: item.examType || 'mid_term',
+          examLabel: `${item.courseCode || 'Course'} ${item.examType || 'Exam'}`,
+          marksObtained: item.marksObtained,
+          maxMarks: item.maxMarks || 100,
+          semester: item.semester || 1,
+          academicYear: '2026-2027',
+          remarks: item.remarks || 'Imported via Bulk CSV Import',
+          isPublished: true
+        });
+        createdCount++;
+      }
+    }
+
+    await logAudit({
+      action: 'UPDATE_MARKS',
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      resourceType: 'Marks',
+      metadata: { importedRows: createdCount, updatedRows: updatedCount },
+      req
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Bulk import complete: ${createdCount} created, ${updatedCount} updated.`,
+      stats: { createdCount, updatedCount }
+    });
   } catch (error) {
     next(error);
   }

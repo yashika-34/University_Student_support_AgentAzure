@@ -52,6 +52,15 @@ const attendanceSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: null
+    },
+    academicYear: {
+      type: String,
+      trim: true,
+      default: () => {
+        const y = new Date().getFullYear();
+        return `${y}-${y + 1}`;
+      },
+      index: true
     }
   },
   {

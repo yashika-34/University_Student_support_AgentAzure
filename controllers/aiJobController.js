@@ -1,8 +1,6 @@
 import { AzureOpenAI } from 'openai';
 import { getEffectiveAzureConfig } from '../services/azureAiService.js';
-import Job from '../models/Job.js';
 import Resume from '../models/Resume.js';
-import Recommendation from '../models/Recommendation.js';
 
 /**
  * Intelligent Job Matching Engine

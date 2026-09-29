@@ -254,6 +254,9 @@ const StudentManagementPage = () => {
     if (!isEdit && data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
       errors.email = 'Invalid email address';
     }
+    if (data.phoneNumber && !/^\d{10}$/.test(data.phoneNumber)) {
+      errors.phoneNumber = 'Phone number must be exactly 10 digits';
+    }
     if (!data.department) errors.department = 'Department is required';
     if (data.cgpa < 0 || data.cgpa > 10) errors.cgpa = 'CGPA must be between 0 and 10';
     return errors;

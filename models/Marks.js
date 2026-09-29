@@ -90,6 +90,14 @@ const marksSchema = new mongoose.Schema(
   }
 );
 
+// Ensure either course or subject is provided
+marksSchema.pre('validate', function (next) {
+  if (!this.course && (!this.subject || this.subject.trim() === '')) {
+    return next(new Error('Marks record must have either a course (ObjectId) or a subject (string).'));
+  }
+  next();
+});
+
 // Auto-calculate percentage and grade before save
 marksSchema.pre('save', function (next) {
   if (this.maxMarks > 0) {
