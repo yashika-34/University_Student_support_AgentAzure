@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ModalPortal from '../components/ModalPortal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { assignmentAPI, courseAPI } from '../services/api.js';
+import { assignmentAPI, courseAPI, autoGraderAPI } from '../services/api.js';
 import {
   Clock,
   CheckCircle2,
@@ -14,7 +14,13 @@ import {
   FileText,
   AlertCircle,
   Eye,
-  Inbox
+  Inbox,
+  Sparkles,
+  Award,
+  FileCheck2,
+  UserCheck,
+  RefreshCw,
+  Check
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext.jsx';
 import { SkeletonStatGrid, SkeletonCard } from '../components/common/Skeleton.jsx';
@@ -44,6 +50,18 @@ const AssignmentPage = () => {
     dueDate: ''
   });
   const [createLoading, setCreateLoading] = useState(false);
+
+  // Faculty state: Review Submissions Studio
+  const [submissionsModalAssignment, setSubmissionsModalAssignment] = useState(null);
+  const [submissionsList, setSubmissionsList] = useState([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [autoGradingSubId, setAutoGradingSubId] = useState(null);
+  const [batchAutoGrading, setBatchAutoGrading] = useState(false);
+  const [editingGrade, setEditingGrade] = useState({});
+  const [editingFeedback, setEditingFeedback] = useState({});
+
+  // Student state: View Graded Feedback
+  const [studentFeedbackModal, setStudentFeedbackModal] = useState(null);
 
   const loadAssignments = async () => {
     setLoading(true);
@@ -151,6 +169,123 @@ const AssignmentPage = () => {
     }
   };
 
+  // ── Open Faculty Submissions Modal ──
+  const handleOpenSubmissions = async (assignment) => {
+    setSubmissionsModalAssignment(assignment);
+    setLoadingSubmissions(true);
+    try {
+      const res = await assignmentAPI.getSubmissions(assignment._id || assignment.id);
+      const subs = res.data?.submissions || [];
+      setSubmissionsList(subs);
+      const initGrades = {};
+      const initFeedback = {};
+      subs.forEach((s) => {
+        initGrades[s._id] = s.grade !== null && s.grade !== undefined ? s.grade : '';
+        initFeedback[s._id] = s.feedback || '';
+      });
+      setEditingGrade(initGrades);
+      setEditingFeedback(initFeedback);
+    } catch (err) {
+      toast.error('Failed to load student submissions.');
+    } finally {
+      setLoadingSubmissions(false);
+    }
+  };
+
+  // ── Single AI Auto-Grading ──
+  const handleAutoGradeSingle = async (sub) => {
+    setAutoGradingSubId(sub._id);
+    try {
+      const res = await autoGraderAPI.gradeSheet({
+        studentName: sub.studentName,
+        studentRollNo: sub.studentRollNo,
+        pastedText: sub.fileUrl || 'Student submission document',
+        customQuestionText: `${submissionsModalAssignment.title}\n\n${submissionsModalAssignment.description}`,
+        maxMarks: submissionsModalAssignment.maxScore || 100,
+        examType: 'assignment',
+        examTitle: submissionsModalAssignment.title
+      });
+
+      const evalData = res.data.evaluation;
+      const calculatedGrade = evalData.obtainedMarks;
+      const feedbackText = `${evalData.overallFeedback}\n\nKey Strengths:\n• ${evalData.improvementTips?.join('\n• ')}`;
+
+      // Save to assignment submission
+      await assignmentAPI.grade(submissionsModalAssignment.id || submissionsModalAssignment._id, {
+        studentId: sub.studentId || sub._id,
+        grade: calculatedGrade,
+        feedback: feedbackText
+      });
+
+      // Update local state
+      setEditingGrade((p) => ({ ...p, [sub._id]: calculatedGrade }));
+      setEditingFeedback((p) => ({ ...p, [sub._id]: feedbackText }));
+      setSubmissionsList((prev) =>
+        prev.map((s) =>
+          s._id === sub._id
+            ? { ...s, grade: calculatedGrade, feedback: feedbackText, status: 'graded' }
+            : s
+        )
+      );
+
+      toast.success(`AI Auto-Graded ${sub.studentName}'s solution: ${calculatedGrade}/${submissionsModalAssignment.maxScore}! 🎯`);
+      loadAssignments();
+    } catch (err) {
+      console.error(err);
+      toast.error('AI Auto-grading failed for this submission.');
+    } finally {
+      setAutoGradingSubId(null);
+    }
+  };
+
+  // ── Batch AI Auto-Grading ──
+  const handleAutoGradeAll = async () => {
+    const unreviewed = submissionsList.filter((s) => s.status !== 'graded');
+    if (unreviewed.length === 0) {
+      toast.info('All submissions are already graded!');
+      return;
+    }
+
+    setBatchAutoGrading(true);
+    let successCount = 0;
+    for (const sub of unreviewed) {
+      try {
+        await handleAutoGradeSingle(sub);
+        successCount++;
+      } catch (e) {}
+    }
+    setBatchAutoGrading(false);
+    toast.success(`Finished AI Auto-Grading ${successCount} submissions! 🚀`);
+    loadAssignments();
+  };
+
+  // ── Save Manual Grade ──
+  const handleSaveManualGrade = async (sub) => {
+    const gradeVal = editingGrade[sub._id];
+    if (gradeVal === '' || isNaN(Number(gradeVal))) {
+      toast.error('Please enter a valid numeric grade.');
+      return;
+    }
+    try {
+      await assignmentAPI.grade(submissionsModalAssignment.id || submissionsModalAssignment._id, {
+        studentId: sub.studentId || sub._id,
+        grade: Number(gradeVal),
+        feedback: editingFeedback[sub._id] || ''
+      });
+      setSubmissionsList((prev) =>
+        prev.map((s) =>
+          s._id === sub._id
+            ? { ...s, grade: Number(gradeVal), feedback: editingFeedback[sub._id], status: 'graded' }
+            : s
+        )
+      );
+      toast.success(`Grade saved for ${sub.studentName}! ✓`);
+      loadAssignments();
+    } catch (err) {
+      toast.error('Failed to save grade.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -253,25 +388,44 @@ const AssignmentPage = () => {
                     <span>Max Points: <strong>{item.maxScore}</strong></span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                     <button
                       onClick={() => setViewAssignment(item)}
                       className="btn btn-secondary"
-                      style={{ flex: 1, padding: '0.6rem', fontSize: '0.85rem' }}
+                      style={{ flex: 1, padding: '0.55rem', fontSize: '0.82rem' }}
                     >
-                      <Eye size={14} /> View Details
+                      <Eye size={14} /> Details
                     </button>
+
+                    {role === 'faculty' && (
+                      <button
+                        onClick={() => handleOpenSubmissions(item)}
+                        className="btn btn-primary"
+                        style={{ flex: 1.2, padding: '0.55rem', fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                      >
+                        <Inbox size={14} /> Submissions ({item.submissions?.length || 0})
+                      </button>
+                    )}
+
                     {role === 'student' && (
                       item.status === 'pending' || item.status === 'overdue' ? (
                         <button
                           onClick={() => handleOpenSubmit(item)}
                           className="btn btn-primary"
-                          style={{ flex: 1, padding: '0.6rem', fontSize: '0.85rem' }}
+                          style={{ flex: 1.2, padding: '0.55rem', fontSize: '0.82rem' }}
                         >
                           <Upload size={14} /> Submit Solution
                         </button>
+                      ) : item.status === 'graded' ? (
+                        <button
+                          onClick={() => setStudentFeedbackModal(item)}
+                          className="btn btn-secondary"
+                          style={{ flex: 1.2, padding: '0.55rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', color: '#10b981', borderColor: 'rgba(16,185,129,0.35)', fontWeight: 600 }}
+                        >
+                          <Award size={14} /> Score: {item.submissionDetails?.grade} / {item.maxScore}
+                        </button>
                       ) : (
-                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: 'var(--success)', fontSize: '0.82rem', fontWeight: 600 }}>
+                        <div style={{ flex: 1.2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: 'var(--success)', fontSize: '0.82rem', fontWeight: 600 }}>
                           <CheckCircle2 size={15} /> Submitted
                         </div>
                       )
@@ -771,8 +925,290 @@ const AssignmentPage = () => {
         )}
       </ModalPortal>
 
+      {/* ── Faculty Submissions Review Studio Modal ── */}
+      <ModalPortal isOpen={Boolean(submissionsModalAssignment)}>
+        {submissionsModalAssignment && (
+          <div
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(5px)',
+              zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '1rem', animation: 'fadeIn 0.15s ease-out'
+            }}
+            onClick={() => setSubmissionsModalAssignment(null)}
+          >
+            <div
+              style={{
+                position: 'fixed', top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)', width: '92vw', maxWidth: '840px',
+                maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+                backgroundColor: 'var(--bg-surface, #1e293b)', borderRadius: '12px',
+                border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)', overflow: 'hidden',
+                zIndex: 100000
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{
+                padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: 'var(--bg-surface, #1e293b)', flexWrap: 'wrap', gap: '0.75rem'
+              }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="badge badge-primary">{submissionsModalAssignment.courseCode || 'Course'}</span>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      Submissions Review Studio
+                    </h3>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                    {submissionsModalAssignment.title} &nbsp;•&nbsp; Max Points: {submissionsModalAssignment.maxScore}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button
+                    onClick={handleAutoGradeAll}
+                    disabled={batchAutoGrading || submissionsList.length === 0}
+                    className="btn btn-primary"
+                    style={{ fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}
+                  >
+                    {batchAutoGrading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                    {batchAutoGrading ? 'AI Grading All...' : '✨ AI Auto-Grade All'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSubmissionsModalAssignment(null)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem' }}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Submissions List */}
+              <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {loadingSubmissions ? (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
+                    <Loader2 size={28} className="animate-spin" style={{ color: 'var(--accent-primary)', marginBottom: '0.5rem' }} />
+                    <p style={{ fontSize: '0.88rem' }}>Loading student submissions...</p>
+                  </div>
+                ) : submissionsList.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
+                    <Inbox size={40} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
+                    <h4 style={{ margin: '0 0 0.25rem', fontSize: '1rem' }}>No Submissions Yet</h4>
+                    <p style={{ margin: 0, fontSize: '0.82rem' }}>Students enrolled in this course haven't submitted their solutions yet.</p>
+                  </div>
+                ) : (
+                  submissionsList.map((sub) => (
+                    <div
+                      key={sub._id}
+                      style={{
+                        padding: '1.25rem', borderRadius: '0.75rem',
+                        background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)',
+                        display: 'flex', flexDirection: 'column', gap: '0.75rem'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                            {sub.studentName}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            Roll No: {sub.studentRollNo} &nbsp;•&nbsp; Submitted: {new Date(sub.submittedAt).toLocaleString()}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{
+                            padding: '0.15rem 0.55rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 600,
+                            background: sub.status === 'graded' ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
+                            color: sub.status === 'graded' ? '#10b981' : '#f59e0b',
+                            border: `1px solid ${sub.status === 'graded' ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.25)'}`
+                          }}>
+                            {sub.status === 'graded' ? `✓ Graded (${sub.grade}/${submissionsModalAssignment.maxScore})` : '● Needs Review'}
+                          </span>
+
+                          <button
+                            onClick={() => handleAutoGradeSingle(sub)}
+                            disabled={autoGradingSubId === sub._id}
+                            className="btn btn-primary"
+                            style={{
+                              padding: '0.35rem 0.75rem', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.35rem',
+                              background: 'linear-gradient(135deg, #4f46e5, #7c3aed)'
+                            }}
+                          >
+                            {autoGradingSubId === sub._id ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                            {autoGradingSubId === sub._id ? 'Grading...' : '✨ AI Auto-Review'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Submitted Solution Snippet / File */}
+                      <div style={{
+                        padding: '0.65rem 0.85rem', borderRadius: '0.5rem',
+                        background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
+                        fontSize: '0.82rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap'
+                      }}>
+                        <strong>Deliverable:</strong> {sub.fileUrl || 'Online Submission'}
+                      </div>
+
+                      {/* Grade & Feedback Edit Controls */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: '0.75rem', alignItems: 'flex-start' }}>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Score</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            placeholder="Grade"
+                            value={editingGrade[sub._id] !== undefined ? editingGrade[sub._id] : ''}
+                            onChange={(e) => setEditingGrade((p) => ({ ...p, [sub._id]: e.target.value }))}
+                            style={{ fontSize: '0.85rem', padding: '0.45rem' }}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Examiner Feedback & Suggestions</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            placeholder="Constructive feedback for the student..."
+                            value={editingFeedback[sub._id] || ''}
+                            onChange={(e) => setEditingFeedback((p) => ({ ...p, [sub._id]: e.target.value }))}
+                            style={{ fontSize: '0.85rem', padding: '0.45rem' }}
+                          />
+                        </div>
+
+                        <div style={{ paddingTop: '1.4rem' }}>
+                          <button
+                            onClick={() => handleSaveManualGrade(sub)}
+                            className="btn btn-secondary"
+                            style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                          >
+                            <Check size={13} /> Save
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Footer */}
+              <div style={{
+                padding: '1rem 1.5rem', borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                display: 'flex', justifyContent: 'flex-end', background: 'var(--bg-surface, #1e293b)'
+              }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSubmissionsModalAssignment(null)}
+                >
+                  Close Studio
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </ModalPortal>
+
+      {/* ── Student Grade & AI Feedback Modal ── */}
+      <ModalPortal isOpen={Boolean(studentFeedbackModal)}>
+        {studentFeedbackModal && (
+          <div
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(5px)',
+              zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '1rem', animation: 'fadeIn 0.15s ease-out'
+            }}
+            onClick={() => setStudentFeedbackModal(null)}
+          >
+            <div
+              style={{
+                position: 'fixed', top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)', width: '90vw', maxWidth: '520px',
+                backgroundColor: 'var(--bg-surface, #1e293b)', borderRadius: '12px',
+                border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)', overflow: 'hidden',
+                zIndex: 100000, padding: '1.75rem'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+                <div>
+                  <div className="badge badge-primary" style={{ marginBottom: '0.3rem' }}>
+                    {studentFeedbackModal.courseCode || 'Course'}
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>
+                    {studentFeedbackModal.title}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setStudentFeedbackModal(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Score Display */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '1rem',
+                background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)',
+                padding: '1rem 1.25rem', borderRadius: '0.75rem', marginBottom: '1.25rem'
+              }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: '50%',
+                  background: '#10b981', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 900, fontSize: '1.2rem'
+                }}>
+                  {studentFeedbackModal.submissionDetails?.grade || '—'}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#10b981' }}>
+                    Score: {studentFeedbackModal.submissionDetails?.grade} / {studentFeedbackModal.maxScore} Points
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    Reviewed on {studentFeedbackModal.submissionDetails?.gradedAt ? new Date(studentFeedbackModal.submissionDetails.gradedAt).toLocaleDateString() : 'Recently'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Feedback */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h4 style={{ margin: '0 0 0.4rem', fontSize: '0.9rem', fontWeight: 700 }}>
+                  Examiner Feedback &amp; Suggestions
+                </h4>
+                <div style={{
+                  padding: '1rem', borderRadius: '0.5rem', background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-subtle)', fontSize: '0.85rem', color: 'var(--text-primary)',
+                  lineHeight: 1.6, whiteSpace: 'pre-wrap'
+                }}>
+                  {studentFeedbackModal.submissionDetails?.feedback || 'Good submission. Meets all course requirements.'}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setStudentFeedbackModal(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </ModalPortal>
+
     </div>
   );
 };
 
 export default AssignmentPage;
+

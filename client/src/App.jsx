@@ -39,6 +39,7 @@ import StudentManagementPage from "./pages/teacher/StudentManagementPage";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import DigitalTwinPage from "./pages/teacher/DigitalTwinPage.jsx";
 import DigitalTwinChatPage from "./pages/DigitalTwinChatPage.jsx";
+import AIAutoGraderPage from "./pages/teacher/AIAutoGraderPage.jsx";
 
 // PUBLIC PATHS that should NOT show sidebar
 const PUBLIC_PATHS = ['/', '/login', '/register', '/faqs', '/forgot-password', '/reset-password'];
@@ -107,6 +108,7 @@ function AppLayout() {
               <Route path="/teacher/students-manage" element={<StudentManagementPage />} />
               <Route path="/teacher/report" element={<TeacherAnalyticsPage />} />
               <Route path="/teacher/digital-twin" element={<DigitalTwinPage />} />
+              <Route path="/teacher/auto-grader" element={<AIAutoGraderPage />} />
             </Route>
 
             {/* ── Admin Protected Routes ───────────────────────────────────── */}

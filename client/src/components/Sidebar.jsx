@@ -28,7 +28,8 @@ import {
   Award,
   Compass,
   Shield,
-  Brain
+  Brain,
+  FileCheck2
 } from 'lucide-react';
 
 // ── Navigation configs per role ─────────────────────────────────────────────
@@ -78,6 +79,7 @@ const FACULTY_NAV = [
   ]},
   { section: 'AI Tools', items: [
     { to: '/teacher/digital-twin', icon: Brain, label: 'My Digital Twin' },
+    { to: '/teacher/auto-grader', icon: FileCheck2, label: 'AI Auto-Grader & OCR' },
     { to: '/teacher/question-paper', icon: Sparkles, label: 'Question Paper AI' },
     { to: '/chat', icon: MessageSquare, label: 'AI Assistant' },
     { to: '/documents', icon: Upload, label: 'Knowledge & Documents' }

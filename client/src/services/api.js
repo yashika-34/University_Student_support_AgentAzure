@@ -283,7 +283,8 @@ export const autoGraderAPI = {
   getEvaluations: (params) => api.get('/auto-grader', { params }),
   getById: (id) => api.get(`/auto-grader/${id}`),
   syncToMarks: (id) => api.post(`/auto-grader/${id}/sync-marks`),
-  deleteEvaluation: (id) => api.delete(`/auto-grader/${id}`)
+  deleteEvaluation: (id) => api.delete(`/auto-grader/${id}`),
+  getQuestionPapers: () => api.get('/teacher/question-paper/my-papers')
 };
 
 // ── Admin APIs ────────────────────────────────────────────────────────────
