@@ -1,166 +1,45 @@
 /**
- * Community, Gamification & Analytics Controller: Forum, Badges, Analytics Charts
+ * Community, Gamification & Analytics Controller
+ * All data is sourced from MongoDB — no hardcoded or mock values.
  */
 
+import ForumPost from '../models/ForumPost.js';
+import Badge from '../models/Badge.js';
+import Attendance from '../models/Attendance.js';
+import Marks from '../models/Marks.js';
+import Assignment from '../models/Assignment.js';
+import Student from '../models/Student.js';
+import Course from '../models/Course.js';
+
+// ─── Discussion Forum ─────────────────────────────────────────────────────────
+
 /**
- * Discussion Forum
+ * @desc  List all forum posts, newest first
+ * @route GET /api/v1/engagement/forum
  */
 export const getForumPosts = async (req, res) => {
   try {
-    const posts = [
-      {
-        id: 'post-1',
-        title: 'Tips for memoization vs tabulation in DP Problem Set 1 (CS-301)?',
-        authorName: 'Alex Mercer',
-        authorRole: 'student',
-        category: 'Algorithms',
-        content: 'When solving the Longest Common Subsequence, is it recommended to reconstruct the sequence path using a directional pointer matrix or recursive traceback?',
-        upvotes: 24,
-        isSolved: true,
-        createdAt: '2026-09-17T11:20:00.000Z',
-        replies: [
-          {
-            authorName: 'Dr. Alan Turing',
-            authorRole: 'faculty',
-            content: 'Directional traceback from cell (m, n) provides O(m+n) reconstruction without extra auxiliary memory if you navigate values directly.',
-            isVerifiedAnswer: true,
-            createdAt: '2026-09-17T14:40:00.000Z'
-          }
-        ]
-      },
-      {
-        id: 'post-2',
-        title: 'Configuring Azure Managed Identity in Docker containers',
-        authorName: 'Liam Smith',
-        authorRole: 'student',
-        category: 'Cloud Computing',
-        content: 'Has anyone faced token retrieval timeouts when running Azure Identity client inside local Docker desktop? Any workaround without hardcoding client secrets?',
-        upvotes: 18,
-        isSolved: false,
-        createdAt: '2026-09-18T16:00:00.000Z',
-        replies: [
-          {
-            authorName: 'Emma Watson',
-            authorRole: 'student',
-            content: 'Ensure Azure CLI is logged in on the host machine and pass the Azure credential environment flag or use Azure Developer CLI (azd).',
-            isVerifiedAnswer: false,
-            createdAt: '2026-09-18T17:15:00.000Z'
-          }
-        ]
-      },
-      {
-        id: 'post-3',
-        title: 'Recommended electives for Machine Learning & GenAI track in Semester 6',
-        authorName: 'Sophia Chen',
-        authorRole: 'student',
-        category: 'Exam Prep',
-        content: 'Looking for reviews on CS-408 Deep Learning vs CS-412 Information Retrieval. Which has better hands-on labs?',
-        upvotes: 31,
-        isSolved: false,
-        createdAt: '2026-09-19T09:30:00.000Z',
-        replies: []
-      }
-    ];
+    const { category, solved, page = 1, limit = 20 } = req.query;
+    const filter = {};
+    if (category) filter.category = category;
+    if (solved !== undefined) filter.isSolved = solved === 'true';
 
-    res.status(200).json({ success: true, data: posts });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-export const createForumPost = async (req, res) => {
-  try {
-    const { title, category, content, authorName } = req.body;
-    const newPost = {
-      id: `post-${Date.now()}`,
-      title,
-      category: category || 'Algorithms',
-      content,
-      authorName: authorName || 'Alex Mercer',
-      authorRole: 'student',
-      upvotes: 1,
-      isSolved: false,
-      createdAt: new Date().toISOString(),
-      replies: []
-    };
-
-    res.status(201).json({ success: true, data: newPost });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-/**
- * Achievements & Badge System
- */
-export const getBadges = async (req, res) => {
-  try {
-    const badges = [
-      {
-        code: 'PERFECT_ATTENDANCE',
-        title: 'Attendance Titan',
-        description: 'Maintained 95%+ attendance across all registered courses for 4 consecutive weeks.',
-        category: 'Attendance',
-        icon: 'Award',
-        unlocked: true,
-        unlockedAt: '2026-09-10',
-        xp: 250
-      },
-      {
-        code: 'QUIZ_MASTER',
-        title: 'Quiz Champion',
-        description: 'Completed 10 AI generated practice quizzes with an average score above 85%.',
-        category: 'Academic',
-        icon: 'Sparkles',
-        unlocked: true,
-        unlockedAt: '2026-09-15',
-        xp: 300
-      },
-      {
-        code: 'COMMUNITY_PILLAR',
-        title: 'Forum Contributor',
-        description: 'Received 20+ upvotes on student technical answers in discussion boards.',
-        category: 'Community',
-        icon: 'Users',
-        unlocked: true,
-        unlockedAt: '2026-09-18',
-        xp: 200
-      },
-      {
-        code: 'DEANS_HONORS',
-        title: "Dean's Scholar",
-        description: 'Achieved Semester GPA of 3.80 or higher in semester final examinations.',
-        category: 'Academic',
-        icon: 'GraduationCap',
-        unlocked: false,
-        progress: '3.82 current estimate (in progress)',
-        xp: 500
-      },
-      {
-        code: 'CAREER_PRODIGY',
-        title: 'ATS Resume Master',
-        description: 'Obtained a 90%+ ATS optimization rating on uploaded technical portfolio.',
-        category: 'Career',
-        icon: 'FileText',
-        unlocked: false,
-        progress: 'Current score: 85%',
-        xp: 350
-      }
-    ];
-
-    const currentXp = 750;
-    const nextLevelXp = 1000;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const [posts, total] = await Promise.all([
+      ForumPost.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      ForumPost.countDocuments(filter)
+    ]);
 
     res.status(200).json({
       success: true,
-      data: {
-        currentLevel: 4,
-        rankTitle: 'Senior Scholar Specialist',
-        currentXp,
-        nextLevelXp,
-        xpToNextLevel: nextLevelXp - currentXp,
-        badges
-      }
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / parseInt(limit)),
+      data: posts
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -168,57 +47,411 @@ export const getBadges = async (req, res) => {
 };
 
 /**
- * Analytics Dashboard with Visual Chart Data
+ * @desc  Create a new forum post
+ * @route POST /api/v1/engagement/forum
+ */
+export const createForumPost = async (req, res) => {
+  try {
+    const { title, category, content } = req.body;
+
+    if (!title || !category || !content) {
+      return res.status(400).json({ success: false, message: 'title, category, and content are required.' });
+    }
+
+    // Derive author details from the authenticated user if available
+    const authorName = req.user
+      ? `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email
+      : 'Anonymous';
+    const authorRole = req.user?.role === 'faculty' ? 'faculty' : 'student';
+
+    const post = await ForumPost.create({
+      title,
+      category,
+      content,
+      authorName,
+      authorRole,
+      upvotes: 0,
+      isSolved: false,
+      replies: []
+    });
+
+    res.status(201).json({ success: true, data: post });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * @desc  Add a reply to a forum post
+ * @route POST /api/v1/engagement/forum/:id/reply
+ */
+export const addForumReply = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content, isVerifiedAnswer } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ success: false, message: 'Reply content is required.' });
+    }
+
+    const authorName = req.user
+      ? `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email
+      : 'Anonymous';
+    const authorRole = req.user?.role === 'faculty' ? 'faculty' : 'student';
+
+    const post = await ForumPost.findByIdAndUpdate(
+      id,
+      {
+        $push: {
+          replies: {
+            authorName,
+            authorRole,
+            content,
+            isVerifiedAnswer: isVerifiedAnswer === true && authorRole === 'faculty',
+            createdAt: new Date()
+          }
+        }
+      },
+      { new: true }
+    );
+
+    if (!post) return res.status(404).json({ success: false, message: 'Post not found.' });
+
+    res.status(200).json({ success: true, data: post });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * @desc  Toggle upvote on a post
+ * @route PATCH /api/v1/engagement/forum/:id/upvote
+ */
+export const upvoteForumPost = async (req, res) => {
+  try {
+    const post = await ForumPost.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { upvotes: 1 } },
+      { new: true }
+    );
+    if (!post) return res.status(404).json({ success: false, message: 'Post not found.' });
+    res.status(200).json({ success: true, data: post });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * @desc  Mark a post as solved
+ * @route PATCH /api/v1/engagement/forum/:id/solve
+ */
+export const markPostSolved = async (req, res) => {
+  try {
+    const post = await ForumPost.findByIdAndUpdate(
+      req.params.id,
+      { isSolved: true },
+      { new: true }
+    );
+    if (!post) return res.status(404).json({ success: false, message: 'Post not found.' });
+    res.status(200).json({ success: true, data: post });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ─── Achievements & Badge Catalog ─────────────────────────────────────────────
+
+/**
+ * @desc  Return the full badge catalog from MongoDB with real student unlock status
+ * @route GET /api/v1/engagement/badges
+ */
+export const getBadges = async (req, res) => {
+  try {
+    // Fetch the badge catalog
+    const badgeCatalog = await Badge.find().sort({ category: 1, xpPoints: -1 }).lean();
+
+    // If a student is authenticated, compute real unlock status
+    let studentProfile = null;
+    let attendancePct = null;
+    let avgMarks = null;
+    let forumUpvotes = 0;
+
+    if (req.user && req.user.role === 'student') {
+      studentProfile = await Student.findOne({ userId: req.user._id }).lean();
+
+      if (studentProfile) {
+        // Attendance: overall percentage
+        const attAgg = await Attendance.aggregate([
+          { $match: { student: studentProfile._id } },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: 1 },
+              present: { $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] } }
+            }
+          }
+        ]);
+        const att = attAgg[0];
+        attendancePct = att && att.total > 0 ? (att.present / att.total) * 100 : 0;
+
+        // Marks: average percentage
+        const marksAgg = await Marks.aggregate([
+          { $match: { student: studentProfile._id, isPublished: true } },
+          { $group: { _id: null, avg: { $avg: '$marksObtained' } } }
+        ]);
+        avgMarks = marksAgg[0]?.avg || 0;
+
+        // Forum upvotes received
+        const forumAgg = await ForumPost.aggregate([
+          { $unwind: '$replies' },
+          {
+            $match: {
+              'replies.authorName': `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim()
+            }
+          },
+          { $group: { _id: null, totalUpvotes: { $sum: '$upvotes' } } }
+        ]);
+        forumUpvotes = forumAgg[0]?.totalUpvotes || 0;
+      }
+    }
+
+    // Evaluate unlock status for each badge
+    const evaluatedBadges = badgeCatalog.map((badge) => {
+      let unlocked = false;
+      let progress = null;
+
+      if (studentProfile) {
+        switch (badge.badgeCode) {
+          case 'PERFECT_ATTENDANCE':
+            unlocked = attendancePct >= 95;
+            progress = `${attendancePct.toFixed(1)}% attendance (need 95%)`;
+            break;
+          case 'QUIZ_MASTER':
+            unlocked = avgMarks >= 85;
+            progress = `Avg score: ${avgMarks.toFixed(1)}% (need 85%)`;
+            break;
+          case 'COMMUNITY_PILLAR':
+            unlocked = forumUpvotes >= 20;
+            progress = `${forumUpvotes} upvotes received (need 20)`;
+            break;
+          case 'DEANS_HONORS':
+            unlocked = studentProfile.cgpa >= 3.80;
+            progress = `Current CGPA: ${studentProfile.cgpa} (need 3.80+)`;
+            break;
+          case 'CAREER_PRODIGY':
+            unlocked = false;
+            progress = 'Complete ATS resume review to unlock';
+            break;
+          default:
+            unlocked = false;
+            progress = null;
+        }
+      }
+
+      return {
+        code: badge.badgeCode,
+        title: badge.title,
+        description: badge.description,
+        category: badge.category,
+        icon: badge.iconName,
+        xp: badge.xpPoints,
+        unlocked,
+        ...(progress && !unlocked ? { progress } : {}),
+        ...(unlocked ? { unlockedAt: badge.updatedAt } : {})
+      };
+    });
+
+    // Compute XP from unlocked badges
+    const unlockedBadges = evaluatedBadges.filter((b) => b.unlocked);
+    const totalXp = unlockedBadges.reduce((sum, b) => sum + b.xp, 0);
+    const level = Math.floor(totalXp / 250) + 1;
+    const currentLevelXp = totalXp % 250;
+    const nextLevelXp = 250;
+
+    const rankTitles = [
+      'Freshman Scholar',
+      'Rising Scholar',
+      'Academic Achiever',
+      'Senior Scholar Specialist',
+      'Honor Roll Elite',
+      'Valedictorian Candidate'
+    ];
+
+    res.status(200).json({
+      success: true,
+      data: {
+        currentLevel: level,
+        rankTitle: rankTitles[Math.min(level - 1, rankTitles.length - 1)],
+        currentXp: currentLevelXp,
+        nextLevelXp,
+        xpToNextLevel: nextLevelXp - currentLevelXp,
+        totalXp,
+        badges: evaluatedBadges
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ─── Student Analytics Dashboard ─────────────────────────────────────────────
+
+/**
+ * @desc  Return real student analytics built from DB aggregations
+ * @route GET /api/v1/engagement/analytics
  */
 export const getAnalytics = async (req, res) => {
   try {
-    const analytics = {
-      // 5-Semester GPA Trajectory
-      gpaTrend: [
-        { semester: 'Sem 1', gpa: 3.65, classAverage: 3.25 },
-        { semester: 'Sem 2', gpa: 3.72, classAverage: 3.30 },
-        { semester: 'Sem 3', gpa: 3.80, classAverage: 3.32 },
-        { semester: 'Sem 4', gpa: 3.85, classAverage: 3.35 },
-        { semester: 'Sem 5 (Current)', gpa: 3.82, classAverage: 3.38 }
-      ],
+    let studentId = null;
 
-      // Attendance Distribution
-      attendanceStats: [
-        { course: 'CS-301 (Algo)', percentage: 87.5, threshold: 75 },
-        { course: 'CS-305 (Cloud)', percentage: 72.2, threshold: 75 },
-        { course: 'CS-309 (AI/NN)', percentage: 95.0, threshold: 75 }
-      ],
+    if (req.user && req.user.role === 'student') {
+      const studentProfile = await Student.findOne({ userId: req.user._id }).lean();
+      if (studentProfile) studentId = studentProfile._id;
+    }
 
-      // Assignment Completion Status
-      assignmentMetrics: {
-        totalAssigned: 12,
-        submittedOnTime: 10,
-        pendingReview: 1,
-        overdue: 0,
-        averageScore: 92.4
+    // ── GPA Trend (semester-level aggregation from Marks) ──────────────────
+    const gpaTrendRaw = await Marks.aggregate([
+      ...(studentId ? [{ $match: { student: studentId, isPublished: true } }] : [{ $match: { isPublished: true } }]),
+      {
+        $group: {
+          _id: '$semester',
+          avgGradePoints: { $avg: '$gradePoints' }
+        }
       },
+      { $sort: { _id: 1 } }
+    ]);
 
-      // Weekly Study Time Breakdown (Hours)
-      studyHoursDistribution: [
-        { day: 'Mon', hours: 4.5 },
-        { day: 'Tue', hours: 3.5 },
-        { day: 'Wed', hours: 5.0 },
-        { day: 'Thu', hours: 4.0 },
-        { day: 'Fri', hours: 3.0 },
-        { day: 'Sat', hours: 6.5 },
-        { day: 'Sun', hours: 4.5 }
-      ],
+    const gpaTrend = gpaTrendRaw.map((row) => ({
+      semester: `Sem ${row._id}`,
+      gpa: parseFloat(row.avgGradePoints?.toFixed(2) || 0)
+    }));
 
-      // Peer Percentile Ranking
-      percentileRank: {
-        academicScore: 91,
-        attendanceConsistency: 84,
-        assignmentTurnaround: 96,
-        overallIndex: 92
+    // ── Attendance per Enrolled Course ──────────────────────────────────────
+    const attFilter = studentId ? { student: studentId } : {};
+    const attendanceRaw = await Attendance.aggregate([
+      { $match: attFilter },
+      {
+        $group: {
+          _id: '$course',
+          total: { $sum: 1 },
+          present: { $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] } }
+        }
+      },
+      {
+        $lookup: {
+          from: 'courses',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'courseInfo'
+        }
+      },
+      { $unwind: { path: '$courseInfo', preserveNullAndEmptyArrays: true } }
+    ]);
+
+    const attendanceStats = attendanceRaw.map((row) => ({
+      course: row.courseInfo
+        ? `${row.courseInfo.courseCode} (${row.courseInfo.courseName})`
+        : String(row._id),
+      percentage: row.total > 0 ? parseFloat(((row.present / row.total) * 100).toFixed(1)) : 0,
+      threshold: 75
+    }));
+
+    // ── Assignment Metrics ──────────────────────────────────────────────────
+    const now = new Date();
+    const [totalAssigned, allAssignments] = await Promise.all([
+      Assignment.countDocuments({}),
+      Assignment.find({}).select('submissions dueDate maxScore').lean()
+    ]);
+
+    let submittedOnTime = 0;
+    let overdue = 0;
+    let pendingReview = 0;
+    let totalScore = 0;
+    let gradedCount = 0;
+
+    for (const asg of allAssignments) {
+      const subs = studentId
+        ? (asg.submissions || []).filter((s) => String(s.student) === String(studentId))
+        : asg.submissions || [];
+
+      for (const sub of subs) {
+        if (sub.status === 'submitted') pendingReview++;
+        if (sub.status === 'graded') {
+          submittedOnTime++;
+          if (sub.grade != null) {
+            totalScore += (sub.grade / asg.maxScore) * 100;
+            gradedCount++;
+          }
+        }
       }
+      if (asg.dueDate < now && subs.length === 0) overdue++;
+    }
+
+    const assignmentMetrics = {
+      totalAssigned,
+      submittedOnTime,
+      pendingReview,
+      overdue,
+      averageScore: gradedCount > 0 ? parseFloat((totalScore / gradedCount).toFixed(1)) : null
     };
 
-    res.status(200).json({ success: true, data: analytics });
+    // ── Percentile Ranking ──────────────────────────────────────────────────
+    let percentileRank = null;
+    if (studentId) {
+      const studentProfile = await Student.findById(studentId).lean();
+      const totalStudents = await Student.countDocuments({});
+
+      if (totalStudents > 0 && studentProfile) {
+        const betterCgpa = await Student.countDocuments({ cgpa: { $lt: studentProfile.cgpa } });
+        const academicScore = Math.round((betterCgpa / totalStudents) * 100);
+
+        const attTotalAgg = await Attendance.aggregate([
+          { $match: { student: studentId } },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: 1 },
+              present: { $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] } }
+            }
+          }
+        ]);
+        const attData = attTotalAgg[0];
+        const myAttPct = attData && attData.total > 0 ? (attData.present / attData.total) * 100 : 0;
+
+        // Compare to class average attendance
+        const classAttAgg = await Attendance.aggregate([
+          {
+            $group: {
+              _id: '$student',
+              total: { $sum: 1 },
+              present: { $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] } }
+            }
+          },
+          { $project: { pct: { $multiply: [{ $divide: ['$present', '$total'] }, 100] } } }
+        ]);
+        const allPcts = classAttAgg.map((r) => r.pct);
+        const attBetter = allPcts.filter((p) => p < myAttPct).length;
+        const attendanceConsistency = allPcts.length > 0
+          ? Math.round((attBetter / allPcts.length) * 100)
+          : 50;
+
+        percentileRank = {
+          academicScore,
+          attendanceConsistency,
+          overallIndex: Math.round((academicScore + attendanceConsistency) / 2)
+        };
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        gpaTrend,
+        attendanceStats,
+        assignmentMetrics,
+        ...(percentileRank ? { percentileRank } : {})
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

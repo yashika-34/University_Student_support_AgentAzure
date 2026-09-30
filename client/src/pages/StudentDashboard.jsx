@@ -15,8 +15,11 @@ import {
 import {
   Award, Sparkles, BarChart2, AlertTriangle, Clock, BookOpen, HelpCircle,
   FileText, CalendarCheck, MessageSquare, TrendingUp, Bell, ChevronRight, Loader2, X, MapPin, Compass,
-  Flame, Layers, CheckCircle2, Bookmark, Zap, Brain, RotateCcw, Play
+  Flame, Layers, CheckCircle2, Bookmark, Zap, Brain, RotateCcw, Play, Inbox
 } from 'lucide-react';
+import { SkeletonStatGrid, SkeletonChart, SkeletonCard, SkeletonTable } from '../components/common/Skeleton.jsx';
+import EmptyState from '../components/common/EmptyState.jsx';
+import MetricCard from '../components/common/MetricCard.jsx';
 
 const StudentDashboard = () => {
   const { user } = useAuth();
@@ -56,11 +59,14 @@ const StudentDashboard = () => {
   const [catchUpExpanded, setCatchUpExpanded] = useState(false);
   const [activeCatchUpTab, setActiveCatchUpTab] = useState('lectures'); // 'lectures' | 'assignments' | 'notices' | 'roadmap'
 
+  // AI Academic Advisor & Student Assistant State
+  const [aiAssistant, setAiAssistant] = useState(null);
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        const [profRes, attRes, asgRes, marksRes, examRes, notRes, fcStatsRes, fcRecRes, catchUpRes] = await Promise.allSettled([
+        const [profRes, attRes, asgRes, marksRes, examRes, notRes, fcStatsRes, fcRecRes, catchUpRes, aiAssistRes] = await Promise.allSettled([
           studentAPI.getMyProfile(),
           attendanceAPI.getMySummary(),
           assignmentAPI.getMyPending(),
@@ -69,7 +75,8 @@ const StudentDashboard = () => {
           noticeAPI.getNotices(),
           flashcardAPI.getStats(),
           flashcardAPI.getRecommended(),
-          attendanceAPI.getCatchUpData()
+          attendanceAPI.getCatchUpData(),
+          studentAPI.getAIAssistant()
         ]);
 
         if (profRes.status === 'fulfilled' && profRes.value.data?.data) {
@@ -98,6 +105,9 @@ const StudentDashboard = () => {
         }
         if (catchUpRes.status === 'fulfilled' && catchUpRes.value.data?.data) {
           setCatchUpData(catchUpRes.value.data.data);
+        }
+        if (aiAssistRes.status === 'fulfilled' && aiAssistRes.value.data?.data) {
+          setAiAssistant(aiAssistRes.value.data.data);
         }
       } catch (err) {
         console.error('Failed to load student dashboard:', err);
@@ -274,9 +284,13 @@ const StudentDashboard = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
-        <Loader2 size={36} className="animate-spin" color="var(--primary)" />
-        <p style={{ color: 'var(--text-secondary)' }}>Loading your academic profile from database...</p>
+      <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <SkeletonCard lines={2} />
+        <SkeletonStatGrid count={4} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+          <SkeletonChart height={280} />
+          <SkeletonTable rows={4} cols={3} />
+        </div>
       </div>
     );
   }
@@ -523,6 +537,105 @@ const StudentDashboard = () => {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── AI Academic Advisor & Student Assistant Briefing ── */}
+      {aiAssistant && (
+        <div
+          className="glass-panel"
+          style={{
+            padding: '1.75rem',
+            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 50%, rgba(16, 185, 129, 0.06) 100%)',
+            border: '1px solid rgba(59, 130, 246, 0.25)',
+            borderRadius: 'var(--radius-md)'
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '12px',
+                  background: 'var(--primary-gradient)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                }}
+              >
+                <Brain size={22} color="#ffffff" />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>
+                    AI Academic Advisor &amp; Student Assistant
+                  </h3>
+                  <span className="badge badge-primary" style={{ fontSize: '0.72rem' }}>
+                    Live Analytics &bull; RAG Powered
+                  </span>
+                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0.2rem 0 0 0' }}>
+                  Real-time synthesis of your attendance records, coursework deadlines, exam performance, and study recommendations.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+              <Link to="/chat" className="btn btn-secondary" style={{ fontSize: '0.82rem', padding: '0.45rem 0.85rem' }}>
+                <Sparkles size={14} color="var(--primary)" /> Consult Advisor in Chat
+              </Link>
+            </div>
+          </div>
+
+          {/* 4 Core Pillars: Missed Classes, Assignment Priorities, Exam Priorities, Personalized Study Suggestions */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+            
+            {/* 1. Missed Classes Summary */}
+            <div style={{ background: 'var(--bg-input)', padding: '1.15rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.88rem', fontWeight: 700, color: 'var(--warning)' }}>
+                <Clock size={16} /> Missed Classes &amp; Catch-Up
+              </div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                {aiAssistant.missedClassesSummary}
+              </div>
+            </div>
+
+            {/* 2. Upcoming Assignment Priorities */}
+            <div style={{ background: 'var(--bg-input)', padding: '1.15rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.88rem', fontWeight: 700, color: 'var(--primary)' }}>
+                <CheckCircle2 size={16} /> Assignment Priorities
+              </div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                {aiAssistant.upcomingAssignmentPriorities}
+              </div>
+            </div>
+
+            {/* 3. Exam Preparation Priorities */}
+            <div style={{ background: 'var(--bg-input)', padding: '1.15rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.88rem', fontWeight: 700, color: 'var(--accent-purple)' }}>
+                <TrendingUp size={16} /> Exam Preparation Focus
+              </div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                {aiAssistant.examPreparationPriorities}
+              </div>
+            </div>
+
+            {/* 4. Personalized Study Suggestions */}
+            <div style={{ background: 'var(--bg-input)', padding: '1.15rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.88rem', fontWeight: 700, color: 'var(--success)' }}>
+                <Zap size={16} /> Personalized Study Suggestions
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.35rem', lineHeight: 1.45 }}>
+                {aiAssistant.personalizedStudySuggestions?.map((sug, sIdx) => (
+                  <li key={sIdx}>{sug}</li>
+                ))}
+              </ul>
+            </div>
+
+          </div>
         </div>
       )}
 
@@ -960,7 +1073,11 @@ const StudentDashboard = () => {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {upcomingExams.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No upcoming exams scheduled.</p>
+              <EmptyState
+                icon={CalendarCheck}
+                title="No upcoming exams"
+                description="Your semester timetable currently has no upcoming exams scheduled."
+              />
             ) : (
               upcomingExams.map((exam) => {
                 const examDate = new Date(exam.date);
@@ -1010,34 +1127,42 @@ const StudentDashboard = () => {
           </h3>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Live Campus Feeds</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-          {notices.map((n) => (
-            <div
-              key={n._id}
-              onClick={() => setSelectedNotice(n)}
-              style={{
-                padding: '1rem',
-                background: 'var(--bg-input)',
-                borderRadius: 'var(--radius-sm)',
-                borderLeft: n.priority === 'urgent' ? '4px solid var(--danger)' : '4px solid var(--primary)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                <span className="badge badge-secondary">{n.category}</span>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{new Date(n.publishedAt).toLocaleDateString()}</span>
+        {notices.length === 0 ? (
+          <EmptyState
+            icon={Bell}
+            title="No campus notices"
+            description="There are no active bulletins or university announcements at this moment."
+          />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+            {notices.map((n) => (
+              <div
+                key={n._id}
+                onClick={() => setSelectedNotice(n)}
+                style={{
+                  padding: '1rem',
+                  background: 'var(--bg-input)',
+                  borderRadius: 'var(--radius-sm)',
+                  borderLeft: n.priority === 'urgent' ? '4px solid var(--danger)' : '4px solid var(--primary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                  <span className="badge badge-secondary">{n.category}</span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{new Date(n.publishedAt).toLocaleDateString()}</span>
+                </div>
+                <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '0.35rem' }}>{n.title}</h4>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  {n.content}
+                </p>
+                <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>
+                  Click to view bulletin →
+                </div>
               </div>
-              <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '0.35rem' }}>{n.title}</h4>
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {n.content}
-              </p>
-              <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>
-                Click to view bulletin →
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Notice Details Modal via ModalPortal ── */}

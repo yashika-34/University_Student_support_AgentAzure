@@ -5,6 +5,10 @@ import Attendance from '../models/Attendance.js';
 import Marks from '../models/Marks.js';
 import Assignment from '../models/Assignment.js';
 import Notice from '../models/Notice.js';
+import ExamSchedule from '../models/ExamSchedule.js';
+import { getEffectiveAzureConfig } from '../services/azureAiService.js';
+import { STUDENT_ASSISTANT_PROMPT } from '../services/promptEngine.js';
+import { AzureOpenAI } from 'openai';
 
 /**
  * @desc    Get current student's full profile
@@ -220,18 +224,6 @@ export const getStudentAnalytics = async (req, res, next) => {
           classAverage: Number((sgpa * 0.9).toFixed(2))
         };
       });
-    } else {
-      // Base on student.currentSemester and student.cgpa
-      const curSem = student.currentSemester || 5;
-      const baseCgpa = student.cgpa || 3.8;
-      for (let i = 1; i <= curSem; i++) {
-        const offset = ((i - curSem) * 0.05);
-        gpaTrend.push({
-          semester: `Sem ${i}`,
-          gpa: Number((baseCgpa + offset).toFixed(2)),
-          classAverage: Number(((baseCgpa + offset) * 0.88).toFixed(2))
-        });
-      }
     }
 
     // 2. Attendance Stats per enrolled course
@@ -262,7 +254,7 @@ export const getStudentAnalytics = async (req, res, next) => {
 
     const overallAttendance = totalClassesAll > 0
       ? Number(((attendedClassesAll / totalClassesAll) * 100).toFixed(1))
-      : 85.0;
+      : 0.0;
 
     // 3. Assignment turnaround
     const enrolledCourseIds = enrolledCourses.map((c) => c.courseId);
@@ -276,16 +268,7 @@ export const getStudentAnalytics = async (req, res, next) => {
       ? Math.round((submittedCount / totalAssignments) * 100)
       : 100;
 
-    // 4. Study Hours Distribution
-    const studyHoursDistribution = [
-      { day: 'Mon', hours: 4.5 },
-      { day: 'Tue', hours: 3.5 },
-      { day: 'Wed', hours: 5.0 },
-      { day: 'Thu', hours: 4.0 },
-      { day: 'Fri', hours: 3.0 },
-      { day: 'Sat', hours: 6.5 },
-      { day: 'Sun', hours: 4.5 }
-    ];
+    // Study hours distribution is not yet tracked in the DB — return empty array
 
     res.status(200).json({
       success: true,
@@ -304,10 +287,10 @@ export const getStudentAnalytics = async (req, res, next) => {
         totalAssignments,
         submittedAssignments: submittedCount,
         assignmentTurnaround,
-        totalStudyHours: 31,
+        totalStudyHours: 0,
         gpaTrend,
         attendanceStats,
-        studyHoursDistribution
+        studyHoursDistribution: []
       }
     });
   } catch (error) {
@@ -345,7 +328,7 @@ export const getUnifiedDashboard = async (req, res, next) => {
     const totalClasses = attendanceRecords.length;
     const attendedClasses = attendanceRecords.filter((r) => r.status === 'present').length;
     const excusedClasses = attendanceRecords.filter((r) => r.status === 'excused').length;
-    const overallAttendance = totalClasses > 0 ? Number((((attendedClasses + excusedClasses) / totalClasses) * 100).toFixed(1)) : 85.0;
+    const overallAttendance = totalClasses > 0 ? Number((((attendedClasses + excusedClasses) / totalClasses) * 100).toFixed(1)) : 0.0;
 
     const formattedAssignments = assignments.map((asg) => {
       const sub = asg.submissions?.find((s) => s.student?.toString() === student._id.toString());
@@ -402,6 +385,243 @@ export const getUnifiedDashboard = async (req, res, next) => {
           priority: n.priority,
           date: n.createdAt
         }))
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    AI Academic Advisor & Assistant: Real-time insights, missed classes, assignments, and exam priorities
+ * @route   GET /api/v1/students/me/ai-assistant
+ * @access  Private (Student)
+ */
+export const getAIAcademicAssistant = async (req, res, next) => {
+  try {
+    const student = await Student.findOne({ userId: req.user._id })
+      .populate('enrolledCourses.courseId')
+      .populate('department', 'name code');
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student profile not found.' });
+    }
+
+    const enrolledCourseIds = student.enrolledCourses.map((c) => c.courseId?._id).filter(Boolean);
+
+    // 1. Live Attendance & Missed Classes
+    const attendanceStats = [];
+    for (const c of student.enrolledCourses) {
+      if (!c.courseId) continue;
+      const stats = await Attendance.calculateAttendancePercentage(student._id, c.courseId._id);
+      attendanceStats.push({
+        courseId: c.courseId._id,
+        courseCode: c.courseId.courseCode,
+        courseName: c.courseId.courseName,
+        attendedClasses: stats.attendedClasses,
+        totalClasses: stats.totalClasses,
+        percentage: stats.percentage,
+        isLow: stats.percentage < 75 && stats.totalClasses > 0
+      });
+    }
+
+    const absentRecords = await Attendance.find({
+      student: student._id,
+      status: 'absent'
+    })
+      .populate('course', 'courseCode courseName')
+      .sort({ date: -1 })
+      .limit(10);
+
+    const missedClassesList = absentRecords.map((rec) => ({
+      date: rec.date ? rec.date.toISOString().split('T')[0] : 'N/A',
+      courseCode: rec.course?.courseCode || 'Unknown',
+      courseName: rec.course?.courseName || '',
+      sessionType: rec.sessionType || 'Lecture',
+      topic: rec.topic || 'Curriculum Module Discussion',
+      remarks: rec.remarks || 'Recorded Absent'
+    }));
+
+    // 2. Pending & Upcoming Assignments
+    const rawAssignments = await Assignment.find({
+      course: { $in: enrolledCourseIds },
+      isPublished: true
+    })
+      .populate('course', 'courseCode courseName')
+      .sort({ dueDate: 1 });
+
+    const now = new Date();
+    const prioritizedAssignments = rawAssignments.map((a) => {
+      const submission = a.submissions?.find((s) => s.student?.toString() === student._id.toString());
+      const isSubmitted = submission && submission.status !== 'pending';
+      const diffDays = Math.ceil((new Date(a.dueDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      let urgency = 'normal';
+      if (diffDays < 0) urgency = 'overdue';
+      else if (diffDays <= 2) urgency = 'critical';
+      else if (diffDays <= 5) urgency = 'high';
+
+      return {
+        id: a._id,
+        title: a.title,
+        courseCode: a.course?.courseCode || '',
+        courseName: a.course?.courseName || '',
+        dueDate: a.dueDate,
+        daysRemaining: diffDays,
+        maxMarks: a.maxMarks || 100,
+        urgency,
+        isSubmitted: Boolean(isSubmitted)
+      };
+    }).filter((a) => !a.isSubmitted).slice(0, 6);
+
+    // 3. Exam Preparation Priorities & Marks Analytics
+    const marksRecords = await Marks.find({
+      student: student._id,
+      isPublished: true
+    }).populate('course', 'courseCode courseName');
+
+    const coursePerformance = {};
+    marksRecords.forEach((m) => {
+      const code = m.course?.courseCode || 'General';
+      if (!coursePerformance[code]) {
+        coursePerformance[code] = {
+          courseCode: code,
+          courseName: m.course?.courseName || '',
+          totalObtained: 0,
+          totalMax: 0
+        };
+      }
+      coursePerformance[code].totalObtained += m.marksObtained || 0;
+      coursePerformance[code].totalMax += m.totalMarks || 100;
+    });
+
+    const performanceSummary = Object.values(coursePerformance).map((cp) => ({
+      courseCode: cp.courseCode,
+      courseName: cp.courseName,
+      percentage: cp.totalMax > 0 ? Math.round((cp.totalObtained / cp.totalMax) * 100) : 0
+    }));
+
+    const upcomingExams = await ExamSchedule.find({
+      status: 'upcoming'
+    }).sort({ date: 1 }).limit(5);
+
+    // Format Data Context for AI
+    const studentDataContext = JSON.stringify({
+      studentName: `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Student',
+      cgpa: student.cgpa || 8.5,
+      department: student.department?.name || 'Computer Science',
+      attendance: attendanceStats,
+      missedClasses: missedClassesList,
+      pendingAssignments: prioritizedAssignments,
+      marksByCourse: performanceSummary,
+      upcomingExams: upcomingExams.map((e) => ({
+        courseCode: e.courseCode,
+        courseName: e.courseName,
+        date: e.date?.toISOString().split('T')[0],
+        venue: e.venue
+      }))
+    }, null, 2);
+
+    let missedClassesSummary = '';
+    let upcomingAssignmentPriorities = '';
+    let examPreparationPriorities = '';
+    let personalizedStudySuggestions = [];
+
+    const azureConfig = getEffectiveAzureConfig();
+
+    if (azureConfig.isConfigured) {
+      try {
+        const client = new AzureOpenAI({
+          endpoint: azureConfig.endpoint,
+          apiKey: azureConfig.apiKey,
+          apiVersion: azureConfig.apiVersion,
+          deployment: azureConfig.primaryDeployment
+        });
+
+        const prompt = `${STUDENT_ASSISTANT_PROMPT}
+${studentDataContext}
+
+Please respond strictly in a structured JSON object with these exact keys:
+{
+  "missedClassesSummary": "A concise, actionable 2-3 paragraph summary detailing the specific missed lectures, affected courses, and concrete recovery steps.",
+  "upcomingAssignmentPriorities": "Ranked priorities for pending assignments highlighting which to tackle first, submission strategies, and time allocation.",
+  "examPreparationPriorities": "Subject-by-subject exam study priorities based on lowest marks and upcoming dates.",
+  "personalizedStudySuggestions": ["3 to 5 targeted, high-impact study recommendations."]
+}
+Return raw JSON only without markdown fences.`;
+
+        const response = await client.chat.completions.create({
+          model: azureConfig.primaryDeployment,
+          messages: [
+            { role: 'system', content: 'You are UniAssist Academic Advisor AI that provides personalized student advice in JSON.' },
+            { role: 'user', content: prompt }
+          ],
+          response_format: { type: 'json_object' },
+          max_tokens: 1500
+        });
+
+        const aiObj = JSON.parse(response.choices[0]?.message?.content?.trim() || '{}');
+        missedClassesSummary = aiObj.missedClassesSummary;
+        upcomingAssignmentPriorities = aiObj.upcomingAssignmentPriorities;
+        examPreparationPriorities = aiObj.examPreparationPriorities;
+        personalizedStudySuggestions = aiObj.personalizedStudySuggestions || [];
+      } catch (aiErr) {
+        console.warn('[AI Academic Assistant Azure Error, generating local analytics]:', aiErr.message);
+      }
+    }
+
+    // High quality analytical fallback if Azure is not configured or fails
+    if (!missedClassesSummary) {
+      const lowAtt = attendanceStats.filter((a) => a.isLow);
+      if (missedClassesList.length > 0) {
+        const missedCourseCodes = [...new Set(missedClassesList.map((m) => m.courseCode))].join(', ');
+        missedClassesSummary = `You have recorded absences across **${missedCourseCodes}** (${missedClassesList.length} total missed sessions). Low attendance alerts are currently active for courses under 75% (${lowAtt.map((a) => `${a.courseCode}: ${a.percentage}%`).join(', ') || 'None'}). \n\n**Recovery Strategy:** Review the lecture notes in the Academic Tools repository, verify assignment deliverables with course faculty during office hours, and solve 2-3 practice problem sets for missed modules to maintain continuous internal evaluation eligibility.`;
+      } else {
+        missedClassesSummary = `Excellent attendance track record! All enrolled courses meet the mandatory 75% university eligibility threshold. Continue attending regular lecture and laboratory sessions to secure top internal evaluation marks.`;
+      }
+
+      if (prioritizedAssignments.length > 0) {
+        const topUrgent = prioritizedAssignments[0];
+        upcomingAssignmentPriorities = `Priority 1: **${topUrgent.title}** (${topUrgent.courseCode}) — due in ${topUrgent.daysRemaining <= 0 ? 'today / overdue' : `${topUrgent.daysRemaining} days`} (Weight: ${topUrgent.maxMarks} pts). Focus on submitting this deliverable before beginning secondary assignments. Allocate 90 minutes of dedicated deep work today to finalize remaining test cases.`;
+      } else {
+        upcomingAssignmentPriorities = `All course assignments are currently up-to-date! Use this window to review upcoming syllabus chapters or build flashcard decks for end-semester revisions.`;
+      }
+
+      const weakestCourse = performanceSummary.sort((a, b) => a.percentage - b.percentage)[0];
+      if (weakestCourse) {
+        examPreparationPriorities = `Highest revision focus required for **${weakestCourse.courseCode} (${weakestCourse.courseName})** where current continuous evaluation sits at **${weakestCourse.percentage}%**. Allocate at least 45% of weekly revision time to reviewing key theorems, algorithmic edge cases, and previous year question papers.`;
+      } else {
+        examPreparationPriorities = `Maintain consistent review schedules across all registered modules with a focus on problem-solving drills and timed mock tests.`;
+      }
+
+      personalizedStudySuggestions = [
+        `Active Recall: Generate quick revision flashcards after each completed lecture to boost 14-day memory retention by over 40%.`,
+        `Spaced Repetition: Dedicate 30 minutes every morning to your lowest-scoring subject (${weakestCourse?.courseCode || 'enrolled courses'}).`,
+        `Attendance Safeguard: Attend all remaining classes in ${lowAtt[0]?.courseCode || 'all registered courses'} to comfortably clear the 75% exam hall ticket eligibility cutoff.`,
+        `Assignment Staging: Break complex laboratory submissions into 3 discrete milestones (architecture outline, core implementation, edge-case testing).`
+      ];
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        summaryMetrics: {
+          cgpa: student.cgpa,
+          averageAttendance: attendanceStats.length > 0
+            ? Math.round(attendanceStats.reduce((acc, curr) => acc + curr.percentage, 0) / attendanceStats.length)
+            : 85,
+          lowAttendanceCount: attendanceStats.filter((a) => a.isLow).length,
+          pendingAssignmentsCount: prioritizedAssignments.length,
+          missedClassesCount: missedClassesList.length
+        },
+        missedClassesSummary,
+        missedClassesList,
+        upcomingAssignmentPriorities,
+        prioritizedAssignments,
+        examPreparationPriorities,
+        performanceSummary,
+        personalizedStudySuggestions,
+        generatedAt: new Date().toISOString()
       }
     });
   } catch (error) {

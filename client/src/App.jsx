@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import { ToastProvider } from './context/ToastContext.jsx';
 
 import Sidebar from './components/Sidebar.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -36,6 +37,8 @@ import StudentProgressPage from './pages/teacher/StudentProgressPage.jsx';
 
 import StudentManagementPage from "./pages/teacher/StudentManagementPage";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
+import DigitalTwinPage from "./pages/teacher/DigitalTwinPage.jsx";
+import DigitalTwinChatPage from "./pages/DigitalTwinChatPage.jsx";
 
 // PUBLIC PATHS that should NOT show sidebar
 const PUBLIC_PATHS = ['/', '/login', '/register', '/faqs', '/forgot-password', '/reset-password'];
@@ -65,6 +68,7 @@ function AppLayout() {
         className={`main-wrapper${showSidebar && sidebarCollapsed ? ' collapsed' : ''}${!showSidebar ? ' full-width' : ''}`}
         style={!showSidebar ? { marginLeft: 0 } : undefined}
       >
+        <a href="#main-content" className="skip-link">Skip to main content</a>
         {/* Top bar only shown on public/non-sidebar pages OR always for mobile menu */}
         <Navbar
           showSidebar={showSidebar}
@@ -72,7 +76,7 @@ function AppLayout() {
           sidebarCollapsed={sidebarCollapsed}
         />
 
-        <main className="main-content">
+        <main id="main-content" className="main-content">
           <Routes>
             {/* ── Public Routes ──────────────────────────────────────────── */}
             <Route path="/" element={<Home />} />
@@ -102,6 +106,7 @@ function AppLayout() {
               <Route path="/teacher/students" element={<StudentProgressPage />} />
               <Route path="/teacher/students-manage" element={<StudentManagementPage />} />
               <Route path="/teacher/report" element={<TeacherAnalyticsPage />} />
+              <Route path="/teacher/digital-twin" element={<DigitalTwinPage />} />
             </Route>
 
             {/* ── Admin Protected Routes ───────────────────────────────────── */}
@@ -118,6 +123,8 @@ function AppLayout() {
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/documents" element={<RagUploadPage />} />
               <Route path="/rag-upload" element={<RagUploadPage />} />
+              <Route path="/digital-twin" element={<DigitalTwinChatPage />} />
+              <Route path="/digital-twin/chat/:twinId" element={<DigitalTwinChatPage />} />
             </Route>
 
             {/* ── Role redirect ───────────────────────────────────────────── */}
@@ -147,9 +154,11 @@ function RoleRedirect() {
 function App() {
   return (
     <AuthProvider>
-      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <AppLayout />
-      </Router>
+      <ToastProvider>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <AppLayout />
+        </Router>
+      </ToastProvider>
     </AuthProvider>
   );
 }

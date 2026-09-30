@@ -14,7 +14,7 @@ const hashToken = (token) => crypto.createHash('sha256').update(token).digest('h
 const generateToken = (id, role) => {
   return jwt.sign(
     { id, role },
-    process.env.JWT_SECRET || 'super_secret_uniassist_jwt_key_987654321',
+    process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
   );
 };
@@ -23,7 +23,7 @@ const generateToken = (id, role) => {
 const generateRefreshToken = (id) => {
   return jwt.sign(
     { id },
-    process.env.JWT_REFRESH_SECRET || 'super_secret_uniassist_refresh_key_123456789',
+    process.env.JWT_REFRESH_SECRET,
     { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
   );
 };
@@ -373,7 +373,7 @@ export const refreshAccessToken = async (req, res, next) => {
 
     const decoded = jwt.verify(
       refreshToken,
-      process.env.JWT_REFRESH_SECRET || 'super_secret_uniassist_refresh_key_123456789'
+      process.env.JWT_REFRESH_SECRET
     );
 
     const hashed = hashToken(refreshToken);

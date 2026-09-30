@@ -34,12 +34,9 @@ router.post('/bulk/import', authorizeRoles('faculty', 'teacher', 'admin', 'super
 
 // Single Marks Operations
 router.post('/', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), addMarks);
-router.post('/upload', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), addMarks);
 router.put('/:id', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), updateMarks);
 router.delete('/:id', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), deleteMarks);
 
-// Publish Marks
 router.patch('/:id/publish', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), publishMarks);
-router.post('/publish', authorizeRoles('faculty', 'teacher', 'admin', 'super_admin'), publishMarks);
 
 export default router;

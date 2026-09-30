@@ -27,7 +27,8 @@ import {
   Handshake,
   Award,
   Compass,
-  Shield
+  Shield,
+  Brain
 } from 'lucide-react';
 
 // ── Navigation configs per role ─────────────────────────────────────────────
@@ -46,7 +47,8 @@ const STUDENT_NAV = [
   { section: 'AI Tools', items: [
     { to: '/chat', icon: MessageSquare, label: 'AI Assistant' },
     { to: '/career-counselor', icon: Compass, label: 'Career Counselor' },
-    { to: '/academic-tools', icon: Sparkles, label: 'Study Tools' }
+    { to: '/academic-tools', icon: Sparkles, label: 'Study Tools' },
+    { to: '/digital-twin', icon: Brain, label: 'Teacher Twins' }
   ]},
   { section: 'Campus', items: [
     { to: '/career-hub', icon: Briefcase, label: 'Career Hub' },
@@ -75,6 +77,7 @@ const FACULTY_NAV = [
     { to: '/teacher/report', icon: TrendingUp, label: 'Class Reports' }
   ]},
   { section: 'AI Tools', items: [
+    { to: '/teacher/digital-twin', icon: Brain, label: 'My Digital Twin' },
     { to: '/teacher/question-paper', icon: Sparkles, label: 'Question Paper AI' },
     { to: '/chat', icon: MessageSquare, label: 'AI Assistant' },
     { to: '/documents', icon: Upload, label: 'Knowledge & Documents' }

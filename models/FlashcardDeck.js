@@ -42,6 +42,24 @@ const cardItemSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    // Media & Formula Support
+    frontImage: {
+      type: String,
+      default: null
+    },
+    backImage: {
+      type: String,
+      default: null
+    },
+    latexFormula: {
+      type: String,
+      default: null
+    },
+    notes: {
+      type: String,
+      default: '',
+      trim: true
+    },
     reviewCount: {
       type: Number,
       default: 0
@@ -62,6 +80,10 @@ const cardItemSchema = new mongoose.Schema(
     easeFactor: {
       type: Number,
       default: 2.5
+    },
+    quality: {
+      type: Number,
+      default: 0 // Last SM-2 user quality rating (0-5)
     },
     nextReviewDate: {
       type: Date,
@@ -107,7 +129,8 @@ const flashcardDeckSchema = new mongoose.Schema(
         'recommendation',
         'remedial',
         'catch_up',
-        'saved_deck'
+        'saved_deck',
+        'community'
       ],
       required: true,
       index: true
@@ -116,6 +139,15 @@ const flashcardDeckSchema = new mongoose.Schema(
       type: String,
       default: 'General',
       index: true
+    },
+    subject: {
+      type: String,
+      default: 'General'
+    },
+    difficulty: {
+      type: String,
+      enum: ['Beginner', 'Intermediate', 'Advanced', 'Mixed'],
+      default: 'Mixed'
     },
     tags: {
       type: [String],
@@ -131,6 +163,25 @@ const flashcardDeckSchema = new mongoose.Schema(
       default: 0,
       min: 0,
       max: 100
+    },
+    // Shared / Public Community Deck Fields
+    isPublic: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    likes: {
+      type: Number,
+      default: 0
+    },
+    forkCount: {
+      type: Number,
+      default: 0
+    },
+    originalAuthor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
     }
   },
   {
@@ -139,6 +190,7 @@ const flashcardDeckSchema = new mongoose.Schema(
 );
 
 flashcardDeckSchema.index({ user: 1, sourceModule: 1 });
+flashcardDeckSchema.index({ isPublic: 1, category: 1 });
 
 const FlashcardDeck = mongoose.model('FlashcardDeck', flashcardDeckSchema);
 export default FlashcardDeck;

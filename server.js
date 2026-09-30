@@ -42,6 +42,8 @@ import flashcardRoutes from './routes/flashcardRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import examRoutes from './routes/examRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
+import digitalTwinRoutes from './routes/digitalTwinRoutes.js';
+import autoGraderRoutes from './routes/autoGraderRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -168,6 +170,8 @@ app.use('/api/v1/flashcards', flashcardRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/exams', examRoutes);
 app.use('/api/v1/search', searchRoutes);
+app.use('/api/v1/digital-twin', digitalTwinRoutes);
+app.use('/api/v1/auto-grader', autoGraderRoutes);
 
 // Serve static assets from the React build if present
 app.use(express.static(distPath));

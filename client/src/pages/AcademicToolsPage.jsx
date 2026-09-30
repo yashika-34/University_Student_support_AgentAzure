@@ -110,11 +110,7 @@ const AcademicToolsPage = () => {
   const [syllabusModalOpen, setSyllabusModalOpen] = useState(false);
 
   /* ── 1. Attendance Predictor State ──────────────────────────────── */
-  const [courses, setCourses] = useState([
-    { courseCode: 'CS-301', courseName: 'Algorithms', totalClasses: 24, attendedClasses: 21, percentage: 87.5 },
-    { courseCode: 'CS-305', courseName: 'Cloud Computing', totalClasses: 18, attendedClasses: 13, percentage: 72.2 },
-    { courseCode: 'CS-309', courseName: 'Artificial Intelligence', totalClasses: 20, attendedClasses: 19, percentage: 95.0 }
-  ]);
+  const [courses, setCourses] = useState([]);
   const [selectedCourseCode, setSelectedCourseCode] = useState('');
   const [hypotheticalAction, setHypotheticalAction] = useState('attend');
   const [classCount, setClassCount] = useState(3);
@@ -127,36 +123,49 @@ const AcademicToolsPage = () => {
         if (res.data?.overallSummary?.length > 0) {
           setCourses(res.data.overallSummary);
           setSelectedCourseCode(res.data.overallSummary[0].courseCode);
-        } else {
-          setSelectedCourseCode('CS-301');
         }
       } catch {
-        setSelectedCourseCode('CS-301');
+        // Leave courses as empty array — do not show fake data
       }
     };
     fetchAttendance();
   }, []);
 
-  const activeCourse = courses.find((c) => c.courseCode === selectedCourseCode) || courses[0] || { totalClasses: 20, attendedClasses: 16, percentage: 80, courseCode: '' };
+  const activeCourse = courses.find((c) => c.courseCode === selectedCourseCode) || courses[0] || { totalClasses: 0, attendedClasses: 0, percentage: 0, courseCode: '' };
   const newTotal = activeCourse.totalClasses + classCount;
   const newAttended = hypotheticalAction === 'attend' ? activeCourse.attendedClasses + classCount : activeCourse.attendedClasses;
-  const projectedAttendance = ((newAttended / newTotal) * 100).toFixed(1);
+  const projectedAttendance = newTotal > 0 ? ((newAttended / newTotal) * 100).toFixed(1) : '0.0';
   const maxSafeAbsences = Math.max(0, Math.floor((activeCourse.attendedClasses / (targetCutoff / 100)) - activeCourse.totalClasses));
   const neededConsecutive = activeCourse.percentage < targetCutoff
     ? Math.max(0, Math.ceil(((targetCutoff / 100) * activeCourse.totalClasses - activeCourse.attendedClasses) / (1 - (targetCutoff / 100))))
     : 0;
 
   /* ── 2. SGPA & CGPA Predictor State ─────────────────────────────── */
-  const [gradeInputs, setGradeInputs] = useState([
-    { code: 'CS-301', name: 'Algorithms', credits: 4, expectedGrade: 'A' },
-    { code: 'CS-305', name: 'Cloud Computing', credits: 3, expectedGrade: 'B+' },
-    { code: 'CS-309', name: 'Artificial Intelligence', credits: 4, expectedGrade: 'A+' }
-  ]);
+  const [gradeInputs, setGradeInputs] = useState([]);
+  const [studentCgpa, setStudentCgpa] = useState(0);
+  const [completedCredits, setCompletedCredits] = useState(0);
   const gradeScale = { 'A+': 10.0, 'A': 9.0, 'A-': 8.5, 'B+': 8.0, 'B': 7.0, 'B-': 6.5, 'C+': 6.0, 'C': 5.0, 'D': 4.0, 'F': 0.0 };
   const totalSemCredits = gradeInputs.reduce((sum, c) => sum + c.credits, 0);
   const totalGradePoints = gradeInputs.reduce((sum, c) => sum + c.credits * (gradeScale[c.expectedGrade] || 8.0), 0);
-  const predictedSGPA = (totalGradePoints / totalSemCredits).toFixed(2);
-  const projectedCGPA = (((8.65 * 74) + totalGradePoints) / (74 + totalSemCredits)).toFixed(2);
+  const predictedSGPA = totalSemCredits > 0 ? (totalGradePoints / totalSemCredits).toFixed(2) : '0.00';
+  const projectedCGPA = (completedCredits + totalSemCredits) > 0
+    ? (((studentCgpa * completedCredits) + totalGradePoints) / (completedCredits + totalSemCredits)).toFixed(2)
+    : '0.00';
+
+  useEffect(() => {
+    const fetchMarksForGradePredictor = async () => {
+      try {
+        const res = await api.get('/students/me/academic-summary');
+        if (res.data?.summary) {
+          setStudentCgpa(res.data.summary.cgpa || 0);
+          setCompletedCredits(res.data.summary.completedCredits || 0);
+        }
+      } catch {
+        // leave at 0 — do not inject fake values
+      }
+    };
+    fetchMarksForGradePredictor();
+  }, []);
 
   /* ── 3. Study Planner State ─────────────────────────────────────── */
   const [studyPlanSlots, setStudyPlanSlots] = useState([]);
@@ -166,21 +175,10 @@ const AcademicToolsPage = () => {
         const res = await api.get('/academic/study-plan');
         if (res.data?.data?.schedule?.length > 0) {
           setStudyPlanSlots(res.data.data.schedule);
-        } else {
-          setStudyPlanSlots([
-            { id: 'sp-1', day: 'Monday', time: '16:00 - 18:00', topic: 'Review Dynamic Programming & Graph Search', courseCode: 'CS-301', isCompleted: false },
-            { id: 'sp-2', day: 'Tuesday', time: '17:00 - 19:00', topic: 'Deploy Docker container to Azure App Service', courseCode: 'CS-305', isCompleted: false },
-            { id: 'sp-3', day: 'Wednesday', time: '15:00 - 17:00', topic: 'Train Convolutional Neural Network on PyTorch', courseCode: 'CS-309', isCompleted: false },
-            { id: 'sp-4', day: 'Thursday', time: '18:00 - 20:00', topic: 'Solve LeetCode Medium algorithms (Graphs & Heaps)', courseCode: 'CS-301', isCompleted: false },
-            { id: 'sp-5', day: 'Friday', time: '16:00 - 17:30', topic: 'Kubernetes Pod Networking lab exercise', courseCode: 'CS-305', isCompleted: false }
-          ]);
         }
+        // If no study plan, keep empty — do not show fake CS-301 slots
       } catch {
-        setStudyPlanSlots([
-          { id: 'sp-1', day: 'Monday', time: '16:00 - 18:00', topic: 'Review Dynamic Programming & Graph Search', courseCode: 'CS-301', isCompleted: false },
-          { id: 'sp-2', day: 'Tuesday', time: '17:00 - 19:00', topic: 'Deploy Docker container to Azure App Service', courseCode: 'CS-305', isCompleted: false },
-          { id: 'sp-3', day: 'Wednesday', time: '15:00 - 17:00', topic: 'Train Convolutional Neural Network on PyTorch', courseCode: 'CS-309', isCompleted: false }
-        ]);
+        // keep empty array on error
       }
     };
     fetchStudyPlan();

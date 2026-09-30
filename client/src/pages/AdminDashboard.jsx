@@ -4,8 +4,11 @@ import {
   Users, Shield, Activity, FileText, Trash2, ToggleLeft, ToggleRight,
   AlertTriangle, CheckCircle, Clock, Search, Filter, RefreshCw, Eye,
   TrendingUp, Database, Cpu, Server, Lock, UserCheck, UserX, ChevronDown,
-  BarChart3, Loader2, X, Settings
+  BarChart3, Loader2, X, Settings, Inbox
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext.jsx';
+import { SkeletonStatGrid, SkeletonTable, SkeletonCard } from '../components/common/Skeleton.jsx';
+import EmptyState from '../components/common/EmptyState.jsx';
 
 /* ─────────────── Helpers ─────────────── */
 const ROLE_COLORS = {
@@ -85,6 +88,7 @@ const SectionHeader = ({ icon: Icon, title, count, children }) => (
    ADMIN DASHBOARD
 ═══════════════════════════════════════════════════════════ */
 const AdminDashboard = () => {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
@@ -163,8 +167,13 @@ const AdminDashboard = () => {
   useEffect(() => { if (activeTab === 'ai') fetchAI(); }, [activeTab, fetchAI]);
 
   /* ── Actions ── */
-  const showMsg = (msg) => {
+  const showMsg = (msg, isError = false) => {
     setActionMsg(msg);
+    if (isError) {
+      toast.error(msg, 'Admin Action');
+    } else {
+      toast.success(msg, 'Admin Action');
+    }
     setTimeout(() => setActionMsg(''), 3000);
   };
 
@@ -175,7 +184,7 @@ const AdminDashboard = () => {
       setUsers((prev) => prev.map((u) => u._id === user._id ? { ...u, isActive: newStatus } : u));
       showMsg(`User ${newStatus ? 'activated' : 'deactivated'} successfully.`);
     } catch {
-      showMsg('Action failed. Please try again.');
+      showMsg('Action failed. Please try again.', true);
     }
   };
 
@@ -185,7 +194,7 @@ const AdminDashboard = () => {
       setUsers((prev) => prev.map((u) => u._id === userId ? { ...u, role: newRole } : u));
       showMsg('Role updated successfully.');
     } catch {
-      showMsg('Role change failed.');
+      showMsg('Role change failed.', true);
     }
   };
 
@@ -196,7 +205,7 @@ const AdminDashboard = () => {
       setUsers((prev) => prev.filter((u) => u._id !== confirmDelete._id));
       showMsg('User deleted permanently.');
     } catch {
-      showMsg('Delete failed.');
+      showMsg('Delete failed.', true);
     } finally {
       setConfirmDelete(null);
     }

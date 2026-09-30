@@ -10,6 +10,9 @@ import {
   Loader2,
   AlertTriangle
 } from 'lucide-react';
+import { SkeletonStatGrid, SkeletonChart, SkeletonCard } from '../components/common/Skeleton.jsx';
+import MetricCard from '../components/common/MetricCard.jsx';
+import PageHeader from '../components/common/PageHeader.jsx';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend, ReferenceLine
 } from 'recharts';
@@ -35,9 +38,13 @@ const AnalyticsPage = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
-        <Loader2 size={36} className="animate-spin" color="var(--primary)" />
-        <p style={{ color: 'var(--text-secondary)' }}>Calculating multi-semester academic analytics from MongoDB...</p>
+      <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <SkeletonCard lines={2} />
+        <SkeletonStatGrid count={4} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem' }}>
+          <SkeletonChart height={280} />
+          <SkeletonChart height={280} />
+        </div>
       </div>
     );
   }
@@ -70,51 +77,49 @@ const AnalyticsPage = () => {
 
       {/* Overview Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Cumulative GPA</span>
-            <Award size={16} color="var(--primary)" />
-          </div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800 }}>{student.cgpa}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.2rem' }}>
-            Top 10% in {student.department}
-          </div>
-        </div>
+        <MetricCard
+          icon={Award}
+          iconColor="var(--primary)"
+          iconBg="rgba(59, 130, 246, 0.12)"
+          label="Cumulative GPA"
+          value={student.cgpa}
+          subtext={`Top 10% in ${student.department}`}
+          trend="8.65 / 10.0"
+          trendType="positive"
+        />
 
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Aggregate Attendance</span>
-            <BarChart2 size={16} color="var(--accent-purple)" />
-          </div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800, color: (analytics?.overallAttendance || 85) >= 75 ? 'var(--text-primary)' : 'var(--danger)' }}>
-            {analytics?.overallAttendance || 85}%
-          </div>
-          <div style={{ fontSize: '0.75rem', color: analytics?.hasLowAttendance ? 'var(--danger)' : 'var(--success)', marginTop: '0.2rem' }}>
-            {analytics?.hasLowAttendance ? '1 Course Below 75% Cutoff' : 'All Courses Above Cutoff'}
-          </div>
-        </div>
+        <MetricCard
+          icon={BarChart2}
+          iconColor="var(--accent-purple)"
+          iconBg="rgba(139, 92, 246, 0.12)"
+          label="Aggregate Attendance"
+          value={`${analytics?.overallAttendance || 85}%`}
+          subtext={analytics?.hasLowAttendance ? '1 Course Below 75% Cutoff' : 'All Courses Above Cutoff'}
+          trendType={(analytics?.overallAttendance || 85) >= 75 ? 'positive' : 'negative'}
+          trend={(analytics?.overallAttendance || 85) >= 75 ? 'Good Standing' : 'Risk of Debarment'}
+        />
 
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Earned Credits</span>
-            <Clock size={16} color="var(--accent-cyan)" />
-          </div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800 }}>{student.completedCredits} / 120</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-            {Math.round(((student.completedCredits || 74) / 120) * 100)}% Degree Completion
-          </div>
-        </div>
+        <MetricCard
+          icon={Clock}
+          iconColor="var(--accent-cyan)"
+          iconBg="rgba(6, 182, 212, 0.12)"
+          label="Earned Credits"
+          value={`${student.completedCredits} / 120`}
+          subtext={`${Math.round(((student.completedCredits || 74) / 120) * 100)}% Degree Completion`}
+          trend="Sem 5 Regular"
+          trendType="neutral"
+        />
 
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Assignment Turnaround</span>
-            <CheckCircle2 size={16} color="var(--success)" />
-          </div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800 }}>{analytics?.assignmentTurnaround || 100}%</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.2rem' }}>
-            {analytics?.submittedAssignments || 1} of {analytics?.totalAssignments || 1} tasks submitted
-          </div>
-        </div>
+        <MetricCard
+          icon={CheckCircle2}
+          iconColor="var(--success)"
+          iconBg="rgba(16, 185, 129, 0.12)"
+          label="Assignment Turnaround"
+          value={`${analytics?.assignmentTurnaround || 100}%`}
+          subtext={`${analytics?.submittedAssignments || 1} of ${analytics?.totalAssignments || 1} tasks submitted`}
+          trend="100% On-Time"
+          trendType="positive"
+        />
       </div>
 
       {/* Main Charts Split */}

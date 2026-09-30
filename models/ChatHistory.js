@@ -84,6 +84,19 @@ const chatHistorySchema = new mongoose.Schema(
       type: String,
       default: null
     },
+    // Conversation Memory: condensed summary of earlier messages for long conversations
+    conversationSummary: {
+      type: String,
+      default: ''
+    },
+    // Track topics discussed for context-aware follow-ups
+    contextMetadata: {
+      topicsDiscussed: [{ type: String }],
+      toolsUsed: [{ type: String }],
+      lastIntent: { type: String, default: '' }
+    },
+    // AI-generated suggested follow-up questions
+    suggestedFollowUps: [{ type: String }],
     lastActiveAt: {
       type: Date,
       default: Date.now,

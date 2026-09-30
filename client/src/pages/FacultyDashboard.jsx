@@ -6,8 +6,12 @@ import ModalPortal from '../components/ModalPortal.jsx';
 import {
   Users, CheckSquare, AlertTriangle, BookOpen, Send, PlusCircle, FileCheck,
   BarChart3, Sparkles, TrendingUp, FileText, Upload, Loader2, Bell,
-  Plus, Check, X, UserPlus, Layers, Calendar, Award, ExternalLink, Search
+  Plus, Check, X, UserPlus, Layers, Calendar, Award, ExternalLink, Search, Inbox
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext.jsx';
+import { SkeletonStatGrid, SkeletonChart, SkeletonCard, SkeletonTable } from '../components/common/Skeleton.jsx';
+import EmptyState from '../components/common/EmptyState.jsx';
+import MetricCard from '../components/common/MetricCard.jsx';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie
@@ -17,6 +21,7 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'
 
 const FacultyDashboard = () => {
   const { user } = useAuth();
+  const toast = useToast();
   const [dashboardData, setDashboardData] = useState(null);
   const [students, setStudents] = useState([]);
   const [analytics, setAnalytics] = useState(null);
@@ -269,9 +274,13 @@ const FacultyDashboard = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
-        <Loader2 size={36} className="animate-spin" color="var(--primary)" />
-        <p style={{ color: 'var(--text-secondary)' }}>Loading faculty dashboard from MongoDB...</p>
+      <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <SkeletonCard lines={2} />
+        <SkeletonStatGrid count={4} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem' }}>
+          <SkeletonChart height={280} />
+          <SkeletonTable rows={4} cols={3} />
+        </div>
       </div>
     );
   }

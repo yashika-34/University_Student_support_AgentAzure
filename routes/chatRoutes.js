@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   sendMessage,
+  streamMessage,
   getUserSessions,
   getSessionMessages,
   escalateSession,
@@ -15,6 +16,7 @@ router.get('/azure-status', getAzureStatus);
 
 // Send message to AI Agent (supports both logged-in students & guests)
 router.post('/message', optionalAuth, sendMessage);
+router.post('/stream', optionalAuth, streamMessage);
 
 // Protected session history endpoints
 router.get('/sessions', verifyToken, getUserSessions);

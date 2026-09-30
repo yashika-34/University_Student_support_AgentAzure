@@ -14,9 +14,14 @@ import {
   X,
   Users
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext.jsx';
+import { SkeletonStatGrid, SkeletonTable, SkeletonCard } from '../components/common/Skeleton.jsx';
+import EmptyState from '../components/common/EmptyState.jsx';
+import PageHeader from '../components/common/PageHeader.jsx';
 
 const AttendancePage = () => {
   const { role } = useAuth();
+  const toast = useToast();
   const isTeacher = role === 'faculty' || role === 'teacher';
   const [courses, setCourses] = useState([]);
   const [selectedCourseCode, setSelectedCourseCode] = useState('');
@@ -147,10 +152,15 @@ const AttendancePage = () => {
       });
 
       setBatchSaved(true);
-      setSaveMessage(`Successfully saved ${res.data?.count || roster.length} attendance records to database.`);
+      setBatchSaved(true);
+      const msg = `Successfully saved ${res.data?.count || roster.length} attendance records to database.`;
+      setSaveMessage(msg);
+      toast.success(msg, 'Attendance Recorded');
       setTimeout(() => setBatchSaved(false), 4000);
     } catch (err) {
-      setSaveMessage(err.response?.data?.message || 'Failed to submit batch attendance.');
+      const errMsg = err.response?.data?.message || 'Failed to submit batch attendance.';
+      setSaveMessage(errMsg);
+      toast.error(errMsg, 'Submission Failed');
     } finally {
       setSaveLoading(false);
     }
@@ -158,9 +168,10 @@ const AttendancePage = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
-        <Loader2 size={36} className="animate-spin" color="var(--primary)" />
-        <p style={{ color: 'var(--text-secondary)' }}>Loading attendance details from database...</p>
+      <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <SkeletonCard lines={2} />
+        <SkeletonStatGrid count={3} />
+        <SkeletonTable rows={5} cols={4} />
       </div>
     );
   }

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import { AzureOpenAI } from 'openai';
 import FlashcardDeck from '../models/FlashcardDeck.js';
 import FlashcardProgress from '../models/FlashcardProgress.js';
@@ -9,23 +10,24 @@ import { getEffectiveAzureConfig } from '../services/azureAiService.js';
 
 /**
  * SuperMemo SM-2 Spaced Repetition Algorithm
- * @param {number} quality - Rating (0: Complete blackout, 3: Pass with difficulty, 4: Good, 5: Perfect)
+ * @param {number} quality - Rating (0: Blackout, 1: Wrong, 2: Hard, 3: Pass, 4: Good, 5: Perfect)
  * @param {number} repetitions - Consecutive successful recall reviews
  * @param {number} interval - Current review interval in days
  * @param {number} easeFactor - Current ease factor (minimum 1.3)
  */
 export const calculateSM2 = (quality = 4, repetitions = 0, interval = 1, easeFactor = 2.5) => {
+  const q = Math.max(0, Math.min(5, Number(quality)));
   let nextRepetitions = repetitions;
   let nextInterval = interval;
   let nextEaseFactor = easeFactor;
 
-  if (quality >= 3) {
+  if (q >= 3) {
     if (nextRepetitions === 0) {
       nextInterval = 1;
     } else if (nextRepetitions === 1) {
       nextInterval = 6;
     } else {
-      nextInterval = Math.round(interval * nextEaseFactor);
+      nextInterval = Math.max(1, Math.round(interval * nextEaseFactor));
     }
     nextRepetitions += 1;
   } else {
@@ -33,7 +35,7 @@ export const calculateSM2 = (quality = 4, repetitions = 0, interval = 1, easeFac
     nextInterval = 1;
   }
 
-  nextEaseFactor = nextEaseFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+  nextEaseFactor = nextEaseFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
   if (nextEaseFactor < 1.3) {
     nextEaseFactor = 1.3;
   }
@@ -42,6 +44,7 @@ export const calculateSM2 = (quality = 4, repetitions = 0, interval = 1, easeFac
   nextReviewDate.setDate(nextReviewDate.getDate() + nextInterval);
 
   return {
+    quality: q,
     repetitions: nextRepetitions,
     interval: nextInterval,
     easeFactor: Number(nextEaseFactor.toFixed(2)),
@@ -50,9 +53,9 @@ export const calculateSM2 = (quality = 4, repetitions = 0, interval = 1, easeFac
 };
 
 /**
- * Helper to update or initialize user's FlashcardProgress and daily streak
+ * Helper to update or initialize user's FlashcardProgress, XP, and daily streak
  */
-const trackProgressUpdate = async (userId, { isKnown, needsRevision, isBookmarked, card, deckId }) => {
+const trackProgressUpdate = async (userId, { isKnown, needsRevision, isBookmarked, card, deckId, quality = 4 }) => {
   if (!userId) return null;
   const today = new Date().toISOString().split('T')[0];
 
@@ -61,10 +64,15 @@ const trackProgressUpdate = async (userId, { isKnown, needsRevision, isBookmarke
     progress = new FlashcardProgress({
       userId,
       dailyStreak: 1,
+      longestStreak: 1,
       lastActiveDate: today,
       totalReviewed: 0,
       totalKnown: 0,
       totalNeedsRevision: 0,
+      totalXP: 0,
+      level: 1,
+      badges: [],
+      reviewHeatmap: [],
       weakTopics: [],
       bookmarkedCards: []
     });
@@ -79,10 +87,17 @@ const trackProgressUpdate = async (userId, { isKnown, needsRevision, isBookmarke
 
     if (diffDays === 1) {
       progress.dailyStreak += 1;
+      if (progress.dailyStreak > (progress.longestStreak || 0)) {
+        progress.longestStreak = progress.dailyStreak;
+      }
     } else if (diffDays > 1) {
       progress.dailyStreak = 1;
     }
+  } else {
+    progress.dailyStreak = 1;
+    progress.longestStreak = 1;
   }
+
   progress.lastActiveDate = today;
   progress.totalReviewed += 1;
 
@@ -95,6 +110,14 @@ const trackProgressUpdate = async (userId, { isKnown, needsRevision, isBookmarke
       progress.weakTopics.push(card.category);
     }
   }
+
+  // Calculate XP reward
+  let earnedXP = 10; // Base XP for review
+  if (quality >= 4 || isKnown) earnedXP += 10;
+  if (quality === 5) earnedXP += 5;
+  if (progress.dailyStreak >= 3) earnedXP += 5; // Streak bonus
+
+  progress.awardXP(earnedXP, 'Card review');
 
   // Bookmark management
   if (isBookmarked && card) {
@@ -134,7 +157,6 @@ export const generateFlashcards = async (req, res, next) => {
     } = req.body;
 
     const azureConfig = getEffectiveAzureConfig();
-
     let cards = [];
 
     if (azureConfig.isConfigured) {
@@ -183,7 +205,8 @@ Return a JSON object containing a "cards" array with exactly this structure:
       "back": "Accurate, comprehensive, and student-friendly Answer, Explanation, Formula, or Method",
       "category": "e.g., Technical, DSA, ATS, Formula, Behavioral, Core Concept, etc.",
       "difficulty": "Easy" | "Medium" | "Hard",
-      "tags": ["tag1", "tag2"]
+      "tags": ["tag1", "tag2"],
+      "latexFormula": "Optional LaTeX math string if applicable (e.g. \\sum_{i=1}^n x_i or E = mc^2)"
     }
   ]
 }
@@ -200,57 +223,61 @@ Return raw JSON only without markdown formatting.`;
           max_tokens: 2200
         });
 
-        let raw = response.choices[0]?.message?.content?.trim() || '{}';
-        if (raw.startsWith('```')) {
-          raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
-        }
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed.cards) && parsed.cards.length > 0) {
-          cards = parsed.cards.map((c) => ({
-            cardId: crypto.randomUUID(),
+        const parsed = JSON.parse(response.choices[0]?.message?.content?.trim() || '{}');
+        if (parsed.cards && Array.isArray(parsed.cards)) {
+          cards = parsed.cards.map((c, idx) => ({
+            cardId: `ai-${Date.now()}-${idx}`,
             front: c.front,
             back: c.back,
             category: c.category || 'General',
-            difficulty: ['Easy', 'Medium', 'Hard'].includes(c.difficulty) ? c.difficulty : 'Medium',
-            tags: Array.isArray(c.tags) ? c.tags : [],
+            difficulty: c.difficulty || 'Medium',
+            tags: c.tags || [],
+            latexFormula: c.latexFormula || null,
+            frontImage: null,
+            backImage: null,
+            notes: '',
             isKnown: false,
             needsRevision: false,
             isBookmarked: false,
-            reviewCount: 0
+            reviewCount: 0,
+            interval: 1,
+            repetitions: 0,
+            easeFactor: 2.5,
+            nextReviewDate: new Date()
           }));
         }
-      } catch (azureErr) {
-        console.warn('[Flashcard AI Engine] Azure OpenAI synthesis failed, using intelligent fallback:', azureErr.message);
+      } catch (err) {
+        console.warn('[Flashcard Azure Generation Error, falling back to smart templates]:', err.message);
       }
     }
 
-    // Dynamic resilient fallback generator if cards empty or offline
     if (cards.length === 0) {
-      cards = generateFallbackCards(sourceModule, type, title, context, count);
+      cards = generateLocalFallbackCards(sourceModule, type, title, context, count);
     }
 
+    // Optionally persist newly generated deck
     let savedDeck = null;
-    if (save && req.user) {
+    if (save && req.user?._id) {
       savedDeck = await FlashcardDeck.create({
         user: req.user._id,
         title,
-        description: `Smart AI-generated flashcards for ${sourceModule} (${type})`,
+        description: `AI Generated Deck from ${sourceModule} (${type})`,
         sourceModule,
-        category: cards[0]?.category || 'General',
-        tags: [sourceModule, type],
+        category: cards[0]?.category || 'Academic',
         cards,
-        metadata
+        metadata,
+        completionRate: 0
       });
     }
 
     res.status(200).json({
       success: true,
+      count: cards.length,
       data: {
-        deckId: savedDeck ? savedDeck._id : null,
         title,
         sourceModule,
         type,
-        count: cards.length,
+        savedDeckId: savedDeck?._id || null,
         cards
       }
     });
@@ -260,145 +287,68 @@ Return raw JSON only without markdown formatting.`;
 };
 
 /**
- * Intelligent domain-rich fallback cards generator
+ * High-quality fallback generator when Azure OpenAI is offline
  */
-function generateFallbackCards(sourceModule, type, title, context, count = 6) {
-  const contextStr = typeof context === 'string' ? context : JSON.stringify(context);
+function generateLocalFallbackCards(sourceModule, type, title, context, count = 8) {
   const cards = [];
+  const textContext = typeof context === 'object' ? JSON.stringify(context) : String(context || '');
 
-  if (sourceModule === 'job_matcher' || type.includes('role_interview') || type.includes('company_prep')) {
+  if (sourceModule === 'job_matcher' || sourceModule === 'resume_analyzer' || type.includes('ats')) {
     cards.push(
       {
-        cardId: crypto.randomUUID(),
-        front: `What core architectural principles should you emphasize for ${title || 'this role'}?`,
-        back: `Emphasize modularity, loose coupling, idempotency, horizontal scalability, and comprehensive observability (metrics, logs, traces). Connect theoretical principles to real projects.`,
-        category: 'Technical Architecture',
-        difficulty: 'Medium',
-        tags: ['Architecture', 'Interview']
-      },
-      {
-        cardId: crypto.randomUUID(),
-        front: `How do you handle latency optimization and database indexing in production?`,
-        back: `1. Query profiling via EXPLAIN ANALYZE\n2. Compound indexes for high-cardinality filters\n3. Redis/Memcached distributed caching\n4. Connection pooling and asynchronous non-blocking I/O.`,
-        category: 'Performance',
-        difficulty: 'Hard',
-        tags: ['Database', 'Optimization']
-      },
-      {
-        cardId: crypto.randomUUID(),
-        front: `STAR Method: Describe a technical deadlock or production issue you debugged.`,
-        back: `Situation: Incident during peak traffic.\nTask: Restore service SLA under 15 mins.\nAction: Inspected APM traces, identified unindexed query lock, deployed rollback/hotfix.\nResult: Restored 99.99% uptime and added regression automated tests.`,
-        category: 'Behavioral',
-        difficulty: 'Medium',
-        tags: ['STAR', 'Leadership']
-      },
-      {
-        cardId: crypto.randomUUID(),
-        front: `Key ATS Optimization: How to frame project achievements on your resume?`,
-        back: `Use the Google XYZ Formula: "Accomplished [X], as measured by [Y], by doing [Z]". Example: "Decreased API p99 latency by 45% (from 420ms to 230ms) by introducing Redis caching and connection pooling."`,
+        cardId: `fb-ats-1`,
+        front: 'What makes a strong, ATS-compliant bullet point on a software engineer resume?',
+        back: 'The Google XYZ Formula: "Accomplished [X] as measured by [Y], by doing [Z]". Include quantifiable metrics (percentages, latency, revenue), start with strong action verbs (Architected, Deployed, Spearheaded), and omit personal pronouns.',
         category: 'ATS & Resume',
         difficulty: 'Easy',
-        tags: ['ATS', 'Resume']
+        tags: ['Resume', 'ATS', 'Career']
       },
       {
-        cardId: crypto.randomUUID(),
-        front: `Cover Letter Pro Tip: The 3-Paragraph High Impact Structure`,
-        back: `P1: The Hook — Name the specific role and state your unique engineering value proposition.\nP2: The Proof — Highlight 2 measurable technical accomplishments matching their stack.\nP3: The Close — Express alignment with company mission and request an interview.`,
-        category: 'Cover Letter',
-        difficulty: 'Easy',
-        tags: ['Cover Letter', 'Career']
+        cardId: `fb-ats-2`,
+        front: 'Why should you avoid multi-column layouts, tables, and text boxes in ATS resumes?',
+        back: 'Older and standard parsing engines (Workday, Taleo, Greenhouse) read resumes in a linear top-down stream. Two-column grids or text boxes often cause content to be concatenated out-of-order or completely dropped by the parser.',
+        category: 'ATS & Resume',
+        difficulty: 'Medium',
+        tags: ['Resume', 'Formatting']
       }
     );
-  } else if (sourceModule === 'mock_interview' || type.includes('weak_areas') || type.includes('revise')) {
+  } else if (sourceModule === 'mock_interview' || type.includes('interview')) {
     cards.push(
       {
-        cardId: crypto.randomUUID(),
-        front: `Revise Concept: How to structure answers to ambiguous System Design questions?`,
-        back: `1. Scope & Requirements: Functional vs Non-Functional (Scale, Latency, Consistency)\n2. Back-of-the-envelope calculations (RPS, Storage)\n3. High-level Architecture (Client, Gateway, Services, DB)\n4. Deep dive into Bottlenecks & Trade-offs (CAP theorem, Cache invalidation).`,
+        cardId: `fb-int-1`,
+        front: 'What is the STAR Method for behavioral interview questions?',
+        back: 'Situation: Set the scene and context.\nTask: Explain the responsibility or problem to solve.\nAction: Detail the specific steps YOU took (technologies, leadership, decisions).\nResult: Quantifiable outcome, business impact, and key learning.',
+        category: 'Behavioral Interview',
+        difficulty: 'Easy',
+        tags: ['STAR', 'Interview']
+      },
+      {
+        cardId: `fb-int-2`,
+        front: 'System Design: What is the CAP Theorem and what trade-offs does it mandate?',
+        back: 'Consistency: Every read receives the most recent write or an error.\nAvailability: Every request receives a non-error response without guarantee of most recent data.\nPartition Tolerance: System continues despite network drops.\n\nIn a distributed network with partitions (P), you must choose between CP or AP.',
         category: 'System Design',
         difficulty: 'Hard',
-        tags: ['System Design', 'Mock Interview']
-      },
-      {
-        cardId: crypto.randomUUID(),
-        front: `Key Interview Improvement: Eliminating hesitation and filler words`,
-        back: `Use structured pauses. Say: "Let me break that down into three key aspects..." This gives you 5 seconds to organize your thoughts and projects executive confidence.`,
-        category: 'Communication',
-        difficulty: 'Easy',
-        tags: ['Interview Prep', 'Communication']
-      },
-      {
-        cardId: crypto.randomUUID(),
-        front: `Core DSA Pattern: When to choose Two Pointers vs Sliding Window?`,
-        back: `Two Pointers: Ideal for sorted arrays, palindrome checking, or finding pairs with target sum.\nSliding Window: Ideal for contiguous subarrays/substrings where you maintain a running window condition (e.g., maximum sum of size K).`,
-        category: 'DSA',
-        difficulty: 'Medium',
-        tags: ['Algorithms', 'DSA']
-      }
-    );
-  } else if (sourceModule === 'chatbot' || type.includes('formula') || type.includes('concept')) {
-    cards.push(
-      {
-        cardId: crypto.randomUUID(),
-        front: `Key Academic Definition: ${title.slice(0, 50)}`,
-        back: `Core Concept: ${contextStr.slice(0, 180)}...\n\nKey Takeaway: Always relate the theoretical rule to practical problem-solving in exams.`,
-        category: 'Definitions',
-        difficulty: 'Easy',
-        tags: ['Revision', 'Concept']
-      },
-      {
-        cardId: crypto.randomUUID(),
-        front: `University Examination Rule: Minimum Safe Attendance`,
-        back: `Threshold: 75% minimum aggregate attendance required across all subjects to qualify for hall tickets. Attendance between 65-74% requires medical condonation approval. Below 65% is strictly debarred.`,
-        category: 'University Policy',
-        difficulty: 'Easy',
-        tags: ['Attendance', 'Policy']
-      }
-    );
-  } else if (sourceModule === 'teacher_paper' || sourceModule === 'syllabus' || type.includes('chapter') || type.includes('unit')) {
-    cards.push(
-      {
-        cardId: crypto.randomUUID(),
-        front: `Chapter / Unit Key Concept: ${title.slice(0, 50)}`,
-        back: `Core Syllabus Principle: High-priority topic for semester examinations. Ensure thorough understanding of definitions, proof derivations, and practical edge-case applications.`,
-        category: 'Chapter Concepts',
-        difficulty: 'Medium',
-        tags: ['Syllabus', 'Core']
-      },
-      {
-        cardId: crypto.randomUUID(),
-        front: `Exam Revision: Frequently Asked Question Pattern for ${title.slice(0, 40)}`,
-        back: `1. Define the fundamental model and architecture\n2. Provide step-by-step mathematical or algorithmic derivation\n3. Compare time/space complexity tradeoffs\n4. Illustrate with a concrete diagram/schema.`,
-        category: 'Exam Revision',
-        difficulty: 'Hard',
-        tags: ['Exam Prep', 'Important']
-      },
-      {
-        cardId: crypto.randomUUID(),
-        front: `Unit-Wise Quick Revision: Important Theorems & Axioms`,
-        back: `Review key lemmas, boundary conditions, and invariant properties before taking the paper. Memorize formula proofs and standardized notation.`,
-        category: 'Unit Revision',
-        difficulty: 'Medium',
-        tags: ['Unit Wise', 'Formulas']
+        tags: ['System Design', 'Architecture'],
+        latexFormula: '\\text{Consistency} \\land \\text{Availability} \\implies \\text{No Network Partition}'
       }
     );
   } else {
     cards.push(
       {
-        cardId: crypto.randomUUID(),
-        front: `Core Learning Milestone: ${title}`,
-        back: `Focus on fundamentals, verify through hands-on practice, and test recall with active spaced repetition.`,
-        category: 'Core Concepts',
+        cardId: `fb-gen-1`,
+        front: `Core Principle: What is the foundational concept behind ${title || 'this coursework'}?`,
+        back: `This module emphasizes rigorous theoretical grounding, boundary condition verification, and scalable design patterns. Review lecture derivations and syllabus notes to reinforce mental models.`,
+        category: 'Foundations',
         difficulty: 'Medium',
-        tags: ['Learning', 'Revision']
+        tags: ['Theory', 'Foundations']
       },
       {
-        cardId: crypto.randomUUID(),
-        front: `Important Formula / Rule for Examination Success`,
-        back: `Break complex solutions into: 1. Given Conditions, 2. Applicable Formula / Algorithm, 3. Step-by-step Derivation, 4. Edge Cases & Complexity.`,
-        category: 'Exam Revision',
-        difficulty: 'Medium',
-        tags: ['Exam', 'Strategy']
+        cardId: `fb-gen-2`,
+        front: 'Active Recall vs Passive Reading: What does cognitive science prove?',
+        back: 'Testing memory recall without looking at the answer triggers neural reconsolidation, resulting in up to 50% higher long-term retention compared to passively re-reading textbooks or highlighting notes.',
+        category: 'Study Strategy',
+        difficulty: 'Easy',
+        tags: ['Memory', 'Retention']
       }
     );
   }
@@ -412,7 +362,18 @@ function generateFallbackCards(sourceModule, type, title, context, count = 6) {
  */
 export const saveDeck = async (req, res, next) => {
   try {
-    const { title, description, sourceModule, category, cards, metadata } = req.body;
+    const {
+      title,
+      description,
+      sourceModule = 'custom',
+      category = 'General',
+      subject = 'General',
+      difficulty = 'Mixed',
+      isPublic = false,
+      tags = [],
+      cards = [],
+      metadata = {}
+    } = req.body;
     const userId = req.user?._id || null;
 
     if (!title || !Array.isArray(cards) || cards.length === 0) {
@@ -426,10 +387,19 @@ export const saveDeck = async (req, res, next) => {
       category: c.category || category || 'General',
       difficulty: c.difficulty || 'Medium',
       tags: c.tags || [],
+      frontImage: c.frontImage || null,
+      backImage: c.backImage || null,
+      latexFormula: c.latexFormula || null,
+      notes: c.notes || '',
       isKnown: Boolean(c.isKnown),
       needsRevision: Boolean(c.needsRevision),
       isBookmarked: Boolean(c.isBookmarked),
-      reviewCount: c.reviewCount || 0
+      reviewCount: c.reviewCount || 0,
+      interval: c.interval || 1,
+      repetitions: c.repetitions || 0,
+      easeFactor: c.easeFactor || 2.5,
+      quality: c.quality || 0,
+      nextReviewDate: c.nextReviewDate ? new Date(c.nextReviewDate) : new Date()
     }));
 
     const knownCount = formattedCards.filter((c) => c.isKnown).length;
@@ -439,16 +409,65 @@ export const saveDeck = async (req, res, next) => {
       user: userId,
       title,
       description: description || '',
-      sourceModule: sourceModule || 'custom',
-      category: category || 'General',
+      sourceModule,
+      category,
+      subject,
+      difficulty,
+      isPublic: Boolean(isPublic),
+      tags,
       cards: formattedCards,
-      metadata: metadata || {},
+      metadata,
       completionRate
     });
+
+    // If deck creator is logged in, award creator XP badge
+    if (userId) {
+      const progress = await FlashcardProgress.findOne({ userId });
+      if (progress) {
+        progress.awardXP(25, 'Created Deck');
+        await progress.save();
+      }
+    }
 
     res.status(201).json({
       success: true,
       message: 'Flashcard deck saved successfully.',
+      data: deck
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc Update deck metadata (title, description, tags, isPublic)
+ * @route PUT /api/v1/flashcards/decks/:id
+ */
+export const updateDeck = async (req, res, next) => {
+  try {
+    const deck = await FlashcardDeck.findById(req.params.id);
+    if (!deck) {
+      return res.status(404).json({ success: false, message: 'Deck not found.' });
+    }
+
+    if (deck.user && req.user && String(deck.user) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to edit this deck.' });
+    }
+
+    const { title, description, category, subject, difficulty, tags, isPublic } = req.body;
+    if (title !== undefined) deck.title = title;
+    if (description !== undefined) deck.description = description;
+    if (category !== undefined) deck.category = category;
+    if (subject !== undefined) deck.subject = subject;
+    if (difficulty !== undefined) deck.difficulty = difficulty;
+    if (tags !== undefined) deck.tags = tags;
+    if (isPublic !== undefined) deck.isPublic = isPublic;
+
+    await deck.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Deck updated successfully.',
       data: deck
     });
   } catch (err) {
@@ -463,7 +482,7 @@ export const saveDeck = async (req, res, next) => {
 export const getMyDecks = async (req, res, next) => {
   try {
     const userId = req.user?._id;
-    const { sourceModule, category } = req.query;
+    const { sourceModule, category, search } = req.query;
 
     const filter = {};
     if (userId) {
@@ -471,6 +490,12 @@ export const getMyDecks = async (req, res, next) => {
     }
     if (sourceModule) filter.sourceModule = sourceModule;
     if (category) filter.category = category;
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
 
     const decks = await FlashcardDeck.find(filter).sort({ updatedAt: -1 }).limit(50);
 
@@ -490,7 +515,7 @@ export const getMyDecks = async (req, res, next) => {
  */
 export const getDeckById = async (req, res, next) => {
   try {
-    const deck = await FlashcardDeck.findById(req.params.id);
+    const deck = await FlashcardDeck.findById(req.params.id).populate('user', 'firstName lastName avatarUrl');
     if (!deck) {
       return res.status(404).json({ success: false, message: 'Flashcard deck not found.' });
     }
@@ -505,7 +530,179 @@ export const getDeckById = async (req, res, next) => {
 };
 
 /**
- * @desc Delete a deck
+ * @desc Add a manual card to an existing deck
+ * @route POST /api/v1/flashcards/decks/:id/cards
+ */
+export const addCardToDeck = async (req, res, next) => {
+  try {
+    const deck = await FlashcardDeck.findById(req.params.id);
+    if (!deck) {
+      return res.status(404).json({ success: false, message: 'Deck not found.' });
+    }
+
+    if (deck.user && req.user && String(deck.user) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to modify this deck.' });
+    }
+
+    const {
+      front,
+      back,
+      category = 'General',
+      difficulty = 'Medium',
+      tags = [],
+      frontImage = null,
+      backImage = null,
+      latexFormula = null,
+      notes = ''
+    } = req.body;
+
+    if (!front || !back) {
+      return res.status(400).json({ success: false, message: 'Card Front and Back are required.' });
+    }
+
+    const newCard = {
+      cardId: new mongoose.Types.ObjectId().toString(),
+      front,
+      back,
+      category,
+      difficulty,
+      tags,
+      frontImage,
+      backImage,
+      latexFormula,
+      notes,
+      isKnown: false,
+      needsRevision: false,
+      isBookmarked: false,
+      reviewCount: 0,
+      interval: 1,
+      repetitions: 0,
+      easeFactor: 2.5,
+      quality: 0,
+      nextReviewDate: new Date()
+    };
+
+    deck.cards.push(newCard);
+    const knownCount = deck.cards.filter((c) => c.isKnown).length;
+    deck.completionRate = Math.round((knownCount / deck.cards.length) * 100);
+
+    await deck.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Card added successfully.',
+      data: {
+        card: newCard,
+        totalCards: deck.cards.length
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc Update a manual card in a deck
+ * @route PUT /api/v1/flashcards/decks/:id/cards/:cardId
+ */
+export const updateCardInDeck = async (req, res, next) => {
+  try {
+    const deck = await FlashcardDeck.findById(req.params.id);
+    if (!deck) {
+      return res.status(404).json({ success: false, message: 'Deck not found.' });
+    }
+
+    if (deck.user && req.user && String(deck.user) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to edit this card.' });
+    }
+
+    const card = deck.cards.find((c) => c.cardId === req.params.cardId);
+    if (!card) {
+      return res.status(404).json({ success: false, message: 'Card not found in deck.' });
+    }
+
+    const {
+      front,
+      back,
+      category,
+      difficulty,
+      tags,
+      frontImage,
+      backImage,
+      latexFormula,
+      notes,
+      isKnown,
+      needsRevision,
+      isBookmarked
+    } = req.body;
+
+    if (front !== undefined) card.front = front;
+    if (back !== undefined) card.back = back;
+    if (category !== undefined) card.category = category;
+    if (difficulty !== undefined) card.difficulty = difficulty;
+    if (tags !== undefined) card.tags = tags;
+    if (frontImage !== undefined) card.frontImage = frontImage;
+    if (backImage !== undefined) card.backImage = backImage;
+    if (latexFormula !== undefined) card.latexFormula = latexFormula;
+    if (notes !== undefined) card.notes = notes;
+    if (isKnown !== undefined) card.isKnown = isKnown;
+    if (needsRevision !== undefined) card.needsRevision = needsRevision;
+    if (isBookmarked !== undefined) card.isBookmarked = isBookmarked;
+
+    const knownCount = deck.cards.filter((c) => c.isKnown).length;
+    deck.completionRate = Math.round((knownCount / deck.cards.length) * 100);
+
+    await deck.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Card updated successfully.',
+      data: card
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc Delete a card from a deck
+ * @route DELETE /api/v1/flashcards/decks/:id/cards/:cardId
+ */
+export const deleteCardFromDeck = async (req, res, next) => {
+  try {
+    const deck = await FlashcardDeck.findById(req.params.id);
+    if (!deck) {
+      return res.status(404).json({ success: false, message: 'Deck not found.' });
+    }
+
+    if (deck.user && req.user && String(deck.user) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete cards from this deck.' });
+    }
+
+    const initialCount = deck.cards.length;
+    deck.cards = deck.cards.filter((c) => c.cardId !== req.params.cardId);
+
+    if (deck.cards.length === initialCount) {
+      return res.status(404).json({ success: false, message: 'Card not found in deck.' });
+    }
+
+    const knownCount = deck.cards.filter((c) => c.isKnown).length;
+    deck.completionRate = deck.cards.length > 0 ? Math.round((knownCount / deck.cards.length) * 100) : 0;
+
+    await deck.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Card deleted successfully.',
+      data: { remainingCards: deck.cards.length }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc Delete an entire deck
  * @route DELETE /api/v1/flashcards/decks/:id
  */
 export const deleteDeck = async (req, res, next) => {
@@ -526,7 +723,7 @@ export const deleteDeck = async (req, res, next) => {
 };
 
 /**
- * @desc Update a single card status (Known / Needs Revision / Bookmark) & update progress/streak
+ * @desc Update a single card status (SM-2 rating, Known, Needs Revision, Bookmark) & update XP/streak
  * @route PUT /api/v1/flashcards/card-status
  */
 export const updateCardStatus = async (req, res, next) => {
@@ -548,7 +745,7 @@ export const updateCardStatus = async (req, res, next) => {
           deck.cards[cardIndex].lastReviewedAt = new Date();
 
           // Calculate SM-2 Spaced Repetition values
-          const rating = quality !== undefined ? Number(quality) : (isKnown ? 4 : needsRevision ? 2 : 3);
+          const rating = quality !== undefined ? Number(quality) : isKnown ? 4 : needsRevision ? 2 : 3;
           const sm2 = calculateSM2(
             rating,
             deck.cards[cardIndex].repetitions || 0,
@@ -556,6 +753,7 @@ export const updateCardStatus = async (req, res, next) => {
             deck.cards[cardIndex].easeFactor || 2.5
           );
 
+          deck.cards[cardIndex].quality = sm2.quality;
           deck.cards[cardIndex].repetitions = sm2.repetitions;
           deck.cards[cardIndex].interval = sm2.interval;
           deck.cards[cardIndex].easeFactor = sm2.easeFactor;
@@ -570,7 +768,7 @@ export const updateCardStatus = async (req, res, next) => {
       }
     }
 
-    // Update user's aggregate progress and streak
+    // Update user's aggregate progress, XP, badges, and streak
     let progress = null;
     if (userId) {
       progress = await trackProgressUpdate(userId, {
@@ -578,7 +776,8 @@ export const updateCardStatus = async (req, res, next) => {
         needsRevision,
         isBookmarked,
         card: targetCard || { cardId, category: 'General' },
-        deckId
+        deckId,
+        quality: quality !== undefined ? Number(quality) : isKnown ? 4 : 2
       });
     }
 
@@ -589,12 +788,24 @@ export const updateCardStatus = async (req, res, next) => {
         isKnown,
         needsRevision,
         isBookmarked,
+        sm2: targetCard
+          ? {
+              interval: targetCard.interval,
+              repetitions: targetCard.repetitions,
+              easeFactor: targetCard.easeFactor,
+              nextReviewDate: targetCard.nextReviewDate
+            }
+          : null,
         progress: progress
           ? {
               dailyStreak: progress.dailyStreak,
+              longestStreak: progress.longestStreak,
               totalReviewed: progress.totalReviewed,
               totalKnown: progress.totalKnown,
-              totalNeedsRevision: progress.totalNeedsRevision
+              totalNeedsRevision: progress.totalNeedsRevision,
+              totalXP: progress.totalXP,
+              level: progress.level,
+              badges: progress.badges
             }
           : null
       }
@@ -605,13 +816,200 @@ export const updateCardStatus = async (req, res, next) => {
 };
 
 /**
- * @desc Get user's flashcard progress, daily revision streak, and today's stats
+ * @desc Get deep analytics for a specific deck
+ * @route GET /api/v1/flashcards/decks/:id/analytics
+ */
+export const getDeckAnalytics = async (req, res, next) => {
+  try {
+    const deck = await FlashcardDeck.findById(req.params.id);
+    if (!deck) {
+      return res.status(404).json({ success: false, message: 'Deck not found.' });
+    }
+
+    const now = new Date();
+    const totalCards = deck.cards.length;
+    const masteredCount = deck.cards.filter((c) => c.isKnown || (c.repetitions || 0) >= 3).length;
+    const needsRevisionCount = deck.cards.filter((c) => c.needsRevision).length;
+    const bookmarkedCount = deck.cards.filter((c) => c.isBookmarked).length;
+    const dueCount = deck.cards.filter((c) => !c.nextReviewDate || new Date(c.nextReviewDate) <= now).length;
+
+    // SM-2 Stages
+    const stages = {
+      learning: deck.cards.filter((c) => (c.repetitions || 0) <= 1).length,
+      reviewing: deck.cards.filter((c) => (c.repetitions || 0) > 1 && (c.repetitions || 0) < 5).length,
+      mastered: deck.cards.filter((c) => (c.repetitions || 0) >= 5).length
+    };
+
+    // Average Ease Factor
+    const totalEase = deck.cards.reduce((acc, c) => acc + (c.easeFactor || 2.5), 0);
+    const avgEaseFactor = totalCards > 0 ? Number((totalEase / totalCards).toFixed(2)) : 2.5;
+
+    // Difficulty breakdown
+    const difficultyDistribution = {
+      Easy: deck.cards.filter((c) => c.difficulty === 'Easy').length,
+      Medium: deck.cards.filter((c) => c.difficulty === 'Medium').length,
+      Hard: deck.cards.filter((c) => c.difficulty === 'Hard').length
+    };
+
+    // Retention rate
+    const reviewedTotal = masteredCount + needsRevisionCount;
+    const retentionRate = reviewedTotal > 0 ? Math.round((masteredCount / reviewedTotal) * 100) : 100;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        deckId: deck._id,
+        title: deck.title,
+        category: deck.category,
+        totalCards,
+        masteredCount,
+        needsRevisionCount,
+        bookmarkedCount,
+        dueCount,
+        completionRate: deck.completionRate || 0,
+        retentionRate,
+        avgEaseFactor,
+        stages,
+        difficultyDistribution,
+        lastReviewedAt: deck.updatedAt
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc Get public/community shared decks
+ * @route GET /api/v1/flashcards/community
+ */
+export const getPublicCommunityDecks = async (req, res, next) => {
+  try {
+    const { category, search, difficulty, limit = 30 } = req.query;
+
+    const filter = { isPublic: true };
+    if (category && category !== 'All') filter.category = category;
+    if (difficulty && difficulty !== 'All') filter.difficulty = difficulty;
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const decks = await FlashcardDeck.find(filter)
+      .populate('user', 'firstName lastName avatarUrl')
+      .sort({ likes: -1, forkCount: -1, createdAt: -1 })
+      .limit(Number(limit));
+
+    res.status(200).json({
+      success: true,
+      count: decks.length,
+      data: decks
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc Fork / Clone a community deck into user's personal decks
+ * @route POST /api/v1/flashcards/decks/:id/fork
+ */
+export const forkPublicDeck = async (req, res, next) => {
+  try {
+    const originalDeck = await FlashcardDeck.findById(req.params.id);
+    if (!originalDeck) {
+      return res.status(404).json({ success: false, message: 'Original deck not found.' });
+    }
+
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required to fork decks.' });
+    }
+
+    // Reset card progress for the clone
+    const clonedCards = originalDeck.cards.map((c) => ({
+      cardId: crypto.randomUUID(),
+      front: c.front,
+      back: c.back,
+      category: c.category,
+      difficulty: c.difficulty,
+      tags: c.tags,
+      frontImage: c.frontImage || null,
+      backImage: c.backImage || null,
+      latexFormula: c.latexFormula || null,
+      notes: c.notes || '',
+      isKnown: false,
+      needsRevision: false,
+      isBookmarked: false,
+      reviewCount: 0,
+      interval: 1,
+      repetitions: 0,
+      easeFactor: 2.5,
+      quality: 0,
+      nextReviewDate: new Date()
+    }));
+
+    const forkedDeck = await FlashcardDeck.create({
+      user: userId,
+      title: `${originalDeck.title} (Forked)`,
+      description: originalDeck.description,
+      sourceModule: 'community',
+      category: originalDeck.category,
+      subject: originalDeck.subject,
+      difficulty: originalDeck.difficulty,
+      tags: originalDeck.tags,
+      cards: clonedCards,
+      isPublic: false,
+      originalAuthor: originalDeck.user
+    });
+
+    originalDeck.forkCount = (originalDeck.forkCount || 0) + 1;
+    await originalDeck.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Deck successfully cloned to your collection.',
+      data: forkedDeck
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc Like / Upvote a deck
+ * @route POST /api/v1/flashcards/decks/:id/like
+ */
+export const toggleLikeDeck = async (req, res, next) => {
+  try {
+    const deck = await FlashcardDeck.findById(req.params.id);
+    if (!deck) {
+      return res.status(404).json({ success: false, message: 'Deck not found.' });
+    }
+
+    deck.likes = (deck.likes || 0) + 1;
+    await deck.save();
+
+    res.status(200).json({
+      success: true,
+      data: { likes: deck.likes }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc Get user's flashcard progress, XP, badges, heatmap, and review stats
  * @route GET /api/v1/flashcards/stats
  */
 export const getUserFlashcardStats = async (req, res, next) => {
   try {
     const userId = req.user?._id;
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
 
     let progress = null;
     if (userId) {
@@ -620,36 +1018,111 @@ export const getUserFlashcardStats = async (req, res, next) => {
 
     if (!progress) {
       progress = {
-        dailyStreak: 3,
-        totalReviewed: 28,
-        totalKnown: 22,
-        totalNeedsRevision: 6,
-        weakTopics: ['Distributed Caching', 'STAR Method', 'Dynamic Programming'],
-        bookmarkedCards: []
+        dailyStreak: 0,
+        longestStreak: 0,
+        totalReviewed: 0,
+        totalKnown: 0,
+        totalNeedsRevision: 0,
+        totalXP: 0,
+        level: 1,
+        badges: [],
+        reviewHeatmap: [],
+        weakTopics: [],
+        bookmarkedCards: [],
+        dailyReminder: { enabled: true, reminderTime: '19:00', emailNotification: false }
       };
     }
 
     // Calculate completion percentage
     const total = (progress.totalKnown || 0) + (progress.totalNeedsRevision || 0);
-    const completionPercentage = total > 0 ? Math.round(((progress.totalKnown || 0) / total) * 100) : 78;
+    const completionPercentage = total > 0 ? Math.round(((progress.totalKnown || 0) / total) * 100) : 0;
 
     // Fetch user's recent decks
     const recentDecks = userId
-      ? await FlashcardDeck.find({ user: userId }).sort({ updatedAt: -1 }).limit(5)
+      ? await FlashcardDeck.find({ user: userId }).sort({ updatedAt: -1 }).limit(6)
       : [];
+
+    // Count real due cards
+    let dueTodayCount = 0;
+    if (userId) {
+      const allUserDecks = await FlashcardDeck.find({ user: userId });
+      allUserDecks.forEach((d) => {
+        d.cards.forEach((c) => {
+          if (!c.nextReviewDate || new Date(c.nextReviewDate) <= now) {
+            dueTodayCount += 1;
+          }
+        });
+      });
+    }
 
     res.status(200).json({
       success: true,
       data: {
-        dailyStreak: progress.dailyStreak || 1,
+        dailyStreak: progress.dailyStreak || 0,
+        longestStreak: progress.longestStreak || 0,
         totalReviewed: progress.totalReviewed || 0,
         totalKnown: progress.totalKnown || 0,
         totalNeedsRevision: progress.totalNeedsRevision || 0,
+        totalXP: progress.totalXP || 0,
+        level: progress.level || 1,
+        badges: progress.badges || [],
+        reviewHeatmap: progress.reviewHeatmap || [],
         completionPercentage,
         weakTopics: progress.weakTopics || [],
         bookmarkedCount: progress.bookmarkedCards ? progress.bookmarkedCards.length : 0,
+        dueTodayCount,
+        dailyReminder: progress.dailyReminder,
         recentDecks
       }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc Get & update review reminder settings
+ * @route GET /api/v1/flashcards/reminders
+ * @route PUT /api/v1/flashcards/reminders
+ */
+export const getReminderSettings = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) return res.status(401).json({ success: false, message: 'Authentication required' });
+
+    const progress = await FlashcardProgress.findOne({ userId });
+    res.status(200).json({
+      success: true,
+      data: progress?.dailyReminder || { enabled: true, reminderTime: '19:00', emailNotification: false }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateReminderSettings = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) return res.status(401).json({ success: false, message: 'Authentication required' });
+
+    const { enabled, reminderTime, emailNotification } = req.body;
+    let progress = await FlashcardProgress.findOne({ userId });
+    if (!progress) {
+      progress = new FlashcardProgress({ userId });
+    }
+
+    progress.dailyReminder = {
+      enabled: enabled !== undefined ? enabled : progress.dailyReminder?.enabled ?? true,
+      reminderTime: reminderTime || progress.dailyReminder?.reminderTime || '19:00',
+      emailNotification: emailNotification !== undefined ? emailNotification : progress.dailyReminder?.emailNotification ?? false
+    };
+
+    await progress.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Reminder preferences saved.',
+      data: progress.dailyReminder
     });
   } catch (err) {
     next(err);
@@ -744,7 +1217,7 @@ export const getDueTodayCards = async (req, res, next) => {
     const userId = req.user?._id;
     const now = new Date();
 
-    let dueCards = [];
+    const dueCards = [];
 
     if (userId) {
       const decks = await FlashcardDeck.find({ user: userId });
@@ -759,6 +1232,10 @@ export const getDueTodayCards = async (req, res, next) => {
               category: card.category,
               difficulty: card.difficulty,
               tags: card.tags,
+              frontImage: card.frontImage,
+              backImage: card.backImage,
+              latexFormula: card.latexFormula,
+              notes: card.notes,
               isKnown: card.isKnown,
               needsRevision: card.needsRevision,
               isBookmarked: card.isBookmarked,
@@ -766,6 +1243,7 @@ export const getDueTodayCards = async (req, res, next) => {
               interval: card.interval || 1,
               repetitions: card.repetitions || 0,
               easeFactor: card.easeFactor || 2.5,
+              quality: card.quality || 0,
               nextReviewDate: card.nextReviewDate,
               deckId: deck._id,
               deckTitle: deck.title,
@@ -774,56 +1252,6 @@ export const getDueTodayCards = async (req, res, next) => {
           }
         });
       });
-    }
-
-    // Default smart starter queue if no user cards due yet
-    if (dueCards.length === 0) {
-      dueCards = [
-        {
-          cardId: 'sm2-1',
-          front: 'Spaced Repetition: What is the Forgetting Curve and how does SM-2 counteract it?',
-          back: 'The Ebbinghaus Forgetting Curve shows memory decays exponentially after initial learning (~50% lost in 24h). The SM-2 algorithm spaces active recall reviews at increasing intervals (1d, 6d, 15d...) precisely before memory drops below the retrieval threshold.',
-          category: 'Learning Science',
-          difficulty: 'Medium',
-          interval: 1,
-          repetitions: 1,
-          easeFactor: 2.5,
-          nextReviewDate: new Date()
-        },
-        {
-          cardId: 'sm2-2',
-          front: 'System Design: What are the trade-offs of Write-Through vs Write-Back Caching?',
-          back: 'Write-Through: Data written to cache and DB simultaneously. High consistency and zero data loss on crash, but higher write latency.\nWrite-Back: Data written to cache first and flushed to DB asynchronously. Minimal write latency, but risks data loss if cache fails before sync.',
-          category: 'System Design',
-          difficulty: 'Hard',
-          interval: 2,
-          repetitions: 2,
-          easeFactor: 2.6,
-          nextReviewDate: new Date()
-        },
-        {
-          cardId: 'sm2-3',
-          front: 'STAR Interview Method: Name the 4 components and time allocation for a 2-minute answer.',
-          back: 'Situation (20s): Set the scene and technical stakes.\nTask (20s): Define your personal objective and constraints.\nAction (60s): Deep dive into technical execution and decisions.\nResult (20s): Quantifiable outcomes (e.g., latency dropped 45%).',
-          category: 'Interview Prep',
-          difficulty: 'Medium',
-          interval: 3,
-          repetitions: 2,
-          easeFactor: 2.5,
-          nextReviewDate: new Date()
-        },
-        {
-          cardId: 'sm2-4',
-          front: 'Dynamic Programming: What are the two essential properties of a DP problem?',
-          back: '1. Overlapping Subproblems: The problem can be broken down into subproblems which are reused several times.\n2. Optimal Substructure: An optimal solution to the problem contains within it optimal solutions to subproblems.',
-          category: 'Algorithms',
-          difficulty: 'Medium',
-          interval: 1,
-          repetitions: 0,
-          easeFactor: 2.5,
-          nextReviewDate: new Date()
-        }
-      ];
     }
 
     res.status(200).json({
@@ -864,4 +1292,3 @@ export const exportDeckToAnki = async (req, res, next) => {
     next(err);
   }
 };
-

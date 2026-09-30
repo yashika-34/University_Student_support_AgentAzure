@@ -4,8 +4,12 @@ import { marksAPI, courseAPI, teacherAPI } from '../services/api.js';
 import ModalPortal from '../components/ModalPortal.jsx';
 import {
   Award, BookOpen, TrendingUp, BarChart2, Filter,
-  PlusCircle, Save, Check, Loader2, AlertCircle, X, Search, Trash2
+  PlusCircle, Save, Check, Loader2, AlertCircle, X, Search, Trash2, Inbox
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext.jsx';
+import { SkeletonStatGrid, SkeletonChart, SkeletonCard, SkeletonTable } from '../components/common/Skeleton.jsx';
+import EmptyState from '../components/common/EmptyState.jsx';
+import MetricCard from '../components/common/MetricCard.jsx';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
@@ -27,20 +31,14 @@ const EXAM_TYPE_LABELS = {
   midterm: 'Mid Semester',
   final: 'Final Exam',
   quiz: 'Quiz',
-  practical: 'Practical Lab',
-  assignment: 'Assignment',
-  project: 'Project Evaluation'
+  practical: 'Practical Lab'
 };
 
 const MarksPage = () => {
-  const { role } = useAuth();
-  const isFaculty = role === 'faculty' || role === 'teacher';
-
+  const { user, role, isFaculty } = useAuth();
   const [marks, setMarks] = useState([]);
-  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // Filters
+  const [summary, setSummary] = useState(null);
   const [selectedSemester, setSelectedSemester] = useState('all');
   const [selectedCourseFilter, setSelectedCourseFilter] = useState('all');
   const [selectedExamType, setSelectedExamType] = useState('all');
@@ -280,9 +278,13 @@ const MarksPage = () => {
 
   if (loading && marks.length === 0) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
-        <Loader2 size={36} className="animate-spin" color="var(--primary)" />
-        <p style={{ color: 'var(--text-secondary)' }}>Loading examination grades from database...</p>
+      <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <SkeletonCard lines={2} />
+        <SkeletonStatGrid count={3} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+          <SkeletonChart height={260} />
+          <SkeletonTable rows={5} cols={4} />
+        </div>
       </div>
     );
   }

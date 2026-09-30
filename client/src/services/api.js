@@ -59,6 +59,7 @@ export const studentAPI = {
   getMyProfile: () => api.get('/students/me'),
   getAcademicSummary: () => api.get('/students/me/academic-summary'),
   getStudentAnalytics: () => api.get('/students/me/analytics'),
+  getAIAssistant: () => api.get('/students/me/ai-assistant'),
   getAll: (params) => api.get('/students', { params }),
   getById: (id) => api.get(`/students/${id}`),
   updateProfile: (data) => api.put('/students/me', data)
@@ -111,7 +112,8 @@ export const assignmentAPI = {
     }
     return api.post(`/assignments/${id}/submit`, formData);
   },
-  grade: (id, data) => api.put(`/assignments/${id}/grade`, data)
+  grade: (id, data) => api.put(`/assignments/${id}/grade`, data),
+  getSubmissions: (id) => api.get(`/assignments/${id}/submissions`)
 };
 
 // ── Notices & Notifications APIs ──────────────────────────────────────────
@@ -222,18 +224,66 @@ export const academicAPI = {
   getRecommendations: () => api.get('/academic/recommendations')
 };
 
-// ── Flashcard APIs (Azure AI Powered) ────────────────────────────────────
+// ── Flashcard APIs (Azure AI Powered Platform) ───────────────────────────
 export const flashcardAPI = {
   generate: (data) => api.post('/flashcards/generate', data),
   saveDeck: (data) => api.post('/flashcards/decks', data),
+  updateDeck: (id, data) => api.put(`/flashcards/decks/${id}`, data),
   getMyDecks: (params) => api.get('/flashcards/decks', { params }),
   getDeckById: (id) => api.get(`/flashcards/decks/${id}`),
   deleteDeck: (id) => api.delete(`/flashcards/decks/${id}`),
+  addCard: (deckId, data) => api.post(`/flashcards/decks/${deckId}/cards`, data),
+  updateCard: (deckId, cardId, data) => api.put(`/flashcards/decks/${deckId}/cards/${cardId}`, data),
+  deleteCard: (deckId, cardId) => api.delete(`/flashcards/decks/${deckId}/cards/${cardId}`),
+  getDeckAnalytics: (deckId) => api.get(`/flashcards/decks/${deckId}/analytics`),
+  getCommunityDecks: (params) => api.get('/flashcards/community', { params }),
+  forkDeck: (deckId) => api.post(`/flashcards/decks/${deckId}/fork`),
+  likeDeck: (deckId) => api.post(`/flashcards/decks/${deckId}/like`),
   updateCardStatus: (data) => api.put('/flashcards/card-status', data),
   getStats: () => api.get('/flashcards/stats'),
+  getReminders: () => api.get('/flashcards/reminders'),
+  updateReminders: (data) => api.put('/flashcards/reminders', data),
   getRecommended: () => api.get('/flashcards/recommended'),
   getDueToday: () => api.get('/flashcards/due-today'),
   exportAnkiUrl: (deckId) => `/api/v1/flashcards/decks/${deckId}/export-anki`
+};
+
+// ── Digital Twin APIs ─────────────────────────────────────────────────────
+export const digitalTwinAPI = {
+  // Faculty management
+  getMyTwin: () => api.get('/digital-twin/my-twin'),
+  updateMyTwin: (data) => api.put('/digital-twin/my-twin', data),
+  addKnowledgeText: (data) => api.post('/digital-twin/my-twin/knowledge', data),
+  addKnowledgeFile: (formData) => api.post('/digital-twin/my-twin/knowledge', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  deleteKnowledge: (entryId) => api.delete(`/digital-twin/my-twin/knowledge/${entryId}`),
+  updateFaqs: (faqs) => api.put('/digital-twin/my-twin/faqs', { faqs }),
+  toggleStatus: () => api.patch('/digital-twin/my-twin/toggle'),
+  getAnalytics: () => api.get('/digital-twin/my-twin/analytics'),
+  resolveDoubt: (doubtId, data) => api.post(`/digital-twin/my-twin/resolve-doubt/${doubtId}`, data),
+  // Discovery & Chat (students & all roles)
+  discoverTwins: () => api.get('/digital-twin/discover'),
+  chatWithTwin: (twinId, data) => api.post(`/digital-twin/chat/${twinId}`, data),
+  getConversationHistory: (twinId) => api.get(`/digital-twin/conversation/${twinId}`),
+  clearConversationHistory: (twinId) => api.delete(`/digital-twin/conversation/${twinId}`),
+  escalateDoubt: (twinId, data) => api.post(`/digital-twin/escalate/${twinId}`, data)
+};
+
+// ── AI Auto-Grader APIs ───────────────────────────────────────────────────
+export const autoGraderAPI = {
+  gradeSheet: (formData) => {
+    if (formData instanceof FormData) {
+      return api.post('/auto-grader/grade', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+    }
+    return api.post('/auto-grader/grade', formData);
+  },
+  getEvaluations: (params) => api.get('/auto-grader', { params }),
+  getById: (id) => api.get(`/auto-grader/${id}`),
+  syncToMarks: (id) => api.post(`/auto-grader/${id}/sync-marks`),
+  deleteEvaluation: (id) => api.delete(`/auto-grader/${id}`)
 };
 
 // ── Admin APIs ────────────────────────────────────────────────────────────

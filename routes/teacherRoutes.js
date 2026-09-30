@@ -23,7 +23,8 @@ import {
   approveStudentAccount,
   getDepartmentStats,
   uploadSyllabusAndGenerate,
-  getTeacherPapers
+  getTeacherPapers,
+  generateVariant
 } from '../controllers/teacherController.js';
 
 const router = express.Router();
@@ -65,7 +66,8 @@ router.post('/notices', createTeacherNotice);
 
 // ── AI Question Paper ──────────────────────────────────────────────────────
 router.post('/question-paper', generateQuestionPaper);
-router.post('/question-paper/upload', upload.single('syllabus'), uploadSyllabusAndGenerate);
+router.post('/question-paper/upload', upload.array('syllabus', 5), uploadSyllabusAndGenerate);
+router.post('/question-paper/:id/variant', generateVariant);
 router.get('/question-paper/my-papers', getTeacherPapers);
 
 // ── Class Report ──────────────────────────────────────────────────────────

@@ -23,7 +23,9 @@ export const verifyToken = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_uniassist_jwt_key_987654321');
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) throw new Error('JWT_SECRET environment variable is not configured.');
+    const decoded = jwt.verify(token, jwtSecret);
 
     // Retrieve user without passwordHash
     const user = await User.findById(decoded.id).select('-passwordHash');
@@ -71,23 +73,30 @@ export const authorizeRoles = (...roles) => {
     }
 
     const userRole = req.user.role;
-    const isAllowed =
-      roles.includes(userRole) ||
-      (roles.includes('faculty') && userRole === 'teacher') ||
-      (roles.includes('teacher') && userRole === 'faculty') ||
-      userRole === 'super_admin' ||
-      userRole === 'admin';
 
-    if (!isAllowed) {
-      return res.status(403).json({
-        success: false,
-        message: `Forbidden. Role '${req.user.role}' is not authorized to access this resource.`
-      });
+    // Exact role match
+    if (roles.includes(userRole)) {
+      return next();
     }
 
-    next();
+    // faculty ↔ teacher equivalence
+    if (roles.includes('faculty') && userRole === 'teacher') return next();
+    if (roles.includes('teacher') && userRole === 'faculty') return next();
+
+    // super_admin/admin bypass — only if they are explicitly allowed OR the route is not student-exclusive
+    // Student-only routes explicitly list ONLY 'student' — admins should NOT access these
+    const isStudentOnlyRoute = roles.length === 1 && roles[0] === 'student';
+    if (!isStudentOnlyRoute && (userRole === 'super_admin' || userRole === 'admin')) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: `Forbidden. Role '${req.user.role}' is not authorized to access this resource.`
+    });
   };
 };
+
 
 /**
  * Middleware for optional JWT authentication. If token is present and valid, populates req.user.
@@ -105,7 +114,9 @@ export const optionalAuth = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_uniassist_jwt_key_987654321');
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) return next();
+    const decoded = jwt.verify(token, jwtSecret);
     const user = await User.findById(decoded.id).select('-passwordHash');
     if (user && user.isActive) {
       req.user = user;

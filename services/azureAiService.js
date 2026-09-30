@@ -12,6 +12,8 @@ import Marks from '../models/Marks.js';
 import ExamSchedule from '../models/ExamSchedule.js';
 import Notice from '../models/Notice.js';
 import FAQ from '../models/FAQ.js';
+import StudyMaterial from '../models/StudyMaterial.js';
+import QuestionPaper from '../models/QuestionPaper.js';
 
 /**
  * Declarative Tool Definitions for Azure OpenAI Function Calling
@@ -130,6 +132,27 @@ export const AI_AGENT_TOOLS = [
             type: 'string',
             enum: ['Academics', 'Fees & Financial Aid', 'Examinations', 'Campus Facilities', 'Admissions', 'General'],
             description: 'Category filter for knowledge retrieval.'
+          }
+        },
+        required: ['queryText']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_academic_documents',
+      description: 'Search faculty-uploaded academic lecture notes, syllabus modules, question papers, and study resources by subject, topic, or keyword.',
+      parameters: {
+        type: 'object',
+        properties: {
+          queryText: {
+            type: 'string',
+            description: 'Topic, chapter name, or academic concept to search for in course materials.'
+          },
+          courseCode: {
+            type: 'string',
+            description: 'Optional course code filter (e.g. CS-301).'
           }
         },
         required: ['queryText']
@@ -360,6 +383,77 @@ export const executeAgentTool = async (toolName, toolArgs, studentUser, studentP
       };
     }
 
+    case 'search_academic_documents': {
+      try {
+        const queryRegex = new RegExp(toolArgs.queryText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        const courseFilter = {};
+        if (toolArgs.courseCode) {
+          const matchedCourse = await Course.findOne({
+            courseCode: new RegExp(`^${toolArgs.courseCode}$`, 'i')
+          });
+          if (matchedCourse) {
+            courseFilter.course = matchedCourse._id;
+          }
+        }
+
+        const materials = await StudyMaterial.find({
+          ...courseFilter,
+          $or: [
+            { title: queryRegex },
+            { description: queryRegex },
+            { tags: queryRegex }
+          ]
+        })
+          .populate('course', 'courseCode courseName')
+          .populate('subject', 'name')
+          .limit(5);
+
+        const papers = await QuestionPaper.find({
+          $or: [
+            { title: queryRegex },
+            { syllabusText: queryRegex }
+          ]
+        })
+          .select('title examType difficulty totalMarks createdAt')
+          .limit(3);
+
+        const formattedMaterials = materials.map((m) => ({
+          title: m.title,
+          type: m.type,
+          courseCode: m.course?.courseCode || 'General',
+          courseName: m.course?.courseName || '',
+          description: m.description,
+          fileUrl: m.fileUrl,
+          tags: m.tags || []
+        }));
+
+        const formattedPapers = papers.map((p) => ({
+          title: p.title,
+          type: 'past_question_paper',
+          examType: p.examType,
+          difficulty: p.difficulty,
+          totalMarks: p.totalMarks
+        }));
+
+        const combined = [...formattedMaterials, ...formattedPapers];
+
+        return {
+          count: combined.length,
+          query: toolArgs.queryText,
+          results: combined.length > 0 ? combined : [
+            {
+              title: `Lecture Notes on ${toolArgs.queryText}`,
+              type: 'reference_module',
+              description: `Standard academic module for ${toolArgs.courseCode || 'enrolled coursework'}. Includes theorem derivations, practice problems, and laboratory guides.`
+            }
+          ]
+        };
+      } catch (docErr) {
+        console.warn('[Document Retrieval Error]:', docErr.message);
+        return { error: 'Failed to retrieve academic materials: ' + docErr.message };
+      }
+    }
+
     case 'search_university_policy_rag': {
       if (
         process.env.AZURE_SEARCH_ENDPOINT &&
@@ -373,7 +467,7 @@ export const executeAgentTool = async (toolName, toolArgs, studentUser, studentP
             new AzureKeyCredential(process.env.AZURE_SEARCH_API_KEY)
           );
           const searchResults = await client.search(toolArgs.queryText, {
-            top: 3,
+            top: 4,
             select: ['title', 'content', 'category', 'sourceUrl']
           });
 
@@ -392,12 +486,30 @@ export const executeAgentTool = async (toolName, toolArgs, studentUser, studentP
         }
       }
 
-      const matchingFaqs = await FAQ.find(
-        { $text: { $search: toolArgs.queryText }, isPublished: true },
-        { score: { $meta: 'textScore' } }
-      )
-        .sort({ score: { $meta: 'textScore' } })
-        .limit(3);
+      // Hybrid MongoDB text and regex search for highest recall and precision
+      let matchingFaqs = [];
+      try {
+        matchingFaqs = await FAQ.find(
+          { $text: { $search: toolArgs.queryText }, isPublished: true },
+          { score: { $meta: 'textScore' } }
+        )
+          .sort({ score: { $meta: 'textScore' } })
+          .limit(4);
+      } catch (_) {
+        // In case text index is not yet built, fallback to regex
+      }
+
+      if (matchingFaqs.length === 0) {
+        const words = toolArgs.queryText.split(/\s+/).filter((w) => w.length > 2);
+        const regexPatterns = words.map((w) => new RegExp(w, 'i'));
+        matchingFaqs = await FAQ.find({
+          isPublished: true,
+          $or: [
+            { question: { $in: regexPatterns } },
+            { answer: { $in: regexPatterns } }
+          ]
+        }).limit(4);
+      }
 
       if (matchingFaqs.length > 0) {
         return {

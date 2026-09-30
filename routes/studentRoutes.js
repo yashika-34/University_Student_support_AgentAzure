@@ -6,7 +6,8 @@ import {
   updateStudentProfile,
   getAcademicSummary,
   getStudentAnalytics,
-  getUnifiedDashboard
+  getUnifiedDashboard,
+  getAIAcademicAssistant
 } from '../controllers/studentController.js';
 import { verifyToken, authorizeRoles } from '../middleware/authMiddleware.js';
 
@@ -16,6 +17,9 @@ router.use(verifyToken);
 
 // Single Unified Student Dashboard
 router.get('/me/dashboard', authorizeRoles('student'), getUnifiedDashboard);
+
+// AI Academic Advisor / Assistant
+router.get('/me/ai-assistant', authorizeRoles('student'), getAIAcademicAssistant);
 
 router.get('/me', authorizeRoles('student'), getMyStudentProfile);
 router.put('/me', authorizeRoles('student'), updateStudentProfile);

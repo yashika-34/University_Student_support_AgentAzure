@@ -7,7 +7,7 @@
 
 In modern higher education institutions, students and faculty navigate an increasingly fragmented ecosystem of digital tools—ranging from Learning Management Systems (LMS) and Student Information Systems (SIS) to departmental portals and Bursar ledgers. This structural fragmentation creates severe administrative bottlenecks: staff spend over 40% of their working hours addressing repetitive inquiries, while students experience delays, missed financial deadlines, and academic debarment risks due to late information. 
 
-**UniAssist AI** is an enterprise-grade, role-aware academic support platform developed to unify student services into an intelligent conversational single-point-of-contact. Engineered with the **MERN Stack** (MongoDB, Express.js, React.js, Node.js) and integrated with **Azure AI Foundry** (Azure OpenAI GPT-4o-mini and Azure AI Search), the system combines **Hybrid Vector-Semantic Retrieval-Augmented Generation (RAG)** with **Autonomous Database Function Calling**.
+**UniAssist AI** is an enterprise-grade, role-aware academic support platform developed to unify student services into an intelligent conversational single-point-of-contact. Engineered with the **MERN Stack** (MongoDB, Express.js, React.js, Node.js) and integrated with **Azure AI Foundry** (Azure OpenAI GPT-4.1-mini and Azure AI Search), the system combines **Hybrid Vector-Semantic Retrieval-Augmented Generation (RAG)** with **Autonomous Database Function Calling**.
 
 Key architectural features include:
 1. Deterministic data grounding that eliminates hallucinations by retrieving personal student metrics (attendance, pending assignments, fee balances, exam timetables) directly from live MongoDB replica sets via strict JSON-schema tool calls.

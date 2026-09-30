@@ -30,7 +30,6 @@ router.post('/logout', verifyToken, logout);
 router.get('/me', verifyToken, getMe);
 router.put('/profile', verifyToken, updateProfile);
 router.put('/update-password', verifyToken, updatePassword);
-router.put('/change-password', verifyToken, updatePassword);
 
 // Session Management (Multi-device control)
 router.get('/sessions', verifyToken, getActiveSessions);

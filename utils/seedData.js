@@ -27,6 +27,7 @@ import StudyPlan from '../models/StudyPlan.js';
 import ForumPost from '../models/ForumPost.js';
 import Ticket from '../models/Ticket.js';
 import Appointment from '../models/Appointment.js';
+import Badge from '../models/Badge.js';
 
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/uniassist_db';
 
@@ -55,7 +56,8 @@ async function seed() {
       StudyPlan.deleteMany({}),
       ForumPost.deleteMany({}),
       Ticket.deleteMany({}),
-      Appointment.deleteMany({})
+      Appointment.deleteMany({}),
+      Badge.deleteMany({})
     ]);
     console.log('🗑️  Cleared existing collections.');
 
@@ -751,7 +753,50 @@ async function seed() {
         deadline: new Date('2026-10-22')
       }
     ]);
-    // Badges are dynamically computed in engagementController
+    // ── 11b. Seed Badge Catalog ──────────────────────────────────────────────
+    await Badge.insertMany([
+      {
+        badgeCode: 'PERFECT_ATTENDANCE',
+        title: 'Attendance Titan',
+        description: 'Maintained 95%+ attendance across all registered courses.',
+        iconName: 'Award',
+        xpPoints: 250,
+        category: 'Attendance'
+      },
+      {
+        badgeCode: 'QUIZ_MASTER',
+        title: 'Quiz Champion',
+        description: 'Achieved an average score above 85% across all assessments.',
+        iconName: 'Sparkles',
+        xpPoints: 300,
+        category: 'Academic'
+      },
+      {
+        badgeCode: 'COMMUNITY_PILLAR',
+        title: 'Forum Contributor',
+        description: 'Received 20+ upvotes on answers in discussion boards.',
+        iconName: 'Users',
+        xpPoints: 200,
+        category: 'Community'
+      },
+      {
+        badgeCode: 'DEANS_HONORS',
+        title: "Dean's Scholar",
+        description: 'Achieved a CGPA of 3.80 or higher.',
+        iconName: 'GraduationCap',
+        xpPoints: 500,
+        category: 'Academic'
+      },
+      {
+        badgeCode: 'CAREER_PRODIGY',
+        title: 'ATS Resume Master',
+        description: 'Obtained a 90%+ ATS optimization rating on uploaded resume.',
+        iconName: 'FileText',
+        xpPoints: 350,
+        category: 'Career'
+      }
+    ]);
+    console.log('🏅 Badge catalog seeded.');
 
     // ── 12. Seed Notifications ──────────────────────────────────────────────
     for (const s of studentProfiles.slice(0, 3)) {

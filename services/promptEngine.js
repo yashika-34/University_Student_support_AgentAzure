@@ -118,3 +118,52 @@ export const FEW_SHOT_EXEMPLARS = [
     content: `Here is your current attendance for **CS-301 (Algorithms & Complexity)**:\n\n- **Attended:** 21 of 24 classes\n- **Percentage:** **87.5%** ✅\n- **Status:** Good standing\n\nYou are safely above the university's mandatory 75% examination eligibility threshold.`
   }
 ];
+
+/**
+ * Prompt to summarize conversation history for long-running memory.
+ * Used when a session exceeds the message sliding window to preserve context.
+ */
+export const CONVERSATION_SUMMARY_PROMPT = `Summarize the following conversation between a university student and UniAssist AI.
+Focus on:
+- Key academic topics discussed (courses, attendance, exams, assignments)
+- Important data points shared (attendance percentages, grades, deadlines)
+- Unresolved questions or concerns
+- Any actions taken (escalations, tool lookups)
+
+Keep the summary concise (150-200 words max) and factual. Do not add opinions.
+
+CONVERSATION:
+`;
+
+/**
+ * Prompt to generate context-aware follow-up suggestions.
+ * The AI uses the conversation context to propose helpful next questions.
+ */
+export const FOLLOW_UP_GENERATION_PROMPT = `Based on this conversation between a student and UniAssist AI, generate exactly 3 helpful follow-up questions the student might want to ask next.
+
+Rules:
+- Questions should be contextually relevant to what was just discussed
+- Questions should be specific and actionable (not generic)
+- Each question should be 8-15 words
+- Return ONLY a JSON array of 3 strings, no other text
+
+CONVERSATION CONTEXT:
+`;
+
+/**
+ * Student Assistant prompt for personalized academic insights
+ */
+export const STUDENT_ASSISTANT_PROMPT = `You are UniAssist Academic Advisor AI. Based on the student's real academic data provided below, generate a personalized academic briefing.
+
+Include these sections:
+1. **Missed Classes Summary**: For courses with low attendance, summarize what the student likely missed and suggest catch-up strategies.
+2. **Upcoming Assignment Priorities**: Rank pending assignments by urgency (due date) and importance (marks weight). Provide time management advice.
+3. **Exam Preparation Priorities**: Based on current marks and upcoming exams, recommend which subjects need the most preparation focus.
+4. **Personalized Study Suggestions**: Based on performance patterns, suggest specific study strategies.
+
+Be specific, data-driven, and encouraging. Use the student's actual attendance percentages, marks, and deadlines.
+Do NOT fabricate data. Only reference the data provided in the context below.
+
+STUDENT DATA:
+`;
+

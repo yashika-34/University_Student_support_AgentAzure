@@ -1090,3 +1090,241 @@ a { color: inherit; text-decoration: none; }
 }
 @keyframes notif-spin { to { transform: rotate(360deg); } }
 .spin { animation: notif-spin 0.7s linear infinite; }
+
+/* ==========================================================================
+   SaaS Design System Enhancements: Shimmer, Skeletons, Toasts, Tables, A11y
+   ========================================================================== */
+
+/* ── Accessibility Skip Link ─────────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -60px;
+  left: 1rem;
+  background: var(--primary);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  z-index: 10000;
+  font-weight: 600;
+  transition: top 0.2s ease;
+  text-decoration: none;
+}
+.skip-link:focus {
+  top: 1rem;
+}
+
+/* ── Focus Rings & Keyboard Navigation ───────────────────────────────────── */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ── Skeleton Shimmer Loader ──────────────────────────────────────────────── */
+.skeleton-box {
+  display: inline-block;
+  background: linear-gradient(
+    90deg,
+    var(--border-subtle) 25%,
+    rgba(255, 255, 255, 0.12) 37%,
+    var(--border-subtle) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeletonShimmer 1.4s ease infinite;
+}
+
+.light .skeleton-box {
+  background: linear-gradient(
+    90deg,
+    #e2e8f0 25%,
+    #f8fafc 37%,
+    #e2e8f0 63%
+  );
+  background-size: 400% 100%;
+}
+
+@keyframes skeletonShimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* ── SaaS Table Component ─────────────────────────────────────────────────── */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.saas-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+  font-size: 0.88rem;
+}
+
+.saas-table thead th {
+  background: rgba(13, 19, 33, 0.95);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.light .saas-table thead th {
+  background: #f8fafc;
+}
+
+.saas-table tbody tr {
+  transition: background-color 0.18s ease;
+}
+
+.saas-table tbody tr:hover {
+  background-color: var(--bg-glass);
+}
+
+.saas-table tbody td {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.saas-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Global Toast Notifications ───────────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 420px;
+  width: calc(100vw - 3rem);
+  pointer-events: none;
+}
+
+.toast-item {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem 1.15rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+
+.toast-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.toast-success::before { background: var(--success); }
+.toast-success .toast-icon { color: var(--success); }
+
+.toast-error::before { background: var(--danger); }
+.toast-error .toast-icon { color: var(--danger); }
+
+.toast-warning::before { background: var(--warning); }
+.toast-warning .toast-icon { color: var(--warning); }
+
+.toast-info::before { background: var(--info); }
+.toast-info .toast-icon { color: var(--info); }
+
+.toast-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.toast-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.2rem;
+}
+
+.toast-message {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease;
+}
+
+.toast-close:hover {
+  color: var(--text-primary);
+}
+
+/* ── Light Mode Polish ────────────────────────────────────────────────────── */
+.light .glass-panel {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+
+.light .glass-panel:hover {
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.light .btn-secondary {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+
+.light .btn-secondary:hover {
+  background: #e2e8f0;
+}
+
+.light .form-input, .light .form-select, .light .form-textarea {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+

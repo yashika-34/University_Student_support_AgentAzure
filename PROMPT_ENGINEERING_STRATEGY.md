@@ -5,7 +5,7 @@
 
 ## 1. Executive Summary
 
-This specification outlines the prompt engineering architecture, context augmentation pipeline, tool-calling schema, and guardrails governing the **UniAssist AI Student Support Agent**, integrated via **Azure AI Foundry** (Azure OpenAI GPT-4o / GPT-4o-mini + Azure AI Search).
+This specification outlines the prompt engineering architecture, context augmentation pipeline, tool-calling schema, and guardrails governing the **UniAssist AI Student Support Agent**, integrated via **Azure AI Foundry** (Azure OpenAI GPT-4.1-mini + Azure AI Search).
 
 ### Core Philosophy
 1. **Zero Hallucination with Dynamic Tool Grounding:** Student-specific records (attendance percentages, assignment deadlines, fee ledgers, exam schedules) are NEVER generated from LLM internal parametric memory; they are ALWAYS retrieved via function calls to live MongoDB collections.

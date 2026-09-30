@@ -13,11 +13,16 @@ import {
   Loader2,
   FileText,
   AlertCircle,
-  Eye
+  Eye,
+  Inbox
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext.jsx';
+import { SkeletonStatGrid, SkeletonCard } from '../components/common/Skeleton.jsx';
+import EmptyState from '../components/common/EmptyState.jsx';
 
 const AssignmentPage = () => {
   const { role } = useAuth();
+  const toast = useToast();
   const [assignments, setAssignments] = useState([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedAssignment, setSelectedAssignment] = useState(null);
@@ -136,9 +141,11 @@ const AssignmentPage = () => {
         maxScore: 100,
         dueDate: ''
       });
+      toast.success('Assignment created and published to course roster.', 'Assignment Created');
       loadAssignments();
     } catch (err) {
       console.error('Failed to create assignment:', err);
+      toast.error(err.response?.data?.message || 'Failed to create assignment.', 'Error');
     } finally {
       setCreateLoading(false);
     }
@@ -146,9 +153,14 @@ const AssignmentPage = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
-        <Loader2 size={36} className="animate-spin" color="var(--primary)" />
-        <p style={{ color: 'var(--text-secondary)' }}>Loading assignments from database...</p>
+      <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <SkeletonCard lines={2} />
+        <SkeletonStatGrid count={3} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+          <SkeletonCard lines={4} />
+          <SkeletonCard lines={4} />
+          <SkeletonCard lines={4} />
+        </div>
       </div>
     );
   }
