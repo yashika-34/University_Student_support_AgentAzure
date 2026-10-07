@@ -29,7 +29,8 @@ import {
   Compass,
   Shield,
   Brain,
-  FileCheck2
+  FileCheck2,
+  AlertTriangle
 } from 'lucide-react';
 
 // ── Navigation configs per role ─────────────────────────────────────────────
@@ -74,12 +75,12 @@ const FACULTY_NAV = [
     { to: '/teacher/students', icon: Users, label: 'Student Progress' }
   ]},
   { section: 'Analytics', items: [
-    { to: '/teacher/analytics', icon: BarChart3, label: 'Course Analytics' },
-    { to: '/teacher/report', icon: TrendingUp, label: 'Class Reports' }
+    { to: '/teacher/analytics', icon: BarChart3, label: 'Course Analytics & Reports' }
   ]},
   { section: 'AI Tools', items: [
     { to: '/teacher/digital-twin', icon: Brain, label: 'My Digital Twin' },
     { to: '/teacher/auto-grader', icon: FileCheck2, label: 'AI Auto-Grader & OCR' },
+    { to: '/teacher/risk-warning', icon: AlertTriangle, label: 'Risk & Early Warning' },
     { to: '/teacher/question-paper', icon: Sparkles, label: 'Question Paper AI' },
     { to: '/chat', icon: MessageSquare, label: 'AI Assistant' },
     { to: '/documents', icon: Upload, label: 'Knowledge & Documents' }

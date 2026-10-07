@@ -53,73 +53,7 @@ export const AuthProvider = ({ children }) => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  // Demo accounts for static deployment fallback (GitHub Pages)
-  const DEMO_ACCOUNTS = {
-    'dr.alan@university.edu': {
-      password: 'Faculty@1234',
-      user: {
-        _id: 'demo-faculty-001',
-        id: 'demo-faculty-001',
-        fullName: 'Dr. Alan Turing',
-        firstName: 'Alan',
-        lastName: 'Turing',
-        email: 'dr.alan@university.edu',
-        role: 'faculty',
-        profile: { department: 'Computer Science', designation: 'Professor' }
-      }
-    },
-    'alex.student@university.edu': {
-      password: 'Student@1234',
-      user: {
-        _id: 'demo-student-001',
-        id: 'demo-student-001',
-        fullName: 'Alex Mercer',
-        firstName: 'Alex',
-        lastName: 'Mercer',
-        email: 'alex.student@university.edu',
-        role: 'student',
-        profile: {
-          studentId: 'STU-2024-001',
-          degreeProgram: 'B.Tech Computer Science',
-          currentSemester: 5,
-          cgpa: 8.65,
-          completedCredits: 74
-        }
-      }
-    },
-    'emma.student@university.edu': {
-      password: 'Student@1234',
-      user: {
-        _id: 'demo-student-002',
-        id: 'demo-student-002',
-        fullName: 'Emma Wilson',
-        firstName: 'Emma',
-        lastName: 'Wilson',
-        email: 'emma.student@university.edu',
-        role: 'student',
-        profile: {
-          studentId: 'STU-2024-002',
-          degreeProgram: 'B.Tech Computer Science',
-          currentSemester: 5,
-          cgpa: 7.92,
-          completedCredits: 70
-        }
-      }
-    },
-    'admin@university.edu': {
-      password: 'Password123!',
-      user: {
-        _id: 'demo-admin-001',
-        id: 'demo-admin-001',
-        fullName: 'Admin User',
-        firstName: 'Admin',
-        lastName: 'User',
-        email: 'admin@university.edu',
-        role: 'admin',
-        profile: {}
-      }
-    }
-  };
+
 
   const login = async (email, password) => {
 

@@ -11,7 +11,7 @@ import {
 import { useToast } from '../context/ToastContext.jsx';
 import { SkeletonStatGrid, SkeletonChart, SkeletonCard, SkeletonTable } from '../components/common/Skeleton.jsx';
 import EmptyState from '../components/common/EmptyState.jsx';
-import MetricCard from '../components/common/MetricCard.jsx';
+import TeacherSuperpowersSuite from '../components/dashboard/TeacherSuperpowersSuite.jsx';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie
@@ -295,8 +295,19 @@ const FacultyDashboard = () => {
 
   const assignedCourses = dashboardData?.courses || [];
 
-  // Prepare Dynamic Chart Data from MongoDB
-  const rawAtt = analytics?.attendance || { above90: 2, above75: 2, below75: 1 };
+  // Prepare Dynamic Chart Data from MongoDB or student records
+  const computedAtt = students.reduce(
+    (acc, s) => {
+      const pct = s.attendancePercentage ?? 85;
+      if (pct >= 90) acc.above90++;
+      else if (pct >= 75) acc.above75++;
+      else acc.below75++;
+      return acc;
+    },
+    { above90: 0, above75: 0, below75: 0 }
+  );
+
+  const rawAtt = analytics?.attendance || (students.length > 0 ? computedAtt : { above90: 0, above75: 0, below75: 0 });
   const attendanceDistData = [
     { name: '≥90%', value: rawAtt.above90 || 0, fill: '#10b981' },
     { name: '75-89%', value: rawAtt.above75 || 0, fill: '#3b82f6' },
@@ -304,15 +315,23 @@ const FacultyDashboard = () => {
   ];
 
   const rawGrades = analytics?.gradeDistribution || [];
+  const computedGrades = students.reduce((acc, s) => {
+    const g = s.grade || (s.cgpa >= 9 ? 'O' : s.cgpa >= 8 ? 'A+' : s.cgpa >= 7 ? 'A' : s.cgpa >= 6 ? 'B+' : 'B');
+    acc[g] = (acc[g] || 0) + 1;
+    return acc;
+  }, {});
+
   const gradeData = rawGrades.length > 0
-    ? rawGrades.map((g) => ({ grade: g._id || 'A', count: g.count || 1 }))
-    : [
-        { grade: 'O', count: 3 },
-        { grade: 'A+', count: 4 },
-        { grade: 'A', count: 5 },
-        { grade: 'B+', count: 2 },
-        { grade: 'B', count: 1 }
-      ];
+    ? rawGrades.map((g) => ({ grade: g._id || 'A', count: g.count || 0 }))
+    : Object.keys(computedGrades).length > 0
+      ? Object.entries(computedGrades).map(([grade, count]) => ({ grade, count }))
+      : [
+          { grade: 'O', count: 0 },
+          { grade: 'A+', count: 0 },
+          { grade: 'A', count: 0 },
+          { grade: 'B+', count: 0 },
+          { grade: 'B', count: 0 }
+        ];
 
   const lowAttendanceStudents = students.filter((s) => s.isLowAttendance || s.attendancePercentage < 75);
 
@@ -409,6 +428,9 @@ const FacultyDashboard = () => {
           </div>
         ))}
       </div>
+
+      {/* ── AI FACULTY SUPERPOWERS SUITE (10 AI AUTOMATIONS) ──────────────────── */}
+      <TeacherSuperpowersSuite assignedCourses={assignedCourses} />
 
       {/* ── ASSIGNED COURSES MANAGEMENT SECTION ─────────────────────────────── */}
       <div className="glass-panel" style={{ padding: '1.75rem' }}>

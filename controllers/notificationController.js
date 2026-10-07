@@ -1,5 +1,7 @@
 import Notification from '../models/Notification.js';
 import Notice from '../models/Notice.js';
+import Student from '../models/Student.js';
+import User from '../models/User.js';
 import { logAudit } from '../services/auditService.js';
 
 /**
@@ -219,9 +221,35 @@ export const createNotice = async (req, res, next) => {
       req
     });
 
+    // Cross-link: Push Notification to all students so notification bell & drawer update immediately
+    try {
+      const students = await Student.find({}).populate('userId');
+      const studentRecipients = students.filter(s => s.userId && s.userId._id);
+      
+      if (studentRecipients.length > 0) {
+        const notifDocs = studentRecipients.map(s => ({
+          recipient: s.userId._id,
+          sender: req.user ? req.user._id : null,
+          type: priority === 'urgent' ? 'attendance_alert' : 'system_announcement',
+          priority: priority === 'urgent' ? 'critical' : (priority === 'high' ? 'high' : 'medium'),
+          title: `Announcement: ${notice.title}`,
+          message: notice.content,
+          actionUrl: '/student/dashboard',
+          metadata: {
+            noticeId: notice._id,
+            authorName: notice.authorName,
+            category: notice.category
+          }
+        }));
+        await Notification.insertMany(notifDocs);
+      }
+    } catch (notifErr) {
+      console.warn('[Notice->Notification Sync]:', notifErr.message);
+    }
+
     res.status(201).json({
       success: true,
-      message: 'Notice created successfully.',
+      message: 'Notice created successfully and broadcasted to students.',
       data: notice
     });
   } catch (error) {

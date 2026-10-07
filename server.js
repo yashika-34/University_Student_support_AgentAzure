@@ -44,6 +44,7 @@ import examRoutes from './routes/examRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
 import digitalTwinRoutes from './routes/digitalTwinRoutes.js';
 import autoGraderRoutes from './routes/autoGraderRoutes.js';
+import riskRoutes from './routes/riskRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -172,6 +173,7 @@ app.use('/api/v1/exams', examRoutes);
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/digital-twin', digitalTwinRoutes);
 app.use('/api/v1/auto-grader', autoGraderRoutes);
+app.use('/api/v1/risk', riskRoutes);
 
 // Serve static assets from the React build if present
 app.use(express.static(distPath));

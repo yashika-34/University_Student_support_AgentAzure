@@ -172,7 +172,13 @@ export const teacherAPI = {
   editStudent: (id, data) => api.put(`/teacher/manage/students/${id}`, data),
   deleteStudent: (id, hardDelete = false) => api.delete(`/teacher/manage/students/${id}`, { params: { hardDelete } }),
   approveStudent: (id, action) => api.put(`/teacher/manage/students/${id}/approve`, { action }),
-  getDepartmentStats: () => api.get('/teacher/manage/departments')
+  getDepartmentStats: () => api.get('/teacher/manage/departments'),
+  addAttendance: (data) => api.post('/teacher/attendance', data),
+  addMarks: (data) => api.post('/teacher/marks', data),
+  createNotice: (data) => api.post('/teacher/notices', data),
+  getClassReport: (courseId) => api.get(`/teacher/report/${courseId}`),
+  generateVariant: (id, data) => api.post(`/teacher/question-paper/${id}/variant`, data),
+  getTeacherPapers: () => api.get('/teacher/question-paper/my-papers')
 };
 
 // ── FAQs APIs ─────────────────────────────────────────────────────────────
@@ -304,6 +310,18 @@ export const adminAPI = {
 // ── Search APIs ───────────────────────────────────────────────────────────
 export const searchAPI = {
   globalSearch: (query, params) => api.get('/search', { params: { q: query, ...params } })
+};
+
+// ── Risk & Early Warning APIs ─────────────────────────────────────────────
+export const riskAPI = {
+  getDashboardStats: () => api.get('/risk/dashboard-stats'),
+  analyzeStudent: (studentId) => api.post(`/risk/analyze/${studentId}`),
+  batchAnalyze: (data) => api.post('/risk/batch-analyze', data),
+  getAlerts: (params) => api.get('/risk/alerts', { params }),
+  getAlertById: (alertId) => api.get(`/risk/alerts/${alertId}`),
+  acknowledgeAlert: (alertId) => api.patch(`/risk/alerts/${alertId}/acknowledge`),
+  deleteAlert: (alertId) => api.delete(`/risk/alerts/${alertId}`),
+  getStudentHistory: (studentId) => api.get(`/risk/student/${studentId}`)
 };
 
 export default api;

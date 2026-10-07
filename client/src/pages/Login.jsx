@@ -155,34 +155,45 @@ const Login = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
             <button
               type="button"
-              onClick={() => handleQuickLogin('dr.alan@university.edu', 'Faculty@1234')}
+              onClick={() => handleQuickLogin('yashika.student@university.edu', 'Student@1234')}
               className="btn btn-secondary"
-              style={{ fontSize: '0.75rem', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.15rem', alignItems: 'center' }}
+              style={{ fontSize: '0.75rem', padding: '0.6rem 0.5rem', display: 'flex', flexDirection: 'column', gap: '0.2rem', alignItems: 'center', borderColor: 'var(--primary)' }}
               disabled={isLoading}
             >
-              <span style={{ fontWeight: 700, color: 'var(--primary)' }}>👨‍🏫 Faculty Role</span>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Dr. Alan Turing</span>
+              <span style={{ fontWeight: 700, color: 'var(--primary)' }}>🎓 Student Role</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-primary)', fontWeight: 600 }}>Yashika Garg</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Roll: 2410993073 (AIML)</span>
             </button>
             <button
               type="button"
-              onClick={() => handleQuickLogin('alex.student@university.edu', 'Student@1234')}
+              onClick={() => handleQuickLogin('rohit.thakur@university.edu', 'Faculty@1234')}
               className="btn btn-secondary"
-              style={{ fontSize: '0.75rem', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.15rem', alignItems: 'center' }}
+              style={{ fontSize: '0.75rem', padding: '0.6rem 0.5rem', display: 'flex', flexDirection: 'column', gap: '0.2rem', alignItems: 'center', borderColor: 'var(--accent-purple)' }}
               disabled={isLoading}
             >
-              <span style={{ fontWeight: 700, color: 'var(--accent-purple)' }}>🎓 Student Role</span>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Alex Mercer (8.65 CGPA)</span>
+              <span style={{ fontWeight: 700, color: 'var(--accent-purple)' }}>👨‍🏫 Faculty Role</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-primary)', fontWeight: 600 }}>Prof. Rohit K. Thakur</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Computer Networks</span>
             </button>
           </div>
-          <div style={{ marginTop: '0.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
             <button
               type="button"
-              onClick={() => handleQuickLogin('emma.student@university.edu', 'Student@1234')}
+              onClick={() => handleQuickLogin('dr.alan@university.edu', 'Faculty@1234')}
               className="btn btn-secondary"
-              style={{ width: '100%', fontSize: '0.75rem', padding: '0.4rem', textAlign: 'center' }}
+              style={{ fontSize: '0.72rem', padding: '0.4rem', textAlign: 'center' }}
               disabled={isLoading}
             >
-              🎓 Student: Emma Watson (7.85 CGPA)
+              👨‍🏫 Dr. Alan Turing
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickLogin('admin@uniassist.edu', 'Admin@1234')}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.72rem', padding: '0.4rem', textAlign: 'center' }}
+              disabled={isLoading}
+            >
+              🛡️ Dean / Admin
             </button>
           </div>
         </div>

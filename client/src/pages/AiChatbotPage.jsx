@@ -36,7 +36,7 @@ const AiChatbotPage = () => {
     {
       id: 'welcome-1',
       sender: 'assistant',
-      content: `Hello ${user ? user.fullName.split(' ')[0] : 'there'}! 👋 I am your **UniAssist AI Academic Agent**, powered by Azure AI Foundry and live university records.\n\nI have continuous conversation memory enabled and can help you with:\n- 📊 Live attendance percentage, missed classes, and threshold warnings\n- 📝 Pending assignment deadlines, submissions, and time allocation\n- 🗓️ Examination schedules, digital hall tickets, and syllabus reviews\n- 📚 Academic lecture notes, uploaded study materials, and policy handbooks`,
+      content: `Hello ${user ? (user.fullName?.split(' ')[0] || user.firstName || 'there') : 'there'}! 👋 I am your **UniAssist AI Academic Agent**, powered by Azure AI Foundry and live university records.\n\nI have continuous conversation memory enabled and can help you with:\n- 📊 Live attendance percentage, missed classes, and threshold warnings\n- 📝 Pending assignment deadlines, submissions, and time allocation\n- 🗓️ Examination schedules, digital hall tickets, and syllabus reviews\n- 📚 Academic lecture notes, uploaded study materials, and policy handbooks`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -186,7 +186,7 @@ const AiChatbotPage = () => {
       ]);
 
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('uniassist_token');
         const headers = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
 

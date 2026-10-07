@@ -190,9 +190,9 @@ const ProfileDropdown = ({ onClose }) => {
   const isTeacherOrFaculty = role === 'faculty' || role === 'teacher';
   const roleLabel = role === 'faculty' ? '👨‍🏫 Faculty' : role === 'teacher' ? '👨‍🏫 Teacher' : '🎓 Student';
 
-  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (!isTeacherOrFaculty ? 'Alex Mercer' : 'Dr. Alan Turing');
-  const displayEmail = user?.email || (!isTeacherOrFaculty ? 'alex.student@university.edu' : 'dr.alan@university.edu');
-  const displayId = user?.profile?.studentId || user?.profile?.employeeId || user?.id || (!isTeacherOrFaculty ? 'STU-2024-8842' : 'FAC-CS-101');
+  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (!isTeacherOrFaculty ? 'Yashika Garg' : 'Prof. Rohit Kumar Thakur');
+  const displayEmail = user?.email || (!isTeacherOrFaculty ? 'yashika.student@university.edu' : 'rohit.thakur@university.edu');
+  const displayId = user?.profile?.studentId || user?.profile?.employeeId || user?.id || (!isTeacherOrFaculty ? '2410993073' : 'FAC-CSE-0205');
   const initials = displayName
     .split(' ')
     .filter(Boolean)

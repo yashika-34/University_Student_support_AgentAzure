@@ -30,9 +30,9 @@ const ProfilePage = () => {
   }, [location.hash]);
 
   // ── Profile Data from MongoDB / AuthContext ────────────────────────────
-  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (isStudent ? 'Alex Mercer' : 'Dr. Alan Turing');
-  const displayEmail = user?.email || (isStudent ? 'alex.student@university.edu' : 'dr.alan@university.edu');
-  const displayId = profile.studentId || profile.employeeId || user?.id || (isStudent ? 'STU-2024-8842' : 'FAC-CS-101');
+  const displayName = user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || (isStudent ? 'Yashika Garg' : 'Prof. Rohit Kumar Thakur');
+  const displayEmail = user?.email || (isStudent ? 'yashika.student@university.edu' : 'rohit.thakur@university.edu');
+  const displayId = profile.studentId || profile.employeeId || user?.id || (isStudent ? '2410993073' : 'FAC-CSE-0205');
   const displayDepartment = profile.department || 'Computer Science & Engineering';
   const displaySemester = profile.currentSemester || 5;
 
@@ -42,19 +42,19 @@ const ProfilePage = () => {
     id: displayId,
     department: displayDepartment,
     currentSemester: displaySemester,
-    degreeProgram: profile.degreeProgram || 'B.S. in Computer Science',
+    degreeProgram: profile.degreeProgram || 'B.E. Computer Science & Engineering (AIML)',
     cgpa: profile.cgpa
       ? (profile.cgpa <= 4.0 ? Number((profile.cgpa * 2.5).toFixed(2)) : profile.cgpa)
-      : 8.65,
-    batch: profile.batch || '2022-2026',
-    completedCredits: profile.completedCredits || 74,
+      : 8.82,
+    batch: profile.batch || '2024-2028',
+    completedCredits: profile.completedCredits || 88,
     advisor: profile.academicAdvisor?.userId?.firstName 
-      ? `Dr. ${profile.academicAdvisor.userId.firstName} ${profile.academicAdvisor.userId.lastName}` 
-      : 'Dr. Alan Turing',
+      ? `Prof. ${profile.academicAdvisor.userId.firstName} ${profile.academicAdvisor.userId.lastName}` 
+      : 'Prof. Rohit Kumar Thakur',
     emergencyContact: {
-      name: profile.emergencyContact?.name || 'Mercer Family',
+      name: profile.emergencyContact?.name || 'Garg Family',
       relationship: profile.emergencyContact?.relationship || 'Parent',
-      phone: profile.emergencyContact?.phone || '+1-555-9988'
+      phone: profile.emergencyContact?.phone || '+91-9876543073'
     }
   };
 

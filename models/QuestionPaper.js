@@ -7,6 +7,15 @@ const questionPaperSchema = new mongoose.Schema({
     trim: true,
     default: 'AI Generated Question Paper'
   },
+  // NEW: Let the teacher just type what they want in plain English (e.g. "Make a 50 mark test on Machine Learning")
+  magicPrompt: {
+    type: String,
+    trim: true
+  },
+  // NEW: Let the teacher just drag and drop last year's paper or syllabus PDF.
+  sourceMaterialUrl: {
+    type: String
+  },
   examType: {
     type: String,
     enum: ['Mid-Term', 'End-Term', 'Quiz', 'Assignment', 'Practice Test', 'Final Examination'],
@@ -36,7 +45,7 @@ const questionPaperSchema = new mongoose.Schema({
   variants: [{
     generatedPaper: String,
     answerKey: String,
-    variantName: String,
+    variantName: String, // e.g., "Set A", "Set B"
     createdAt: { type: Date, default: Date.now }
   }],
   createdBy: {
